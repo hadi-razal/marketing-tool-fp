@@ -1,19 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
+  --background: #050505;
   --foreground: #ffffff;
 
   /* Premium Brand Colors */
   --primary: #ff4d00;
-  /* Vibrant Orange */
   --primary-dark: #cc3d00;
   --primary-light: #ff7a40;
+  --accent: #3b82f6;
 
   /* Glassmorphism & Surfaces */
   --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-surface: rgba(20, 20, 20, 0.6);
-  --glass-highlight: rgba(255, 255, 255, 0.03);
+  --glass-surface: rgba(20, 20, 20, 0.7);
+  --glass-surface-hover: rgba(30, 30, 30, 0.8);
+  --glass-highlight: rgba(255, 255, 255, 0.05);
 
   /* Semantic Colors */
   --success: #10b981;
@@ -34,6 +35,8 @@
 
   --animate-float: float 6s ease-in-out infinite;
   --animate-pulse-glow: pulse-glow 4s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.5s ease-out forwards;
+  --animate-slide-up: slide-up 0.5s ease-out forwards;
 
   @keyframes float {
 
@@ -60,6 +63,28 @@
       transform: scale(1.05);
     }
   }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 body {
@@ -68,8 +93,8 @@ body {
   font-family: var(--font-sans);
   overflow-x: hidden;
   background-image:
-    radial-gradient(circle at 15% 50%, rgba(255, 77, 0, 0.08), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08), transparent 25%);
+    radial-gradient(circle at 15% 50%, rgba(255, 77, 0, 0.05), transparent 40%),
+    radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.05), transparent 40%);
   background-attachment: fixed;
 }
 
@@ -95,9 +120,10 @@ body {
 /* Utilities */
 .glass-panel {
   background: var(--glass-surface);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 .glass-button {
@@ -111,6 +137,7 @@ body {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.15);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .text-gradient {
@@ -123,4 +150,9 @@ body {
   background: linear-gradient(to right, #ff4d00, #ff8c00);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }

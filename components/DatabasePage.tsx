@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    FolderOpen, Clock, Check, X, Edit2, Search, Loader2, Download, Database, Trash2
+    FolderOpen, Clock, Check, X, Edit2, Search, Loader2, Download, Database, Trash2, Filter
 } from 'lucide-react';
 import { SidebarContainer } from './Sidebar';
 import { ProfileCard } from './ProfileCard';
 import { supabase } from '@/lib/supabase';
+import { motion } from 'framer-motion';
 
 const exportToCSV = (data: any[], filename: string) => {
     if (!data || !data.length) return;
@@ -90,26 +91,28 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     }, [leads, selectedGroup, dbSearch]);
 
     return (
-        <div className="flex h-full gap-6">
-            <SidebarContainer>
+        <div className="flex flex-col lg:flex-row h-full gap-6">
+            {/* Database Sidebar */}
+            <div className="w-full lg:w-80 flex-shrink-0 flex flex-col h-full overflow-hidden bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
                 <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                     <FolderOpen className="w-5 h-5 text-orange-500" /> Saved Batches
                 </h2>
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
                     {groups.map(group => (
-                        <button key={group} onClick={() => setSelectedGroup(group)} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all border ${selectedGroup === group ? 'bg-zinc-800 text-white border-zinc-700 shadow-md' : 'text-zinc-500 hover:text-white hover:bg-zinc-800/50 border-transparent'}`}>
+                        <button key={group} onClick={() => setSelectedGroup(group)} className={`w-full text-left px-4 py-3.5 rounded-xl text-xs font-medium transition-all border ${selectedGroup === group ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 text-white border-zinc-700 shadow-lg' : 'text-zinc-500 hover:text-white hover:bg-white/5 border-transparent'}`}>
                             <div className="flex justify-between items-center mb-1">
-                                <span className="truncate max-w-[180px]">{group}</span>
+                                <span className="truncate max-w-[180px] font-bold">{group}</span>
                                 {selectedGroup === group && <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>}
                             </div>
-                            {group !== 'All' && <span className="text-[10px] opacity-50 flex items-center gap-1"><Clock className="w-3 h-3" /> Batch</span>}
+                            {group !== 'All' && <span className="text-[10px] opacity-60 flex items-center gap-1"><Clock className="w-3 h-3" /> {leads.filter(l => l.group_name === group).length} items</span>}
                         </button>
                     ))}
                 </div>
-            </SidebarContainer>
+            </div>
 
-            <div className="flex-1 bg-zinc-900/30 border border-white/5 rounded-[32px] p-8 flex flex-col">
-                <div className="flex justify-between items-center mb-6">
+            {/* Main Content */}
+            <div className="flex-1 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 lg:p-8 flex flex-col shadow-xl overflow-hidden">
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
                     <div className="flex items-center gap-4">
                         {renamingGroup === selectedGroup && selectedGroup !== 'All' ? (
                             <div className="flex items-center gap-2 animate-in fade-in">
@@ -124,7 +127,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                             </div>
                         ) : (
                             <div className="flex items-center gap-3 group">
-                                <h1 className="text-3xl font-bold text-white">{selectedGroup === 'All' ? 'All Leads' : selectedGroup}</h1>
+                                <h1 className="text-3xl font-bold text-white tracking-tight">{selectedGroup === 'All' ? 'All Leads' : selectedGroup}</h1>
                                 {selectedGroup !== 'All' && (
                                     <button
                                         onClick={() => { setRenamingGroup(selectedGroup); setNewName(selectedGroup); }}
@@ -137,31 +140,42 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         )}
                     </div>
 
-                    <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                        <input type="text" placeholder="Search saved contacts..." value={dbSearch} onChange={(e) => setDbSearch(e.target.value)} className="bg-zinc-800 text-white text-sm pl-10 pr-4 py-3 rounded-xl border border-zinc-700 focus:border-orange-500 outline-none w-[300px] transition-all" />
-                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+                        <div className="relative flex-1 sm:flex-none">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                            <input type="text" placeholder="Search saved contacts..." value={dbSearch} onChange={(e) => setDbSearch(e.target.value)} className="w-full sm:w-[300px] bg-zinc-950/50 text-white text-sm pl-10 pr-4 py-3 rounded-xl border border-white/10 focus:border-orange-500 outline-none transition-all" />
+                        </div>
 
-                    <div className="flex gap-3">
-                        <button onClick={fetchLeads} className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
-                            <Loader2 className="w-4 h-4" />
-                        </button>
-                        <button onClick={handleExport} className="bg-white hover:bg-zinc-200 text-black px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all active:scale-95">
-                            <Download className="w-4 h-4" /> Export CSV
-                        </button>
+                        <div className="flex gap-3">
+                            <button onClick={fetchLeads} className="w-12 h-12 rounded-xl bg-zinc-800/50 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                                <Loader2 className="w-5 h-5" />
+                            </button>
+                            <button onClick={handleExport} className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-white/10">
+                                <Download className="w-4 h-4" /> Export CSV
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     {filteredLeads.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center opacity-30">
-                            <Database className="w-16 h-16 text-white mb-4" />
-                            <p>{dbSearch ? 'No matches found' : 'No leads in this group'}</p>
+                        <div className="h-full flex flex-col items-center justify-center opacity-40">
+                            <div className="w-24 h-24 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
+                                <Database className="w-10 h-10 text-white" />
+                            </div>
+                            <p className="text-zinc-400 font-medium">{dbSearch ? 'No matches found' : 'No leads in this group'}</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5 pb-20">
-                            {filteredLeads.map((lead) => (
-                                <ProfileCard key={lead.id} lead={lead} actionIcon={Trash2} onAction={() => deleteLead(lead.id)} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-20">
+                            {filteredLeads.map((lead, idx) => (
+                                <motion.div
+                                    key={lead.id}
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                >
+                                    <ProfileCard key={lead.id} lead={lead} actionIcon={Trash2} onAction={() => deleteLead(lead.id)} />
+                                </motion.div>
                             ))}
                         </div>
                     )}

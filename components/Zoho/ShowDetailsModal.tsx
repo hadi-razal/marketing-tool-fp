@@ -32,7 +32,7 @@ const Section = ({ title, children, delay = 0 }: { title: string, children: Reac
 const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false }: any) => {
     if (!value) return null;
     return (
-        <div className={`group relative overflow-hidden bg-zinc-900/40 hover:bg-zinc-900/60 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
+        <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
             <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
             <div className="relative z-10">
@@ -73,7 +73,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
         <Modal isOpen={isOpen} onClose={onClose} title="Show Details" maxWidth="max-w-5xl">
             <div className="relative">
                 {/* Hero Header */}
-                <div className="relative bg-zinc-900/80 border-b border-white/5 p-8 overflow-hidden">
+                <div className="relative glass-panel border-b border-white/5 p-8 overflow-hidden rounded-t-2xl">
                     <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent opacity-50" />
                     <div className="absolute -top-24 -right-24 w-64 h-64 bg-orange-500/20 rounded-full blur-3xl" />
 
@@ -123,7 +123,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                 </div>
 
                 {/* Content Scroll Area */}
-                <div className="p-8 space-y-10 max-h-[65vh] overflow-y-auto custom-scrollbar bg-black/20">
+                <div className="p-8 space-y-10 max-h-[65vh] overflow-y-auto custom-scrollbar bg-black/40">
 
                     {/* General Info */}
                     <Section title="General Information" delay={0.1}>
@@ -177,11 +177,11 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                 </div>
 
                 {/* Actions Footer */}
-                <div className="p-6 border-t border-white/5 bg-zinc-900/90 backdrop-blur-xl flex gap-4 sticky bottom-0 z-20">
+                <div className="p-6 border-t border-white/5 bg-zinc-900/90 backdrop-blur-xl flex gap-4 sticky bottom-0 z-20 rounded-b-2xl">
                     <Button
                         onClick={() => onEdit(data)}
                         variant="secondary"
-                        className="flex-1 h-12 text-base font-medium bg-white/5 hover:bg-white/10 border-white/5"
+                        className="flex-1 h-12 text-base font-medium glass-button"
                         leftIcon={<Edit2 className="w-4 h-4" />}
                     >
                         Edit Record

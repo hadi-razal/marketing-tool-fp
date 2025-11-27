@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getZohoConfig, saveZohoConfig } from '@/lib/zoho';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
@@ -15,7 +15,7 @@ const getAuthUrl = (dc: string = 'com') => {
     return map[dc] || map['com'];
 };
 
-export default function ZohoCallbackPage() {
+function ZohoCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const code = searchParams.get('code');
@@ -98,5 +98,13 @@ export default function ZohoCallbackPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function ZohoCallbackPage() {
+    return (
+        <Suspense fallback={<div className="h-screen bg-black flex items-center justify-center text-white"><Loader2 className="w-16 h-16 text-blue-500 animate-spin" /></div>}>
+            <ZohoCallbackContent />
+        </Suspense>
     );
 }

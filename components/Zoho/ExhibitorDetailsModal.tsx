@@ -33,7 +33,7 @@ const Section = ({ title, children, delay = 0 }: { title: string, children: Reac
 const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false }: any) => {
     if (!value) return null;
     return (
-        <div className={`group relative overflow-hidden bg-zinc-900/40 hover:bg-zinc-900/60 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
+        <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
             <div className="relative z-10">
@@ -74,7 +74,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
         <Modal isOpen={isOpen} onClose={onClose} title="Exhibitor Details" maxWidth="max-w-5xl">
             <div className="relative">
                 {/* Hero Header */}
-                <div className="relative bg-zinc-900/80 border-b border-white/5 p-8 overflow-hidden">
+                <div className="relative glass-panel border-b border-white/5 p-8 overflow-hidden rounded-t-2xl">
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent opacity-50" />
                     <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
 
@@ -89,8 +89,8 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                         <div className="flex flex-wrap items-center gap-3">
                             {data.FP_Level && (
                                 <span className={`px-3 py-1 rounded-full text-xs font-bold border shadow-lg ${data.FP_Level === '1' ? 'bg-red-500/10 text-red-500 border-red-500/20 shadow-red-500/5' :
-                                        data.FP_Level === '2' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-yellow-500/5' :
-                                            'bg-green-500/10 text-green-500 border-green-500/20 shadow-green-500/5'
+                                    data.FP_Level === '2' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-yellow-500/5' :
+                                        'bg-green-500/10 text-green-500 border-green-500/20 shadow-green-500/5'
                                     }`}>
                                     Level {data.FP_Level}
                                 </span>
@@ -103,7 +103,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 </div>
 
                 {/* Content Scroll Area */}
-                <div className="p-8 space-y-10 max-h-[65vh] overflow-y-auto custom-scrollbar bg-black/20">
+                <div className="p-8 space-y-10 max-h-[65vh] overflow-y-auto custom-scrollbar bg-black/40">
 
                     {/* General Info */}
                     <Section title="General Information" delay={0.1}>
@@ -138,7 +138,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 </div>
 
                 {/* Actions Footer */}
-                <div className="p-6 border-t border-white/5 bg-zinc-900/90 backdrop-blur-xl flex gap-4 sticky bottom-0 z-20">
+                <div className="p-6 border-t border-white/5 bg-zinc-900/90 backdrop-blur-xl flex gap-4 sticky bottom-0 z-20 rounded-b-2xl">
                     <Button
                         onClick={() => onAddToLeads(data)}
                         className="flex-1 h-12 text-base font-medium bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20"
@@ -149,7 +149,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                     <Button
                         onClick={() => onEdit(data)}
                         variant="secondary"
-                        className="flex-1 h-12 text-base font-medium bg-white/5 hover:bg-white/10 border-white/5"
+                        className="flex-1 h-12 text-base font-medium glass-button"
                         leftIcon={<Edit2 className="w-4 h-4" />}
                     >
                         Edit Record

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Hash, Trash2, Edit2, Plus, Building2, MapPin, Calendar, Layers, User, Clock, Globe, Info } from 'lucide-react';
+import { Hash, Trash2, Edit2, Plus, Building2, MapPin, Calendar, Layers, User, Clock, Globe, Info, FileText, Link as LinkIcon, Briefcase, Flag } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface DatabaseDetailsModalProps {
@@ -13,42 +13,25 @@ interface DatabaseDetailsModalProps {
     onAddToLeads: (item: any) => void;
 }
 
-const Section = ({ title, children, delay = 0 }: { title: string, children: React.ReactNode, delay?: number }) => (
-    <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay, duration: 0.4 }}
-        className="space-y-4"
-    >
-        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-500/50"></span>
-            {title}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {children}
-        </div>
-    </motion.div>
-);
-
 const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false }: any) => {
     if (!value) return null;
     return (
-        <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-            <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-2 text-zinc-500 text-xs font-bold uppercase tracking-wider">
-                    {Icon && <Icon className="w-3.5 h-3.5 text-zinc-600 group-hover:text-purple-500/70 transition-colors" />}
-                    {label}
+        <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
+            <div className="flex items-start gap-3">
+                <div className="mt-0.5 min-w-[16px]">
+                    {Icon && <Icon className="w-4 h-4 text-zinc-500 group-hover:text-purple-400 transition-colors" />}
                 </div>
-                <div className="text-zinc-100 font-medium break-words text-sm leading-relaxed">
-                    {isLink ? (
-                        <a href={value} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1.5 transition-colors">
-                            {value}
-                        </a>
-                    ) : (
-                        value
-                    )}
+                <div className="flex-1 overflow-hidden">
+                    <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">{label}</div>
+                    <div className="text-zinc-200 font-medium break-words text-sm leading-relaxed">
+                        {isLink ? (
+                            <a href={value} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1.5 transition-colors truncate">
+                                {value} <LinkIcon className="w-3 h-3" />
+                            </a>
+                        ) : (
+                            value
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -70,81 +53,64 @@ export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOp
         });
     };
 
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Database Record Details" maxWidth="max-w-5xl">
-            <div className="relative">
-                {/* Hero Header */}
-                <div className="relative glass-panel border-b border-white/5 p-8 overflow-hidden rounded-t-2xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent opacity-50" />
-                    <div className="absolute -top-24 -right-24 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" />
+    // Fields configuration based on user request
+    // ID, City, Country, Event, Event_logo, Event_Type, Exhibition_Size, Exhibitor_List_FILE, Exhibitor_List_Link, Floorplan, Floorplan_Link, Frequency, Industry, Last_edition_n_Exhibitors, Level, Modified_Time, Modified_User, Note1, Organiser, Starting_Date, Website, World_Area
 
-                    <div className="relative z-10">
-                        <motion.h2
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="text-4xl md:text-5xl font-bold text-white mb-3 tracking-tight"
-                        >
-                            {data.Company || data.Show}
-                        </motion.h2>
-                        <div className="flex items-center gap-3">
-                            <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                                <Hash className="w-3 h-3" /> {data.ID}
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Record Details" maxWidth="max-w-4xl">
+            <div className="flex flex-col h-[80vh]">
+                {/* Header */}
+                <div className="p-6 border-b border-white/5 bg-zinc-900/50">
+                    <h2 className="text-2xl font-bold text-white tracking-tight mb-2">
+                        {data.Event || data.Show || 'Unknown Event'}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
+                            <Hash className="w-3 h-3" /> {data.ID}
+                        </span>
+                        {data.City && (
+                            <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
+                                <MapPin className="w-3 h-3" /> {data.City}, {data.Country}
                             </span>
-                        </div>
+                        )}
+                        {data.Starting_Date && (
+                            <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
+                                <Calendar className="w-3 h-3" /> {data.Starting_Date}
+                            </span>
+                        )}
                     </div>
                 </div>
 
-                {/* Content Scroll Area */}
-                <div className="p-8 space-y-10 max-h-[65vh] overflow-y-auto custom-scrollbar bg-black/40">
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-black/20">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Primary Info */}
+                        <DetailItem label="Event Type" value={data.Event_Type} icon={Layers} />
+                        <DetailItem label="Exhibition Size" value={data.Exhibition_Size} icon={Building2} />
+                        <DetailItem label="Industry" value={data.Industry} icon={Briefcase} />
+                        <DetailItem label="Frequency" value={data.Frequency} icon={Clock} />
+                        <DetailItem label="Level" value={data.Level} icon={Flag} />
+                        <DetailItem label="World Area" value={data.World_Area} icon={Globe} />
+                        <DetailItem label="Organiser" value={data.Organiser} icon={User} />
+                        <DetailItem label="Last Edition Exhibitors" value={data.Last_edition_n_Exhibitors} icon={User} />
 
-                    {/* General Info */}
-                    <Section title="General Information" delay={0.1}>
-                        <DetailItem label="Show" value={data.Show} icon={Layers} />
-                        <DetailItem label="Attended Year" value={data.Attended_Year} icon={Calendar} />
-                        <DetailItem label="Parent ID" value={data.ParentID} icon={Hash} />
-                    </Section>
+                        {/* Links & Files */}
+                        <DetailItem label="Website" value={data.Website} icon={Globe} isLink fullWidth />
+                        <DetailItem label="Exhibitor List Link" value={data.Exhibitor_List_Link} icon={LinkIcon} isLink fullWidth />
+                        <DetailItem label="Floorplan Link" value={data.Floorplan_Link} icon={LinkIcon} isLink fullWidth />
+                        <DetailItem label="Exhibitor List File" value={data.Exhibitor_List_FILE} icon={FileText} fullWidth />
+                        <DetailItem label="Floorplan File" value={data.Floorplan} icon={FileText} fullWidth />
+                        <DetailItem label="Event Logo" value={data.Event_logo} icon={FileText} fullWidth />
 
-                    {/* Booth Details */}
-                    <Section title="Booth Details" delay={0.2}>
-                        <DetailItem label="Booth No" value={data.Booth_No} icon={MapPin} />
-                        <DetailItem label="Booth Sqm" value={data.Booth_Sqm} icon={Building2} />
-                    </Section>
-
-                    {/* System Info */}
-                    <Section title="System Metadata" delay={0.3}>
-                        <DetailItem label="Added User" value={data.Added_User} icon={User} />
-                        <DetailItem label="Added Time" value={formatDate(data.Added_Time)} icon={Clock} />
+                        {/* Metadata */}
+                        <DetailItem label="Note" value={data.Note1} icon={Info} fullWidth />
                         <DetailItem label="Modified User" value={data.Modified_User} icon={User} />
                         <DetailItem label="Modified Time" value={formatDate(data.Modified_Time)} icon={Clock} />
-                    </Section>
-
-                    {/* Additional Data */}
-                    <Section title="Additional Data" delay={0.4}>
-                        {Object.entries(data).map(([key, value]) => {
-                            if (['ID', 'Company', 'Show', 'Attended_Year', 'ParentID', 'Booth_No', 'Booth_Sqm', 'Added_User', 'Added_Time', 'Modified_User', 'Modified_Time'].includes(key)) return null;
-                            if (typeof value === 'object' && value !== null) return null;
-                            return <DetailItem key={key} label={key.replace(/_/g, ' ')} value={String(value)} icon={Info} />;
-                        })}
-                    </Section>
+                    </div>
                 </div>
 
-                {/* Actions Footer */}
-                <div className="p-6 border-t border-white/5 bg-zinc-900/90 backdrop-blur-xl flex gap-4 sticky bottom-0 z-20 rounded-b-2xl">
-                    <Button
-                        onClick={() => onAddToLeads(data)}
-                        className="flex-1 h-12 text-base font-medium bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20"
-                        leftIcon={<Plus className="w-4 h-4" />}
-                    >
-                        Add to Leads
-                    </Button>
-                    <Button
-                        onClick={() => onEdit(data)}
-                        variant="secondary"
-                        className="flex-1 h-12 text-base font-medium glass-button"
-                        leftIcon={<Edit2 className="w-4 h-4" />}
-                    >
-                        Edit Record
-                    </Button>
+                {/* Footer */}
+                <div className="p-4 border-t border-white/5 bg-zinc-900/80 backdrop-blur-xl flex gap-3 justify-end">
                     <Button
                         onClick={() => {
                             if (confirm('Are you sure you want to delete this record?')) {
@@ -152,10 +118,25 @@ export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOp
                                 onClose();
                             }
                         }}
-                        className="flex-1 h-12 text-base font-medium bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 hover:border-red-500/30"
+                        className="h-10 px-4 text-sm font-medium bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 hover:border-red-500/30"
                         leftIcon={<Trash2 className="w-4 h-4" />}
                     >
                         Delete
+                    </Button>
+                    <Button
+                        onClick={() => onEdit(data)}
+                        variant="secondary"
+                        className="h-10 px-4 text-sm font-medium glass-button"
+                        leftIcon={<Edit2 className="w-4 h-4" />}
+                    >
+                        Edit
+                    </Button>
+                    <Button
+                        onClick={() => onAddToLeads(data)}
+                        className="h-10 px-6 text-sm font-medium bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20"
+                        leftIcon={<Plus className="w-4 h-4" />}
+                    >
+                        Add to Leads
                     </Button>
                 </div>
             </div>

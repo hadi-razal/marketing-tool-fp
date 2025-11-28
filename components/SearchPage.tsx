@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
     User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter
 } from 'lucide-react';
-import { SidebarContainer } from './Sidebar';
 import { SoftInput } from './ui/Input';
 import { ProfileCard } from './ProfileCard';
 import { SaveBatchModal } from './SaveBatchModal';

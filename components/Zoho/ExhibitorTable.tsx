@@ -202,12 +202,13 @@ export const ExhibitorTable = () => {
                                         <td className="px-6 py-4 hidden lg:table-cell">{item.City}</td>
                                         <td className="px-6 py-4 hidden md:table-cell">{item.Country}</td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${item.FP_Level === '1' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                                item.FP_Level === '2' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                                    'bg-green-500/10 text-green-500 border-green-500/20'
+                                            <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold border min-w-[80px] ${item.FP_Level === '1' ? 'bg-red-500/10 text-red-400 border-red-500/20 shadow-[0_0_10px_rgba(239,68,68,0.1)]' :
+                                                    item.FP_Level === '2' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20 shadow-[0_0_10px_rgba(249,115,22,0.1)]' :
+                                                        item.FP_Level === '3' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.1)]' :
+                                                            'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
                                                 }`}>
                                                 Level {item.FP_Level}
-                                            </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-right flex justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                                             <button onClick={() => handleAddToLeads(item)} className="p-2 hover:bg-green-500/20 rounded-lg text-zinc-400 hover:text-green-500 transition-colors" title="Add to Leads"><Plus className="w-3.5 h-3.5" /></button>

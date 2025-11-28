@@ -1,26 +1,29 @@
-import React from 'react';
-import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/Button';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 interface SidebarProps {
-    active: string;
-    setActive: (page: string) => void;
     isOpen?: boolean;
     onClose?: () => void;
 }
 
-export const MainSidebar: React.FC<SidebarProps> = ({ active, setActive, isOpen = false, onClose = () => { } }) => {
+export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = () => { } }) => {
+    const pathname = usePathname();
+    const [isHovered, setIsHovered] = useState(false);
+
     const navItems = [
-        { id: 'search', icon: Search, label: 'Search' },
-        { id: 'database', icon: Database, label: 'Database' },
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Analytics' },
-        { id: 'zoho', icon: CloudLightning, label: 'Zoho' },
+        { id: 'search', icon: Search, label: 'Search', href: '/search' },
+        { id: 'database', icon: Database, label: 'Database', href: '/database' },
+        { id: 'analytics', icon: LayoutDashboard, label: 'Analytics', href: '/analytics' },
+        { id: 'zoho', icon: CloudLightning, label: 'Zoho', href: '/zoho' },
     ];
 
     const bottomItems = [
-        { id: 'settings', icon: Settings, label: 'Settings' },
-        { id: 'logout', icon: LogOut, label: 'Logout' },
+        { id: 'settings', icon: Settings, label: 'Settings', href: '/settings' },
+        { id: 'logout', icon: LogOut, label: 'Logout', href: '/login' },
     ];
 
     return (
@@ -38,11 +41,81 @@ export const MainSidebar: React.FC<SidebarProps> = ({ active, setActive, isOpen 
                 )}
             </AnimatePresence>
 
-            {/* Sidebar Container */}
-            <motion.div
+            {/* Desktop Hover Trigger Area */}
+            <div
+                className="hidden lg:block fixed inset-y-0 left-0 w-6 z-50 hover:w-72 transition-all duration-300 group"
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+            >
+                {/* Sidebar Container */}
+                <div
+                    className={cn(
+                        "h-full flex flex-col bg-zinc-900/90 backdrop-blur-2xl border-r border-white/10 shadow-2xl transition-all duration-300 ease-in-out overflow-hidden",
+                        isHovered ? "w-72 translate-x-0" : "w-0 -translate-x-full opacity-0"
+                    )}
+                >
+                    {/* Header */}
+                    <div className="p-6 flex items-center gap-3 min-w-[288px]">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
+                            <CloudLightning className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="font-bold text-lg text-white leading-tight">Fairplatz</h1>
+                            <p className="text-xs text-zinc-400">Marketing Tool</p>
+                        </div>
+                    </div>
+
+                    {/* Navigation */}
+                    <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2 min-w-[288px]">
+                        <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">Menu</p>
+                        {navItems.map((item) => {
+                            const isActive = pathname.startsWith(item.href);
+                            return (
+                                <Link
+                                    key={item.id}
+                                    href={item.href}
+                                    className={cn(
+                                        "relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 group/item text-left",
+                                        isActive
+                                            ? "bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20"
+                                            : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                                    )}
+                                >
+                                    <item.icon className={cn("w-5 h-5 shrink-0", isActive ? "text-white" : "text-zinc-500 group-hover/item:text-zinc-300")} />
+                                    <span className="font-medium text-sm whitespace-nowrap">{item.label}</span>
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="activeSidebarIndicator"
+                                            className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white"
+                                        />
+                                    )}
+                                </Link>
+                            );
+                        })}
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="mt-auto p-4 border-t border-white/5 flex flex-col gap-2 min-w-[288px]">
+                        <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">General</p>
+                        {bottomItems.map((item) => (
+                            <Link
+                                key={item.id}
+                                href={item.href}
+                                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-400 hover:bg-white/5 hover:text-zinc-100 transition-all duration-300 text-left"
+                            >
+                                <item.icon className="w-5 h-5 shrink-0 text-zinc-500 group-hover:text-zinc-300" />
+                                <span className="font-medium text-sm whitespace-nowrap">{item.label}</span>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Mobile Sidebar (Drawer) */}
+            <div
                 className={cn(
-                    "fixed lg:static inset-y-0 left-0 z-50 w-72 h-full flex flex-col bg-zinc-900/80 backdrop-blur-2xl lg:bg-zinc-900/50 lg:backdrop-blur-xl border-r lg:border border-white/10 lg:rounded-3xl shadow-2xl transition-transform duration-300 ease-in-out",
-                    isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+                    "fixed inset-y-0 left-0 z-50 w-72 h-full flex flex-col bg-zinc-900/95 backdrop-blur-2xl border-r border-white/10 shadow-2xl transition-transform duration-300 ease-in-out lg:hidden",
+                    isOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
                 {/* Header */}
@@ -56,7 +129,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ active, setActive, isOpen 
                             <p className="text-xs text-zinc-400">Marketing Tool</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="lg:hidden p-2 hover:bg-white/10 rounded-lg text-zinc-400">
+                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-zinc-400">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
@@ -65,11 +138,12 @@ export const MainSidebar: React.FC<SidebarProps> = ({ active, setActive, isOpen 
                 <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2">
                     <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">Menu</p>
                     {navItems.map((item) => {
-                        const isActive = active === item.id;
+                        const isActive = pathname.startsWith(item.href);
                         return (
-                            <button
+                            <Link
                                 key={item.id}
-                                onClick={() => { setActive(item.id); onClose(); }}
+                                href={item.href}
+                                onClick={onClose}
                                 className={cn(
                                     "relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 group text-left",
                                     isActive
@@ -79,13 +153,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ active, setActive, isOpen 
                             >
                                 <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-zinc-500 group-hover:text-zinc-300")} />
                                 <span className="font-medium text-sm">{item.label}</span>
-                                {isActive && (
-                                    <motion.div
-                                        layoutId="activeSidebarIndicator"
-                                        className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white"
-                                    />
-                                )}
-                            </button>
+                            </Link>
                         );
                     })}
                 </div>
@@ -94,16 +162,17 @@ export const MainSidebar: React.FC<SidebarProps> = ({ active, setActive, isOpen 
                 <div className="mt-auto p-4 border-t border-white/5 flex flex-col gap-2">
                     <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">General</p>
                     {bottomItems.map((item) => (
-                        <button
+                        <Link
                             key={item.id}
+                            href={item.href}
                             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-400 hover:bg-white/5 hover:text-zinc-100 transition-all duration-300 text-left"
                         >
                             <item.icon className="w-5 h-5 text-zinc-500 group-hover:text-zinc-300" />
                             <span className="font-medium text-sm">{item.label}</span>
-                        </button>
+                        </Link>
                     ))}
                 </div>
-            </motion.div>
+            </div>
         </>
     );
 };

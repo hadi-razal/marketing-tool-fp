@@ -2,9 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { StatsGrid } from '@/components/Dashboard/StatsGrid';
-import { AnalyticsCharts } from '@/components/Dashboard/AnalyticsCharts';
 import { PendingTodos } from '@/components/Dashboard/PendingTodos';
-import { UserLeaderboard } from '@/components/Dashboard/UserLeaderboard';
 import { RecentActivity } from '@/components/Dashboard/RecentActivity';
 import { zohoApi } from '@/lib/zoho';
 
@@ -35,26 +33,23 @@ export default function DashboardPage() {
         <div className="h-full overflow-y-auto custom-scrollbar p-8 space-y-8">
             <div className="flex flex-col gap-2">
                 <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard</h1>
-                <p className="text-zinc-400">Welcome back, here's what's happening today.</p>
+                <p className="text-zinc-400">Overview of your marketing activities.</p>
             </div>
 
-            {/* Top Stats Row */}
+            {/* Top Stats Row - Compact */}
             <StatsGrid stats={stats} />
 
-            {/* Main Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                    <AnalyticsCharts />
+            {/* Main Content - Minimal Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
+                {/* Recent Activity - Prominent */}
+                <div className="lg:col-span-2 h-full">
+                    <RecentActivity />
                 </div>
-                <div className="lg:col-span-1 space-y-6">
+
+                {/* Quick Tasks - Side */}
+                <div className="lg:col-span-1 h-full">
                     <PendingTodos />
                 </div>
-            </div>
-
-            {/* Bottom Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <UserLeaderboard />
-                <RecentActivity />
             </div>
         </div>
     );

@@ -79,27 +79,29 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
                             {/* Continents */}
-                            <div className="space-y-3">
-                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Continent / Area</label>
-                                <div className="space-y-1">
-                                    {availableContinents.map(continent => (
-                                        <label key={continent} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer group transition-colors">
-                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${tempContinents.includes(continent) ? 'bg-orange-500 border-orange-500' : 'border-zinc-700 group-hover:border-zinc-500'}`}>
-                                                {tempContinents.includes(continent) && <Check className="w-3 h-3 text-white" />}
-                                            </div>
-                                            <span className={`text-sm ${tempContinents.includes(continent) ? 'text-white font-medium' : 'text-zinc-400 group-hover:text-zinc-300'}`}>
-                                                {continent || 'Unknown'}
-                                            </span>
-                                            <input
-                                                type="checkbox"
-                                                className="hidden"
-                                                checked={tempContinents.includes(continent)}
-                                                onChange={() => toggleContinent(continent)}
-                                            />
-                                        </label>
-                                    ))}
+                            {availableContinents.length > 0 && (
+                                <div className="space-y-3">
+                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Continent / Area</label>
+                                    <div className="space-y-1">
+                                        {availableContinents.map(continent => (
+                                            <label key={continent} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer group transition-colors">
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${tempContinents.includes(continent) ? 'bg-orange-500 border-orange-500' : 'border-zinc-700 group-hover:border-zinc-500'}`}>
+                                                    {tempContinents.includes(continent) && <Check className="w-3 h-3 text-white" />}
+                                                </div>
+                                                <span className={`text-sm ${tempContinents.includes(continent) ? 'text-white font-medium' : 'text-zinc-400 group-hover:text-zinc-300'}`}>
+                                                    {continent || 'Unknown'}
+                                                </span>
+                                                <input
+                                                    type="checkbox"
+                                                    className="hidden"
+                                                    checked={tempContinents.includes(continent)}
+                                                    onChange={() => toggleContinent(continent)}
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* Countries */}
                             <div className="space-y-3">

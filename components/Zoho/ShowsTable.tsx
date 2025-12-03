@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { zohoApi } from '@/lib/zoho';
-import { RefreshCw, Trash2, Edit2, Plus, Search, Settings } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Plus, Search, Filter } from 'lucide-react';
+import { FilterPopover } from './FilterPopover';
 import { ShowFormModal } from './ShowFormModal';
 import { ShowDetailsModal } from './ShowDetailsModal';
-import { ZohoSettingsModal } from './ZohoSettingsModal';
 import { Button } from '../ui/Button';
 import { SoftInput } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
@@ -14,7 +14,6 @@ export const ShowsTable = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any>(null);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -25,30 +24,69 @@ export const ShowsTable = () => {
     const LIMIT = 100;
 
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-    const [totalRecords, setTotalRecords] = useState<number | null>(null);
-    const [loadingTotal, setLoadingTotal] = useState(false);
 
-    // Manual debounce
+    // Filters
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [availableCountries, setAvailableCountries] = useState<string[]>([]);
+    const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+
+    // Fetch unique values for filters
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(search);
-        }, 500);
-        return () => clearTimeout(timer);
-    }, [search]);
+        const fetchFilters = async () => {
+            try {
+                const countries = new Set<string>();
+
+                // Fetch up to 5 pages (1000 records) to get a good sample of countries
+                const MAX_PAGES = 5;
+                const BATCH_SIZE = 100;
+
+                for (let i = 0; i < MAX_PAGES; i++) {
+                    const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', undefined, i * BATCH_SIZE, BATCH_SIZE);
+                    if (res.data && Array.isArray(res.data)) {
+                        res.data.forEach((item: any) => {
+                            if (item.Country) countries.add(item.Country);
+                        });
+
+                        if (res.data.length < BATCH_SIZE) break;
+                    } else {
+                        break;
+                    }
+                }
+
+                setAvailableCountries(Array.from(countries).sort());
+            } catch (err) {
+                console.error('Failed to fetch filter values', err);
+            }
+        };
+        fetchFilters();
+    }, []);
 
     const fetchData = useCallback(async (reset = false, searchTerm = '') => {
         setLoading(true);
         setError('');
         try {
             const from = reset ? 0 : page * LIMIT;
-            // Try searching by Event name
-            const criteria = searchTerm ? `(Event.contains("${searchTerm}"))` : undefined;
+
+            // Construct criteria
+            let criteriaParts = [];
+
+            // Search
+            if (searchTerm) {
+                criteriaParts.push(`(Event.contains("${searchTerm}"))`);
+            }
+
+            // Filters
+            if (selectedCountries.length > 0) {
+                const countryCriteria = selectedCountries.map(c => `Country == "${c}"`).join(' || ');
+                criteriaParts.push(`(${countryCriteria})`);
+            }
+
+            const criteria = criteriaParts.length > 0 ? criteriaParts.join(' && ') : undefined;
 
             const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, LIMIT);
 
             if (res.code === 3000) {
                 if (reset) {
-                    console.log('Shows Data:', res.data); // Debugging
                     setData(res.data);
                     setPage(1);
                 } else {
@@ -68,12 +106,28 @@ export const ShowsTable = () => {
         } finally {
             setLoading(false);
         }
-    }, [page]);
+    }, [page, selectedCountries]);
+
+    // Manual debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [search]);
 
     useEffect(() => {
         fetchData(true, debouncedSearch);
         if (debouncedSearch) setPage(0);
-    }, [debouncedSearch]);
+    }, [debouncedSearch, selectedCountries]);
+
+    const handleApplyFilters = (countries: string[], continents: string[]) => {
+        setSelectedCountries(countries);
+    };
+
+    const handleClearFilters = () => {
+        setSelectedCountries([]);
+    };
 
     const loadMore = () => {
         if (!loading && hasMore) {
@@ -81,21 +135,7 @@ export const ShowsTable = () => {
         }
     };
 
-    const fetchTotalRecords = async () => {
-        setLoadingTotal(true);
-        try {
-            const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', undefined, 0, 1);
-            if (res.result_count) {
-                setTotalRecords(res.result_count);
-            } else {
-                setTotalRecords(9999); // Placeholder
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoadingTotal(false);
-        }
-    };
+
 
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure?')) return;
@@ -131,10 +171,7 @@ export const ShowsTable = () => {
                 initialData={selectedItem}
             />
 
-            <ZohoSettingsModal
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-            />
+
 
             <ShowDetailsModal
                 isOpen={isDetailsOpen}
@@ -147,46 +184,66 @@ export const ShowsTable = () => {
                 onDelete={handleDelete}
             />
 
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-white/5 backdrop-blur-sm">
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="text-sm text-zinc-400 font-medium flex items-center gap-2">
-                        <span>Total Records:</span>
-                        {totalRecords !== null ? (
-                            <span className="text-white font-bold">{totalRecords}</span>
-                        ) : (
-                            <button
-                                onClick={fetchTotalRecords}
-                                disabled={loadingTotal}
-                                className="px-2 py-0.5 bg-white/5 hover:bg-white/10 rounded text-xs text-zinc-300 border border-white/5 transition-colors flex items-center gap-1"
-                            >
-                                {loadingTotal ? 'Loading...' : '# Load'}
-                            </button>
-                        )}
-                    </div>
-                    <div className="h-4 w-px bg-white/10" />
-                    <div className="text-sm text-zinc-400">
-                        Loaded: <span className="text-white font-bold">{data.length}</span>
+            {/* Controls Toolbar */}
+            <div className="relative z-30 flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl backdrop-blur-xl shadow-xl">
+                {/* Search */}
+                <div className="relative flex-1 group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-purple-500/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative flex items-center">
+                        <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-orange-400 transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Search shows..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
+                        />
                     </div>
                 </div>
 
-                <div className="w-full md:w-96 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                        type="text"
-                        placeholder="Search shows..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-zinc-600"
-                    />
-                </div>
-                <div className="flex gap-3 w-full md:w-auto">
-                    <Button variant="secondary" onClick={() => setIsSettingsOpen(true)} className="glass-button h-9 w-9 p-0 flex items-center justify-center">
-                        <Settings className="w-4 h-4" />
+                {/* Actions Group */}
+                <div className="flex items-center gap-3">
+                    {/* Filter */}
+                    <div className="relative">
+                        <Button
+                            variant="secondary"
+                            onClick={() => setIsFilterOpen(!isFilterOpen)}
+                            className={`glass-button h-11 px-5 border-white/10 hover:border-white/20 ${selectedCountries.length > 0 ? 'border-orange-500/50 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20' : 'text-zinc-400 hover:text-white'}`}
+                            leftIcon={<Filter className="w-4 h-4" />}
+                        >
+                            Filters {selectedCountries.length > 0 && `(${selectedCountries.length})`}
+                        </Button>
+
+                        <FilterPopover
+                            isOpen={isFilterOpen}
+                            onClose={() => setIsFilterOpen(false)}
+                            availableCountries={availableCountries}
+                            availableContinents={[]}
+                            selectedCountries={selectedCountries}
+                            selectedContinents={[]}
+                            onApply={handleApplyFilters}
+                            onClear={handleClearFilters}
+                        />
+                    </div>
+
+                    <div className="w-px h-8 bg-white/10 mx-1 hidden md:block" />
+
+                    {/* Refresh */}
+                    <Button
+                        variant="secondary"
+                        onClick={() => fetchData(true, debouncedSearch)}
+                        isLoading={loading}
+                        className="glass-button h-11 w-11 p-0 flex items-center justify-center border-white/10 hover:border-white/20 text-zinc-400 hover:text-white"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     </Button>
-                    <Button variant="secondary" onClick={() => fetchData(true, debouncedSearch)} isLoading={loading} className="glass-button h-9">
-                        <RefreshCw className="w-4 h-4" />
-                    </Button>
-                    <Button onClick={handleAdd} leftIcon={<Plus className="w-4 h-4" />} className="bg-primary hover:bg-primary-dark text-white border-0 shadow-lg shadow-primary/20 h-9 text-sm">
+
+                    {/* Add Button */}
+                    <Button
+                        onClick={handleAdd}
+                        leftIcon={<Plus className="w-4 h-4" />}
+                        className="h-11 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white border-0 shadow-lg shadow-orange-500/20 px-6 font-medium"
+                    >
                         Add Show
                     </Button>
                 </div>
@@ -197,9 +254,6 @@ export const ShowsTable = () => {
                     <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                     <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                     {error}
-                    <button onClick={() => setIsSettingsOpen(true)} className="ml-auto text-xs underline hover:text-red-400">
-                        Reconnect
-                    </button>
                 </div>
             )}
 

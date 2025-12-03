@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X, Menu } from 'lucide-react';
+import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X, Menu, CheckSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/Button';
 import Link from 'next/link';
@@ -18,6 +18,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
         { id: 'search', icon: Search, label: 'Search', href: '/search' },
         { id: 'database', icon: Database, label: 'Database', href: '/database' },
         { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+        { id: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/tasks' },
         { id: 'zoho', icon: CloudLightning, label: 'Zoho (Legacy)', href: '/zoho' },
     ];
 
@@ -96,8 +97,24 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                         })}
                     </div>
 
+                    {/* User Profile */}
+                    <div className="mt-auto p-4 border-t border-white/5">
+                        <div className={cn(
+                            "flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 transition-all duration-300 group/profile cursor-pointer hover:bg-white/10",
+                            isHovered ? "justify-start px-3" : "justify-center px-0 w-10 h-10 mx-auto"
+                        )}>
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 text-white font-bold text-xs">
+                                HR
+                            </div>
+                            <div className={cn("overflow-hidden transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>
+                                <p className="text-sm font-semibold text-white truncate">Hadi Rasal</p>
+                                <p className="text-xs text-zinc-400 truncate">hadi@fairplatz.com</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Bottom Actions */}
-                    <div className="mt-auto p-4 border-t border-white/5 flex flex-col gap-2">
+                    <div className="p-4 pt-2 flex flex-col gap-2">
                         <p className={cn("text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wider transition-all duration-300", isHovered ? "px-4 opacity-100" : "px-0 text-center opacity-0 hidden")}>General</p>
                         {bottomItems.map((item) => (
                             <Link
@@ -163,8 +180,21 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                     })}
                 </div>
 
+                {/* User Profile */}
+                <div className="mt-auto p-4 border-t border-white/5">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 text-white font-bold text-sm">
+                            HR
+                        </div>
+                        <div className="overflow-hidden">
+                            <p className="text-sm font-semibold text-white truncate">Hadi Rasal</p>
+                            <p className="text-xs text-zinc-400 truncate">hadi@fairplatz.com</p>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Bottom Actions */}
-                <div className="mt-auto p-4 border-t border-white/5 flex flex-col gap-2">
+                <div className="p-4 pt-2 flex flex-col gap-2">
                     <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">General</p>
                     {bottomItems.map((item) => (
                         <Link

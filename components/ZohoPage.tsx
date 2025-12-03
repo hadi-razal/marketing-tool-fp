@@ -27,38 +27,46 @@ export const ZohoPage = () => {
                     </div>
                 </div>
 
-                <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
-                    <button
-                        onClick={() => setActiveView('exhibitors')}
-                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'exhibitors' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
-                    >
-                        <Users className={`w-5 h-5 ${activeView === 'exhibitors' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                        <span className="font-medium text-sm">Exhibitors</span>
-                    </button>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6">
+                    {/* Management Group */}
+                    <div className="space-y-2">
+                        <p className="px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Management</p>
+                        <button
+                            onClick={() => setActiveView('exhibitors')}
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'exhibitors' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                        >
+                            <Users className={`w-5 h-5 ${activeView === 'exhibitors' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                            <span className="font-medium text-sm">Exhibitors</span>
+                        </button>
 
-                    <button
-                        onClick={() => setActiveView('shows')}
-                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'shows' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
-                    >
-                        <Calendar className={`w-5 h-5 ${activeView === 'shows' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                        <span className="font-medium text-sm">Shows</span>
-                    </button>
+                        <button
+                            onClick={() => setActiveView('shows')}
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'shows' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                        >
+                            <Calendar className={`w-5 h-5 ${activeView === 'shows' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                            <span className="font-medium text-sm">Shows</span>
+                        </button>
 
-                    <button
-                        onClick={() => setActiveView('database')}
-                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'database' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
-                    >
-                        <Database className={`w-5 h-5 ${activeView === 'database' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                        <span className="font-medium text-sm">Database</span>
-                    </button>
+                        <button
+                            onClick={() => setActiveView('database')}
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'database' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                        >
+                            <Database className={`w-5 h-5 ${activeView === 'database' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                            <span className="font-medium text-sm">Event Participation</span>
+                        </button>
+                    </div>
 
-                    <button
-                        onClick={() => setActiveView('drive')}
-                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'drive' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
-                    >
-                        <HardDrive className={`w-5 h-5 ${activeView === 'drive' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                        <span className="font-medium text-sm">WorkDrive</span>
-                    </button>
+                    {/* Storage Group */}
+                    <div className="space-y-2">
+                        <p className="px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Storage</p>
+                        <button
+                            onClick={() => setActiveView('drive')}
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'drive' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                        >
+                            <HardDrive className={`w-5 h-5 ${activeView === 'drive' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                            <span className="font-medium text-sm">WorkDrive</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div className="mt-auto pt-6 border-t border-white/5">
@@ -91,7 +99,7 @@ export const ZohoPage = () => {
                     {activeView === 'exhibitors' && <ExhibitorTable />}
                     {activeView === 'shows' && <ShowsTable />}
                     {activeView === 'database' && <DatabaseTable />}
-                    {activeView === 'drive' && <FileExplorer />}
+                    {activeView === 'drive' && <FileExplorer folderId="smd3w0fc9f42374574bc893c6909fbf58c677" />}
                 </div>
             </div>
         </div>

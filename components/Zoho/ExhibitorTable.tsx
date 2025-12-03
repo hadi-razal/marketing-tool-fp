@@ -86,19 +86,31 @@ export const ExhibitorTable = () => {
     useEffect(() => {
         const fetchFilters = async () => {
             try {
-                // Fetch a batch of records to extract unique values
-                // Ideally Zoho has an API for this, but we'll simulate by fetching a larger batch
-                const res = await zohoApi.getRecords('Exhibitor_List', undefined, 0, 200);
-                if (res.data) {
-                    const countries = new Set<string>();
-                    const continents = new Set<string>();
-                    res.data.forEach((item: any) => {
-                        if (item.Country) countries.add(item.Country);
-                        if (item.World_Area) continents.add(item.World_Area);
-                    });
-                    setAvailableCountries(Array.from(countries).sort());
-                    setAvailableContinents(Array.from(continents).sort());
+                const countries = new Set<string>();
+                const continents = new Set<string>();
+
+                // Fetch up to 5 pages (1000 records) to get a good sample of countries
+                // In a real production app, you'd want a dedicated "get unique values" API endpoint
+                const MAX_PAGES = 5;
+                const BATCH_SIZE = 200;
+
+                for (let i = 0; i < MAX_PAGES; i++) {
+                    const res = await zohoApi.getRecords('Exhibitor_List', undefined, i * BATCH_SIZE, BATCH_SIZE);
+                    if (res.data && Array.isArray(res.data)) {
+                        res.data.forEach((item: any) => {
+                            if (item.Country) countries.add(item.Country);
+                            if (item.World_Area) continents.add(item.World_Area);
+                        });
+
+                        // Stop if we got less than full batch, meaning end of data
+                        if (res.data.length < BATCH_SIZE) break;
+                    } else {
+                        break;
+                    }
                 }
+
+                setAvailableCountries(Array.from(countries).sort());
+                setAvailableContinents(Array.from(continents).sort());
             } catch (err) {
                 console.error('Failed to fetch filter values', err);
             }
@@ -217,7 +229,7 @@ export const ExhibitorTable = () => {
             />
 
             {/* Controls Toolbar */}
-            <div className="flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl backdrop-blur-xl shadow-xl">
+            <div className="relative z-30 flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl backdrop-blur-xl shadow-xl">
                 {/* Search */}
                 <div className="relative flex-1 group">
                     <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-purple-500/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { MainSidebar } from '@/components/MainSidebar';
 import { Menu } from 'lucide-react';
 import { SplashIntro } from '@/components/SplashIntro';
+import { PageTransition } from '@/components/ui/PageTransition';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -35,7 +36,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
                     {/* Page Content */}
                     <div className="flex-1 overflow-hidden p-4 lg:p-6 relative">
-                        {children}
+                        <PageTransition className="h-full">
+                            {children}
+                        </PageTransition>
                     </div>
                 </main>
             </div>

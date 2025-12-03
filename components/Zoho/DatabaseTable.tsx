@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { zohoApi } from '@/lib/zoho';
-import { RefreshCw, Trash2, Edit2, Plus, Search } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Plus, Search, Filter } from 'lucide-react';
+import { FilterPopover } from './FilterPopover';
 import { DatabaseFormModal } from './DatabaseFormModal';
 import { DatabaseDetailsModal } from './DatabaseDetailsModal';
 import { Button } from '../ui/Button';
@@ -22,8 +23,42 @@ export const DatabaseTable = () => {
     const [page, setPage] = useState(0);
     const LIMIT = 100;
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-    const [totalRecords, setTotalRecords] = useState<number | null>(null);
-    const [loadingTotal, setLoadingTotal] = useState(false);
+
+    // Filters
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [availableCountries, setAvailableCountries] = useState<string[]>([]);
+    const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+
+    // Fetch unique values for filters
+    useEffect(() => {
+        const fetchFilters = async () => {
+            try {
+                const countries = new Set<string>();
+
+                // Fetch up to 5 pages (1000 records) to get a good sample of countries
+                const MAX_PAGES = 5;
+                const BATCH_SIZE = 100;
+
+                for (let i = 0; i < MAX_PAGES; i++) {
+                    const res = await zohoApi.getRecords('Database_Report', undefined, i * BATCH_SIZE, BATCH_SIZE);
+                    if (res.data && Array.isArray(res.data)) {
+                        res.data.forEach((item: any) => {
+                            if (item.Country) countries.add(item.Country);
+                        });
+
+                        if (res.data.length < BATCH_SIZE) break;
+                    } else {
+                        break;
+                    }
+                }
+
+                setAvailableCountries(Array.from(countries).sort());
+            } catch (err) {
+                console.error('Failed to fetch filter values', err);
+            }
+        };
+        fetchFilters();
+    }, []);
 
     // Manual debounce
     useEffect(() => {
@@ -38,8 +73,22 @@ export const DatabaseTable = () => {
         setError('');
         try {
             const from = reset ? 0 : page * LIMIT;
-            // Try searching by Show name
-            const criteria = searchTerm ? `(Show.contains("${searchTerm}"))` : undefined;
+
+            // Construct criteria
+            let criteriaParts = [];
+
+            // Search
+            if (searchTerm) {
+                criteriaParts.push(`(Show.contains("${searchTerm}"))`);
+            }
+
+            // Filters
+            if (selectedCountries.length > 0) {
+                const countryCriteria = selectedCountries.map(c => `Country == "${c}"`).join(' || ');
+                criteriaParts.push(`(${countryCriteria})`);
+            }
+
+            const criteria = criteriaParts.length > 0 ? criteriaParts.join(' && ') : undefined;
 
             const res = await zohoApi.getRecords('Database_Report', criteria, from, LIMIT);
 
@@ -69,71 +118,19 @@ export const DatabaseTable = () => {
     useEffect(() => {
         fetchData(true, debouncedSearch);
         if (debouncedSearch) setPage(0);
-    }, [debouncedSearch]);
+    }, [debouncedSearch, selectedCountries]);
+
+    const handleApplyFilters = (countries: string[], continents: string[]) => {
+        setSelectedCountries(countries);
+    };
+
+    const handleClearFilters = () => {
+        setSelectedCountries([]);
+    };
 
     const loadMore = () => {
         if (!loading && hasMore) {
             fetchData(false, debouncedSearch);
-        }
-    };
-
-    const fetchTotalRecords = async () => {
-        setLoadingTotal(true);
-        try {
-            // In a real scenario, we might need a specific API or iterate.
-            // For now, we simulate or try to fetch a large limit to see if we get a count,
-            // or just use the current data length if it's small.
-            // But the user wants a specific action.
-            // Let's try to fetch with a very large limit to get the "full list" count effectively
-            // or use the getRecordCount we added (which currently just fetches 1 record).
-            // If the API returned a count in metadata, we would use it.
-            // Since we don't know if it does, let's assume we might need to fetch all ID's.
-            // However, to be "less heavy", we will just fetch the count if possible.
-            // Let's assume getRecordCount returns a response that might have "result_count" or similar.
-
-            // Actually, let's just fetch a large batch for the "count" if the user wants to know "how loaded".
-            // Or better, let's just show the current loaded count vs "..."
-            // The user said: "hash load and get the full count".
-
-            const res = await zohoApi.getRecords('Database_Report', undefined, 0, 1);
-            // If the response has a total count field (e.g. record_count), use it.
-            // Zoho Creator V2 JSON often has `code`, `data`.
-            // If no count, we might have to say "Unknown" or implement a heavier count.
-            // For this task, I'll set a placeholder or if the user provided image implies a specific field.
-            // I will set it to a random number or "1000+" for now if I can't get it, 
-            // BUT I should try to be real.
-            // Let's just set it to "Calculated..." for now.
-
-            // WAIT, I can use the `data` length from a large fetch? No.
-            // I will just set it to "N/A" if not found, but the user wants it.
-            // Let's try to fetch the first page and see if there is metadata.
-
-            // For now, I will just simulate a delay and show "Unknown (API limit)" if I can't get it,
-            // OR I can try to fetch all IDs in the background? No.
-
-            // Let's just use the current data length + "..." if hasMore.
-
-            // Actually, I will just fetch 1 record and check if there is a `result_count` in the response.
-            // If not, I will just show "Many".
-
-            if (res.result_count) {
-                setTotalRecords(res.result_count);
-            } else {
-                // Fallback: fetch all IDs (heavy but requested on click)
-                // This is "heavy" but the user said "do that way".
-                // "whne clicekd on hash load and get the ull count which is less heavy for the application do that way"
-                // This implies: Don't load all data, just load the COUNT.
-                // Since there is no count endpoint, maybe fetching just IDs is the way.
-                // But I can't specify columns in V2 easily?
-                // I'll just leave it as null for now and show a toast "Count not available in API".
-                // OR I will just show the current count.
-
-                setTotalRecords(9999); // Placeholder as I can't verify API response structure for count.
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoadingTotal(false);
         }
     };
 
@@ -183,43 +180,66 @@ export const DatabaseTable = () => {
                 onAddToLeads={(item) => alert(`Added ${item.Company} to leads (Simulation)`)}
             />
 
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-white/5 backdrop-blur-sm">
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="text-sm text-zinc-400 font-medium flex items-center gap-2">
-                        <span>Total Records:</span>
-                        {totalRecords !== null ? (
-                            <span className="text-white font-bold">{totalRecords}</span>
-                        ) : (
-                            <button
-                                onClick={fetchTotalRecords}
-                                disabled={loadingTotal}
-                                className="px-2 py-0.5 bg-white/5 hover:bg-white/10 rounded text-xs text-zinc-300 border border-white/5 transition-colors flex items-center gap-1"
-                            >
-                                {loadingTotal ? 'Loading...' : '# Load'}
-                            </button>
-                        )}
-                    </div>
-                    <div className="h-4 w-px bg-white/10" />
-                    <div className="text-sm text-zinc-400">
-                        Loaded: <span className="text-white font-bold">{data.length}</span>
+            {/* Controls Toolbar */}
+            <div className="relative z-30 flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl backdrop-blur-xl shadow-xl">
+                {/* Search */}
+                <div className="relative flex-1 group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-purple-500/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative flex items-center">
+                        <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-orange-400 transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Search database..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
+                        />
                     </div>
                 </div>
 
-                <div className="w-full md:w-96 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                        type="text"
-                        placeholder="Search database..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-zinc-600"
-                    />
-                </div>
-                <div className="flex gap-3 w-full md:w-auto">
-                    <Button variant="secondary" onClick={() => fetchData(true, debouncedSearch)} isLoading={loading} className="glass-button h-9">
-                        <RefreshCw className="w-4 h-4" />
+                {/* Actions Group */}
+                <div className="flex items-center gap-3">
+                    {/* Filter */}
+                    <div className="relative">
+                        <Button
+                            variant="secondary"
+                            onClick={() => setIsFilterOpen(!isFilterOpen)}
+                            className={`glass-button h-11 px-5 border-white/10 hover:border-white/20 ${selectedCountries.length > 0 ? 'border-orange-500/50 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20' : 'text-zinc-400 hover:text-white'}`}
+                            leftIcon={<Filter className="w-4 h-4" />}
+                        >
+                            Filters {selectedCountries.length > 0 && `(${selectedCountries.length})`}
+                        </Button>
+
+                        <FilterPopover
+                            isOpen={isFilterOpen}
+                            onClose={() => setIsFilterOpen(false)}
+                            availableCountries={availableCountries}
+                            availableContinents={[]}
+                            selectedCountries={selectedCountries}
+                            selectedContinents={[]}
+                            onApply={handleApplyFilters}
+                            onClear={handleClearFilters}
+                        />
+                    </div>
+
+                    <div className="w-px h-8 bg-white/10 mx-1 hidden md:block" />
+
+                    {/* Refresh */}
+                    <Button
+                        variant="secondary"
+                        onClick={() => fetchData(true, debouncedSearch)}
+                        isLoading={loading}
+                        className="glass-button h-11 w-11 p-0 flex items-center justify-center border-white/10 hover:border-white/20 text-zinc-400 hover:text-white"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     </Button>
-                    <Button onClick={handleAdd} leftIcon={<Plus className="w-4 h-4" />} className="bg-primary hover:bg-primary-dark text-white border-0 shadow-lg shadow-primary/20 h-9 text-sm">
+
+                    {/* Add Button */}
+                    <Button
+                        onClick={handleAdd}
+                        leftIcon={<Plus className="w-4 h-4" />}
+                        className="h-11 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white border-0 shadow-lg shadow-orange-500/20 px-6 font-medium"
+                    >
                         Add Record
                     </Button>
                 </div>

@@ -17,8 +17,8 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
     const navItems = [
         { id: 'search', icon: Search, label: 'Search', href: '/search' },
         { id: 'database', icon: Database, label: 'Database', href: '/database' },
-        { id: 'analytics', icon: LayoutDashboard, label: 'Analytics', href: '/analytics' },
-        { id: 'zoho', icon: CloudLightning, label: 'Zoho', href: '/zoho' },
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+        { id: 'zoho', icon: CloudLightning, label: 'Zoho (Legacy)', href: '/zoho' },
     ];
 
     const bottomItems = [
@@ -41,33 +41,34 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                 )}
             </AnimatePresence>
 
-            {/* Desktop Hover Trigger Area */}
+            {/* Desktop Sidebar (Mini -> Expanded) */}
             <div
-                className="hidden lg:block fixed inset-y-0 left-0 w-6 z-50 hover:w-72 transition-all duration-300 group"
+                className="hidden lg:block fixed inset-y-0 left-0 z-50 h-full transition-all duration-300 ease-in-out group"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
+                style={{ width: isHovered ? '18rem' : '5rem' }} // w-72 vs w-20
             >
                 {/* Sidebar Container */}
                 <div
                     className={cn(
                         "h-full flex flex-col bg-zinc-900/90 backdrop-blur-2xl border-r border-white/10 shadow-2xl transition-all duration-300 ease-in-out overflow-hidden",
-                        isHovered ? "w-72 translate-x-0" : "w-0 -translate-x-full opacity-0"
+                        "w-full"
                     )}
                 >
                     {/* Header */}
-                    <div className="p-6 flex items-center gap-3 min-w-[288px]">
+                    <div className={cn("p-6 flex items-center gap-3 transition-all duration-300", isHovered ? "justify-start" : "justify-center px-2")}>
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
                             <CloudLightning className="w-6 h-6 text-white" />
                         </div>
-                        <div>
+                        <div className={cn("transition-opacity duration-300 overflow-hidden whitespace-nowrap", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>
                             <h1 className="font-bold text-lg text-white leading-tight">Fairplatz</h1>
                             <p className="text-xs text-zinc-400">Marketing Tool</p>
                         </div>
                     </div>
 
                     {/* Navigation */}
-                    <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2 min-w-[288px]">
-                        <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">Menu</p>
+                    <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2">
+                        <p className={cn("text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wider transition-all duration-300", isHovered ? "px-4 opacity-100" : "px-0 text-center opacity-0 hidden")}>Menu</p>
                         {navItems.map((item) => {
                             const isActive = pathname.startsWith(item.href);
                             return (
@@ -75,15 +76,16 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                                     key={item.id}
                                     href={item.href}
                                     className={cn(
-                                        "relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 group/item text-left",
+                                        "relative w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group/item",
                                         isActive
                                             ? "bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20"
-                                            : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                                            : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100",
+                                        isHovered ? "justify-start px-4" : "justify-center"
                                     )}
                                 >
                                     <item.icon className={cn("w-5 h-5 shrink-0", isActive ? "text-white" : "text-zinc-500 group-hover/item:text-zinc-300")} />
-                                    <span className="font-medium text-sm whitespace-nowrap">{item.label}</span>
-                                    {isActive && (
+                                    <span className={cn("font-medium text-sm whitespace-nowrap transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>{item.label}</span>
+                                    {isActive && isHovered && (
                                         <motion.div
                                             layoutId="activeSidebarIndicator"
                                             className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white"
@@ -95,16 +97,19 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                     </div>
 
                     {/* Bottom Actions */}
-                    <div className="mt-auto p-4 border-t border-white/5 flex flex-col gap-2 min-w-[288px]">
-                        <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">General</p>
+                    <div className="mt-auto p-4 border-t border-white/5 flex flex-col gap-2">
+                        <p className={cn("text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wider transition-all duration-300", isHovered ? "px-4 opacity-100" : "px-0 text-center opacity-0 hidden")}>General</p>
                         {bottomItems.map((item) => (
                             <Link
                                 key={item.id}
                                 href={item.href}
-                                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-400 hover:bg-white/5 hover:text-zinc-100 transition-all duration-300 text-left"
+                                className={cn(
+                                    "w-full flex items-center gap-3 p-3 rounded-xl text-zinc-400 hover:bg-white/5 hover:text-zinc-100 transition-all duration-300",
+                                    isHovered ? "justify-start px-4" : "justify-center"
+                                )}
                             >
                                 <item.icon className="w-5 h-5 shrink-0 text-zinc-500 group-hover:text-zinc-300" />
-                                <span className="font-medium text-sm whitespace-nowrap">{item.label}</span>
+                                <span className={cn("font-medium text-sm whitespace-nowrap transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>{item.label}</span>
                             </Link>
                         ))}
                     </div>

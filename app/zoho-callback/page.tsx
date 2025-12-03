@@ -62,7 +62,7 @@ function ZohoCallbackContent() {
                 saveZohoConfig({
                     ...config,
                     accessToken: data.access_token,
-                    refreshToken: data.refresh_token,
+                    refreshToken: data.refresh_token || config.refreshToken,
                 });
 
                 setStatus('Success! Redirecting...');

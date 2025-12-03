@@ -24,7 +24,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <MainSidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
                 {/* Main Content Area */}
-                <main className="flex-1 h-full overflow-hidden relative flex flex-col z-10">
+                <main className="flex-1 h-full overflow-hidden relative flex flex-col z-10 lg:ml-20 transition-all duration-300">
                     {/* Mobile Header */}
                     <div className="lg:hidden p-4 flex items-center justify-between bg-zinc-900/50 backdrop-blur-md border-b border-white/5 z-30">
                         <div className="font-bold text-lg text-white">Fairplatz</div>

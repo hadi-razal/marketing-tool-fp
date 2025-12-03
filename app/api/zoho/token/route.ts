@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { code, clientId, clientSecret, redirectUri, dc, grantType, refreshToken } = body;
+        let { code, clientId, clientSecret, redirectUri, dc, grantType, refreshToken } = body;
+
+        // Fallback to env vars
+        if (!clientId) clientId = process.env.ZOHO_CLIENT_ID;
+        if (!clientSecret) clientSecret = process.env.ZOHO_CLIENT_SECRET;
 
         const map: Record<string, string> = {
             'com': 'https://accounts.zoho.com',

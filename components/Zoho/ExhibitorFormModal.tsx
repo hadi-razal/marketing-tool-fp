@@ -15,31 +15,54 @@ interface ExhibitorFormModalProps {
 export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, onClose, onSuccess, initialData }) => {
     const [formData, setFormData] = useState({
         Company: '',
-        Type: '',
+        Company_Type: '',
         Website: '',
         City: '',
         Country: '',
-        World_Area: '',
+        Area: '',
         Contact_Details: '',
-        Linkedin: '',
+        Company_Linkedin: '',
         FP_Level: '',
         Events: ''
     });
     const [loading, setLoading] = useState(false);
 
+    const extractValue = (val: any): string => {
+        if (!val) return '';
+        if (typeof val === 'string') return val;
+        if (Array.isArray(val)) {
+            return val.length > 0 ? extractValue(val[0]) : '';
+        }
+        if (typeof val === 'object') {
+            return val.url || val.value || '';
+        }
+        return '';
+    };
+
     useEffect(() => {
         if (initialData) {
-            setFormData(initialData);
+            setFormData({
+                Company: initialData.Company || '',
+                Company_Type: initialData.Company_Type || initialData.Type || '',
+                Website: extractValue(initialData.Website || initialData.Company_Website || initialData.website),
+                City: initialData.City || '',
+                Country: initialData.Country || '',
+                Area: initialData.Area || initialData.World_Area || '',
+                Contact_Details: initialData.Contact_Details || '',
+                Company_Linkedin: extractValue(initialData.Company_Linkedin || initialData.Linkedin),
+                FP_Level: initialData.FP_Level || '',
+                Events: Array.isArray(initialData.Events) ? initialData.Events.join(', ') : (initialData.Events || '')
+            });
         } else {
             setFormData({
                 Company: '',
-                Type: '',
+                Company_Type: '',
                 Website: '',
                 City: '',
                 Country: '',
-                World_Area: '',
+                Area: '',
                 Contact_Details: '',
-                Linkedin: '',
+                Company_Linkedin: '',
                 FP_Level: '',
                 Events: ''
             });
@@ -80,18 +103,18 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <SoftInput label="Type" value={formData.Type} onChange={(e) => setFormData({ ...formData, Type: e.target.value })} placeholder="e.g. Technology" />
+                    <SoftInput label="Type" value={formData.Company_Type} onChange={(e) => setFormData({ ...formData, Company_Type: e.target.value })} placeholder="e.g. Technology" />
                     <SoftInput label="Website" value={formData.Website} onChange={(e) => setFormData({ ...formData, Website: e.target.value })} placeholder="e.g. acme.com" icon={<Globe className="w-4 h-4" />} />
 
                     <SoftInput label="City" value={formData.City} onChange={(e) => setFormData({ ...formData, City: e.target.value })} placeholder="e.g. London" icon={<MapPin className="w-4 h-4" />} />
                     <SoftInput label="Country" value={formData.Country} onChange={(e) => setFormData({ ...formData, Country: e.target.value })} placeholder="e.g. UK" />
 
-                    <SoftInput label="World Area" value={formData.World_Area} onChange={(e) => setFormData({ ...formData, World_Area: e.target.value })} placeholder="e.g. Europe" />
+                    <SoftInput label="World Area" value={formData.Area} onChange={(e) => setFormData({ ...formData, Area: e.target.value })} placeholder="e.g. Europe" />
                     <SoftInput label="FP Level" value={formData.FP_Level} onChange={(e) => setFormData({ ...formData, FP_Level: e.target.value })} placeholder="1, 2, 3, 4" icon={<Hash className="w-4 h-4" />} />
                 </div>
 
                 <SoftInput label="Contact Details" value={formData.Contact_Details} onChange={(e) => setFormData({ ...formData, Contact_Details: e.target.value })} placeholder="Phone or Email" icon={<Phone className="w-4 h-4" />} />
-                <SoftInput label="LinkedIn" value={formData.Linkedin} onChange={(e) => setFormData({ ...formData, Linkedin: e.target.value })} placeholder="LinkedIn URL" icon={<Linkedin className="w-4 h-4" />} />
+                <SoftInput label="LinkedIn" value={formData.Company_Linkedin} onChange={(e) => setFormData({ ...formData, Company_Linkedin: e.target.value })} placeholder="LinkedIn URL" icon={<Linkedin className="w-4 h-4" />} />
                 <SoftInput label="Events" value={formData.Events} onChange={(e) => setFormData({ ...formData, Events: e.target.value })} placeholder="Associated Events" />
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-white/5">

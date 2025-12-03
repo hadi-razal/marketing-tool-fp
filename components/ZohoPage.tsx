@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { Sidebar, SidebarItem } from './Sidebar';
+
 import { ExhibitorTable } from './Zoho/ExhibitorTable';
 import { DatabaseTable } from './Zoho/DatabaseTable';
 import { ShowsTable } from './Zoho/ShowsTable';
 import { ZohoSettingsModal } from './Zoho/ZohoSettingsModal';
-import { Settings, Database, Users, Calendar, CloudLightning, Menu } from 'lucide-react';
-import { Button } from './ui/Button';
+import { Settings, Database, Users, Calendar, CloudLightning, HardDrive } from 'lucide-react';
+import { FileExplorer } from './Drive/FileExplorer';
 
 export const ZohoPage = () => {
     const [activeView, setActiveView] = useState('exhibitors');
     const [showSettings, setShowSettings] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     return (
         <div className="flex flex-col lg:flex-row h-full relative gap-6">
@@ -52,6 +51,14 @@ export const ZohoPage = () => {
                         <Database className={`w-5 h-5 ${activeView === 'database' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
                         <span className="font-medium text-sm">Database</span>
                     </button>
+
+                    <button
+                        onClick={() => setActiveView('drive')}
+                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'drive' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                    >
+                        <HardDrive className={`w-5 h-5 ${activeView === 'drive' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                        <span className="font-medium text-sm">WorkDrive</span>
+                    </button>
                 </div>
 
                 <div className="mt-auto pt-6 border-t border-white/5">
@@ -71,9 +78,12 @@ export const ZohoPage = () => {
                     <div>
                         <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">
                             {activeView === 'exhibitors' ? 'Exhibitor Management' :
-                                activeView === 'shows' ? 'Show Management' : 'Database Records'}
+                                activeView === 'shows' ? 'Show Management' :
+                                    activeView === 'database' ? 'Database Records' : 'Zoho WorkDrive'}
                         </h1>
-                        <p className="text-zinc-400 text-sm mt-1">Manage your Zoho Creator data directly.</p>
+                        <p className="text-zinc-400 text-sm mt-1">
+                            {activeView === 'drive' ? 'Manage your files and folders.' : 'Manage your Zoho Creator data directly.'}
+                        </p>
                     </div>
                 </div>
 
@@ -81,6 +91,7 @@ export const ZohoPage = () => {
                     {activeView === 'exhibitors' && <ExhibitorTable />}
                     {activeView === 'shows' && <ShowsTable />}
                     {activeView === 'database' && <DatabaseTable />}
+                    {activeView === 'drive' && <FileExplorer />}
                 </div>
             </div>
         </div>

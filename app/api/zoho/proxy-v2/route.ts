@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
-    console.log('Proxy POST request received');
+    console.log('Proxy V2 POST request received');
     try {
         const body = await req.json();
         const { url, method, body: requestBody, headers } = body;
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-    return NextResponse.json({ message: 'Proxy is working' });
+    return NextResponse.json({ message: 'Proxy V2 is working' });
 }
 
 export async function OPTIONS() {

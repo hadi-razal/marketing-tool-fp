@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
     FolderOpen, Clock, Check, X, Edit2, Search, Loader2, Download, Database, Trash2, Filter
 } from 'lucide-react';
-import { SidebarContainer } from './Sidebar';
+
 import { ProfileCard } from './ProfileCard';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';

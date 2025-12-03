@@ -14,14 +14,15 @@ const DATA_CENTERS = [
     { label: 'United States (.com)', value: 'com', authUrl: 'https://accounts.zoho.com' },
     { label: 'Europe (.eu)', value: 'eu', authUrl: 'https://accounts.zoho.eu' },
     { label: 'India (.in)', value: 'in', authUrl: 'https://accounts.zoho.in' },
+    { label: 'UAE (.ae)', value: 'ae', authUrl: 'https://accounts.zoho.ae' },
     { label: 'Australia (.com.au)', value: 'com.au', authUrl: 'https://accounts.zoho.com.au' },
     { label: 'China (.com.cn)', value: 'com.cn', authUrl: 'https://accounts.zoho.com.cn' },
 ];
 
 export const ZohoSettingsModal: React.FC<ZohoSettingsModalProps> = ({ isOpen, onClose }) => {
     const [config, setConfig] = useState<ZohoConfig>({
-        clientId: '1000.VI74C4V47ERZ50XZTSO3Z5BKSG7QLL',
-        clientSecret: '8cf1f0ae40fbe98d174b01d28bf8dbbdc4876524a9',
+        clientId: process.env.NEXT_PUBLIC_ZOHO_CLIENT_ID || '',
+        clientSecret: '',
         redirectUri: 'http://localhost:3000/zoho-callback',
         ownerName: 'fairplatz2025',
         appLinkName: 'exhibitorsdb',
@@ -48,10 +49,14 @@ export const ZohoSettingsModal: React.FC<ZohoSettingsModalProps> = ({ isOpen, on
             'ZohoCreator.report.CREATE',
             'ZohoCreator.report.UPDATE',
             'ZohoCreator.report.DELETE',
-            'ZohoCreator.form.CREATE'
+            'ZohoCreator.form.CREATE',
+            'WorkDrive.files.ALL',
+            'WorkDrive.teamfolders.READ',
+            'WorkDrive.team.READ',
+            'ZohoSearch.securesearch.READ'
         ].join(',');
 
-        const authUrl = `${dc.authUrl}/oauth/v2/auth?scope=${scopes}&client_id=${config.clientId}&response_type=code&access_type=offline&redirect_uri=${config.redirectUri}`;
+        const authUrl = `${dc.authUrl}/oauth/v2/auth?scope=${scopes}&client_id=${config.clientId}&response_type=code&access_type=offline&redirect_uri=${config.redirectUri}&prompt=consent`;
         window.location.href = authUrl;
     };
 
@@ -156,7 +161,7 @@ export const ZohoSettingsModal: React.FC<ZohoSettingsModalProps> = ({ isOpen, on
                 <div className="flex gap-3 pt-4 border-t border-white/5">
                     <Button variant="ghost" onClick={onClose} className="flex-1">Cancel</Button>
                     <Button onClick={handleAuthorize} className="flex-1" leftIcon={<Globe className="w-4 h-4" />}>
-                        Authorize & Connect
+                        Authorize / Reconnect
                     </Button>
                 </div>
             </div>

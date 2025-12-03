@@ -48,7 +48,7 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
         setLoading(true);
         try {
             if (initialData?.ID) {
-                await zohoApi.updateRecord('Show_List', initialData.ID, formData);
+                await zohoApi.updateRecord('Event_and_Exhibitor_Admin_Only_Report', initialData.ID, formData);
             } else {
                 await zohoApi.addRecord('Show_Details', formData);
             }

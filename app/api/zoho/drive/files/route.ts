@@ -1,25 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-    console.log('Proxy POST request received');
     try {
         const body = await req.json();
-        const { url, method, body: requestBody, headers } = body;
+        const { url, method, headers } = body;
+        const token = req.headers.get('Authorization');
 
         if (!url) {
             return NextResponse.json({ error: 'URL is required' }, { status: 400 });
         }
 
+        if (!token) {
+            return NextResponse.json({ error: 'Authorization token missing' }, { status: 401 });
+        }
+
+        // We use this specific proxy to ensure the Accept header is correct and to handle JSON:API response
         const fetchOptions: RequestInit = {
             method: method || 'GET',
             headers: {
-                ...headers,
+                'Authorization': token,
+                'Accept': 'application/vnd.api+json', // Critical for WorkDrive
+                ...headers
             },
         };
-
-        if (requestBody && (method === 'POST' || method === 'PATCH' || method === 'PUT')) {
-            fetchOptions.body = typeof requestBody === 'object' ? JSON.stringify(requestBody) : requestBody;
-        }
 
         const res = await fetch(url, fetchOptions);
         const data = await res.json();
@@ -32,12 +35,4 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
-
-export async function GET() {
-    return NextResponse.json({ message: 'Proxy is working' });
-}
-
-export async function OPTIONS() {
-    return NextResponse.json({}, { status: 200 });
 }

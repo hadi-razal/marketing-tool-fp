@@ -4,19 +4,65 @@ import { motion } from 'framer-motion';
 import { User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase';
 
 export default function RegisterPage() {
     const [isLoading, setIsLoading] = useState(false);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [error, setError] = useState('');
     const router = useRouter();
+    const supabase = createClient();
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        // Simulate registration
-        setTimeout(() => {
+        setError('');
+
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        full_name: fullName,
+                    },
+                    emailRedirectTo: `${location.origin}/auth/callback`,
+                },
+            });
+
+            console.log('SignUp Response:', { data, error });
+
+            if (error) throw error;
+
+            if (data.user) {
+                const { error: dbError } = await supabase
+                    .from('users')
+                    .insert([
+                        {
+                            email: email,
+                            name: fullName,
+                            created_at: new Date(),
+                            uid: data.user.id,
+                        }
+                    ]);
+
+                console.log('DB Insert Response:', { dbError });
+
+                if (dbError) {
+                    console.error("Error creating user record:", dbError);
+                    throw new Error(`Database Error: ${dbError.message}. Please check if 'user_id' column type matches (UUID vs int8).`);
+                }
+            }
+
+            // Successful registration
+            router.push('/login?registered=true');
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
             setIsLoading(false);
-            router.push('/login');
-        }, 1500);
+        }
     };
 
     return (
@@ -48,6 +94,8 @@ export default function RegisterPage() {
                                     type="text"
                                     className="w-full bg-black/40 border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/50 focus:bg-black/60 transition-all"
                                     placeholder="John Doe"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
                                     required
                                 />
                             </div>
@@ -61,6 +109,8 @@ export default function RegisterPage() {
                                     type="email"
                                     className="w-full bg-black/40 border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/50 focus:bg-black/60 transition-all"
                                     placeholder="name@company.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     required
                                 />
                             </div>
@@ -74,10 +124,18 @@ export default function RegisterPage() {
                                     type="password"
                                     className="w-full bg-black/40 border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/50 focus:bg-black/60 transition-all"
                                     placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                     required
                                 />
                             </div>
                         </div>
+
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-3 rounded-xl text-center">
+                                {error}
+                            </div>
+                        )}
 
                         <button
                             type="submit"

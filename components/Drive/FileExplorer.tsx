@@ -213,9 +213,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     );
 
     return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-black/20">
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Toolbar */}
-            <div className="flex flex-col md:flex-row items-center justify-between p-4 border-b border-white/5 bg-zinc-900/30 backdrop-blur-sm gap-4">
+            <div className="flex flex-col md:flex-row items-center justify-between p-4 border-b border-white/5 gap-4">
                 <div className="flex items-center gap-2 overflow-hidden w-full md:w-auto">
                     {/* View Selector (Mobile/Compact) */}
                     <select

@@ -15,7 +15,7 @@ export default function TasksPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="flex-1 overflow-hidden relative rounded-2xl border border-white/5 bg-zinc-950/30 shadow-xl"
+                className="flex-1 overflow-hidden relative rounded-[32px] border border-white/5 bg-[#09090b]"
             >
                 <TasksTable />
             </motion.div>

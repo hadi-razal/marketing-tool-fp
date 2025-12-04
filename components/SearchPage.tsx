@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
-    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter
+    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter, Building2, Users, Download
 } from 'lucide-react';
 import { SoftInput } from './ui/Input';
 import { ProfileCard } from './ProfileCard';
+import { CompanyCard } from './CompanyCard';
+import { CompanyDetailsModal } from './CompanyDetailsModal';
 import { SaveBatchModal } from './SaveBatchModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { motion } from 'framer-motion';
+import { databaseService } from '@/services/databaseService';
 
 // Mock Data Services (Moved from page.tsx)
 const enrichCompanyData = async (inputName: string, inputDomain: string, quantity: number) => {
@@ -35,24 +38,6 @@ const enrichCompanyData = async (inputName: string, inputDomain: string, quantit
     });
 };
 
-const fetchApolloData = async (params: any) => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return Array.from({ length: params.quantity || 6 }).map((_, i) => ({
-        ...params,
-        id: `lead_${Date.now()}_${i}`,
-        name: ['Emma Wilson', 'James Bond', 'Lara Croft', 'Bruce Wayne', 'Tony Stark', 'Natasha Romanoff'][i % 6],
-        title: params.titles?.[0] || 'Executive',
-        company: params.company || 'Tech Corp',
-        website: params.website || 'tech.com',
-        location: params.location || 'Remote',
-        email: `user${i}@${params.website || 'tech.com'}`,
-        phone: '+1 555 0199',
-        image: `https://randomuser.me/api/portraits/lego/${i}.jpg`,
-        status: 'Verified',
-        score: Math.floor(Math.random() * 60) + 40, // Mock Score 40-100
-    }));
-};
-
 interface SearchPageProps {
     onSave: (leads: any[]) => void;
     notify: (msg: string, type?: string) => void;
@@ -60,21 +45,144 @@ interface SearchPageProps {
 
 export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
     const [mode, setMode] = useState<'search' | 'import'>('search');
-    const [filters, setFilters] = useState({ company: '', website: '', title: '', location: '', quantity: 5 });
+    const [searchType, setSearchType] = useState<'people' | 'companies'>('people');
+    const [filters, setFilters] = useState({ company: '', website: '', title: '', location: '', keywords: '', quantity: 9 });
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [results, setResults] = useState<any[]>([]);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [selectedCompany, setSelectedCompany] = useState<any>(null);
+    const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [processingStatus, setProcessingStatus] = useState('');
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<any>(null);
 
     const handleSearch = async () => {
-        if (!filters.company || !filters.website) return notify('Company & Website required', 'error');
+        if (searchType === 'people' && (!filters.company && !filters.website && !filters.keywords)) return notify('Company, Website or Keywords required', 'error');
+        if (searchType === 'companies' && (!filters.company && !filters.website && !filters.keywords)) return notify('Company Name, Website or Keywords required', 'error');
+
         setLoading(true);
         setResults([]);
-        const data = await fetchApolloData({ ...filters, titles: [filters.title] });
-        setResults(data);
-        setLoading(false);
+        setPage(1); // Reset page
+        setHasMore(true); // Reset hasMore
+
+        try {
+            const endpoint = searchType === 'people' ? '/api/apollo/search' : '/api/apollo/companies';
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...filters, page: 1 }), // Send page 1
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Search failed');
+            }
+
+            if (searchType === 'people') {
+                setResults(data.leads || []);
+                if (data.leads?.length === 0) notify('No people found matching criteria', 'error');
+                else notify(`Found ${data.leads.length} people`, 'success');
+            } else {
+                // Check if companies are already saved
+                const companies = data.companies || [];
+                const companiesWithStatus = await Promise.all(companies.map(async (comp: any) => {
+                    const isSaved = await databaseService.checkCompanySaved(comp.id);
+                    return { ...comp, isSaved };
+                }));
+
+                setResults(companiesWithStatus);
+
+                // Use pagination data if available, otherwise fallback to length check
+                if (data.pagination) {
+                    setHasMore(data.pagination.page < data.pagination.total_pages);
+                } else {
+                    // Fallback logic: if we got fewer results than requested, there are no more
+                    setHasMore(companies.length >= filters.quantity);
+                }
+
+                if (companies.length === 0) {
+                    notify('No companies found matching criteria', 'error');
+                    setHasMore(false);
+                }
+                else notify(`Found ${companies.length} companies`, 'success');
+            }
+        } catch (error: any) {
+            console.error('Search failed:', error);
+            notify(error.message || 'Failed to fetch data', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLoadMore = async () => {
+        if (!hasMore || loadingMore) return;
+
+        setLoadingMore(true);
+        const nextPage = page + 1;
+
+        try {
+            const endpoint = '/api/apollo/companies'; // Only companies support pagination for now based on this context
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...filters, page: nextPage }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Load more failed');
+            }
+
+            const companies = data.companies || [];
+
+            if (companies.length === 0) {
+                setHasMore(false);
+                notify('No more companies to load', 'info');
+            } else {
+                const companiesWithStatus = await Promise.all(companies.map(async (comp: any) => {
+                    const isSaved = await databaseService.checkCompanySaved(comp.id);
+                    return { ...comp, isSaved };
+                }));
+
+                setResults(prev => [...prev, ...companiesWithStatus]);
+                setPage(nextPage);
+
+                // Update hasMore based on pagination data
+                if (data.pagination) {
+                    setHasMore(data.pagination.page < data.pagination.total_pages);
+                } else {
+                    setHasMore(companies.length >= filters.quantity);
+                }
+            }
+
+        } catch (error: any) {
+            console.error('Load more failed:', error);
+            notify(error.message || 'Failed to load more data', 'error');
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+
+    const handleSaveCompany = async (company: any) => {
+        try {
+            await databaseService.saveCompany(company);
+
+            // Update local state to reflect saved status
+            setResults(prev => prev.map(c => c.id === company.id ? { ...c, isSaved: true } : c));
+            if (selectedCompany && selectedCompany.id === company.id) {
+                setSelectedCompany({ ...selectedCompany, isSaved: true });
+            }
+
+            notify('Company saved to database', 'success');
+        } catch (error) {
+            console.error('Failed to save company:', error);
+            notify('Failed to save company', 'error');
+        }
     };
 
     const processFile = async (file: File) => {
@@ -129,31 +237,69 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
 
             {/* Search Sidebar / Panel */}
             <div className="w-full lg:w-80 flex-shrink-0 flex flex-col gap-6">
-                <div className="bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
-                    <div className="flex bg-zinc-950/50 p-1 rounded-xl mb-6 border border-white/5">
-                        <button onClick={() => setMode('search')} className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${mode === 'search' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Manual</button>
-                        <button onClick={() => setMode('import')} className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${mode === 'import' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Bulk Import</button>
+                <div className="bg-[#09090b] border border-white/5 rounded-md p-6">
+                    <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-md border border-white/5 mb-6">
+                        <button
+                            onClick={() => setMode('search')}
+                            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${mode === 'search' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                            Manual Search
+                        </button>
+                        <button
+                            onClick={() => setMode('import')}
+                            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${mode === 'import' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                            Bulk Import
+                        </button>
                     </div>
 
                     {mode === 'search' ? (
                         <div className="space-y-4">
+                            <div className="flex gap-2 mb-6">
+                                <button
+                                    onClick={() => { setSearchType('people'); setResults([]); }}
+                                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${searchType === 'people' ? 'bg-zinc-800 border-orange-500 text-orange-500' : 'bg-transparent border-white/10 text-zinc-500 hover:border-white/20'}`}
+                                >
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Users className="w-3 h-3" /> People
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => { setSearchType('companies'); setResults([]); }}
+                                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${searchType === 'companies' ? 'bg-zinc-800 border-blue-500 text-blue-500' : 'bg-transparent border-white/10 text-zinc-500 hover:border-white/20'}`}
+                                >
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Building2 className="w-3 h-3" /> Companies
+                                    </div>
+                                </button>
+                            </div>
+
                             <div className="space-y-4">
                                 <SoftInput label="Company Name" placeholder="e.g. Acme Inc" value={filters.company} onChange={(e: any) => setFilters({ ...filters, company: e.target.value })} />
                                 <SoftInput label="Website Domain" placeholder="e.g. acme.com" value={filters.website} onChange={(e: any) => setFilters({ ...filters, website: e.target.value })} />
-                                <div className="w-full h-px bg-white/5 my-2"></div>
-                                <SoftInput label="Job Title" placeholder="e.g. Founder" value={filters.title} onChange={(e: any) => setFilters({ ...filters, title: e.target.value })} />
-                                <SoftInput label="Location" placeholder="e.g. New York" value={filters.location} onChange={(e: any) => setFilters({ ...filters, location: e.target.value })} />
 
-                                <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-xl border border-white/5">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs font-semibold text-zinc-400 flex items-center gap-2"><User className="w-3 h-3" /> Max People</span>
-                                        <span className="bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{filters.quantity}</span>
+                                {searchType === 'people' && (
+                                    <>
+                                        <div className="w-full h-px bg-white/5 my-2"></div>
+                                        <SoftInput label="Job Title" placeholder="e.g. Founder" value={filters.title} onChange={(e: any) => setFilters({ ...filters, title: e.target.value })} />
+                                    </>
+                                )}
+
+                                <SoftInput label="Location" placeholder="e.g. New York" value={filters.location} onChange={(e: any) => setFilters({ ...filters, location: e.target.value })} />
+                                <SoftInput label="Keywords" placeholder="e.g. SaaS, B2B, Marketing" value={filters.keywords} onChange={(e: any) => setFilters({ ...filters, keywords: e.target.value })} />
+
+                                {searchType === 'people' && (
+                                    <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-md border border-white/5">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-semibold text-zinc-400 flex items-center gap-2"><User className="w-3 h-3" /> Max People</span>
+                                            <span className="bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{filters.quantity}</span>
+                                        </div>
+                                        <input type="range" min="1" max="20" value={filters.quantity} onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })} className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500" />
                                     </div>
-                                    <input type="range" min="1" max="20" value={filters.quantity} onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })} className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500" />
-                                </div>
+                                )}
                             </div>
                             <div className="pt-4">
-                                <button onClick={handleSearch} disabled={loading} className="w-full py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold text-sm shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button onClick={handleSearch} disabled={loading} className="w-full py-3.5 rounded-md bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold text-sm shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                                     {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Zap className="w-5 h-5 fill-white" />}
                                     {loading ? 'Searching...' : 'Find Prospects'}
                                 </button>
@@ -161,7 +307,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                         </div>
                     ) : (
                         <div className="flex flex-col gap-6">
-                            <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-xl border border-white/5">
+                            <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-md border border-white/5">
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs font-semibold text-zinc-400 flex items-center gap-2"><Sliders className="w-3 h-3" /> People Per Company</span>
                                     <span className="bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{filters.quantity}</span>
@@ -194,14 +340,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
             </div>
 
             {/* Results Area */}
-            <div className="flex-1 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 lg:p-8 overflow-hidden flex flex-col relative shadow-xl">
+            <div className="flex-1 bg-[#09090b] border border-white/5 rounded-md p-6 lg:p-8 overflow-hidden flex flex-col relative">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                     <div>
                         <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">Live Results</h1>
-                        <p className="text-zinc-400 text-sm mt-1">{results.length > 0 ? `Found ${results.length} enriched profiles` : 'Start a search to see results'}</p>
+                        <p className="text-zinc-400 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
                     </div>
-                    {results.length > 0 && (
-                        <button onClick={initiateSave} className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-white/10 active:scale-95">
+                    {results.length > 0 && searchType === 'people' && (
+                        <button onClick={initiateSave} className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-md font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-white/10 active:scale-95">
                             <Save className="w-4 h-4" /> Save Batch
                         </button>
                     )}
@@ -209,41 +355,100 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     {loading && results.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-4">
-                            <div className="w-16 h-16 rounded-full border-4 border-zinc-800 border-t-orange-500 animate-spin"></div>
-                            <p className="text-zinc-500 text-sm font-medium animate-pulse">Searching across databases...</p>
+                        <div className="h-full flex flex-col items-center justify-center gap-8">
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full animate-pulse" />
+                                <div className="w-20 h-20 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center relative z-10 shadow-2xl">
+                                    <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+                                </div>
+                            </div>
+                            <div className="text-center space-y-2">
+                                <p className="text-white font-bold text-lg">Searching Apollo Database...</p>
+                                <p className="text-zinc-500 text-sm">Finding the best contacts for you</p>
+                            </div>
                         </div>
                     ) : results.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center gap-6 text-zinc-600">
-                            <div className="w-24 h-24 rounded-full bg-zinc-900/50 flex items-center justify-center border border-zinc-800">
-                                <Search className="w-10 h-10 opacity-20" />
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full opacity-20 animate-pulse" />
+                                <div className="w-32 h-32 rounded-3xl bg-zinc-900/50 flex items-center justify-center border border-white/5 shadow-2xl backdrop-blur-sm relative z-10">
+                                    <Search className="w-12 h-12 text-zinc-700" />
+                                </div>
                             </div>
-                            <div className="text-center">
-                                <p className="font-medium text-lg text-zinc-400">No results yet</p>
-                                <p className="text-sm text-zinc-600 mt-1">Enter search criteria or upload a list to begin</p>
+                            <div className="text-center max-w-md">
+                                <h3 className="font-bold text-xl text-white mb-2">Ready to Search</h3>
+                                <p className="text-sm text-zinc-500 leading-relaxed">
+                                    Enter criteria to find verified {searchType === 'people' ? 'professional contacts' : 'companies'} using Apollo's database.
+                                </p>
                             </div>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-20">
-                            {results.map((lead, idx) => (
-                                <motion.div
-                                    key={lead.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.05 }}
-                                >
-                                    <ProfileCard
-                                        lead={lead}
-                                        actionIcon={Save}
-                                        onAction={() => onSave([lead])}
-                                        onClick={() => setSelectedLead(lead)}
-                                    />
-                                </motion.div>
-                            ))}
+                        <div className="pb-20">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
+                                {searchType === 'people' ? (
+                                    results.map((lead, idx) => (
+                                        <motion.div
+                                            key={lead.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                        >
+                                            <ProfileCard
+                                                lead={lead}
+                                                actionIcon={Save}
+                                                onAction={() => onSave([lead])}
+                                                onClick={() => setSelectedLead(lead)}
+                                            />
+                                        </motion.div>
+                                    ))
+                                ) : (
+                                    results.map((company, idx) => (
+                                        <motion.div
+                                            key={company.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                        >
+                                            <CompanyCard
+                                                company={company}
+                                                onClick={() => {
+                                                    setSelectedCompany(company);
+                                                    setIsCompanyModalOpen(true);
+                                                }}
+                                            />
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* Load More Button */}
+                            {searchType === 'companies' && results.length > 0 && (
+                                <div className="flex justify-center">
+                                    {hasMore ? (
+                                        <button
+                                            onClick={handleLoadMore}
+                                            disabled={loadingMore}
+                                            className="px-6 py-3 rounded-md bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {loadingMore ? <Loader2 className="animate-spin w-4 h-4" /> : null}
+                                            {loadingMore ? 'Loading more...' : 'Load More Companies'}
+                                        </button>
+                                    ) : (
+                                        <p className="text-zinc-500 text-sm font-medium">No more companies found.</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
+
+            <CompanyDetailsModal
+                company={selectedCompany}
+                isOpen={isCompanyModalOpen}
+                onClose={() => setIsCompanyModalOpen(false)}
+                onSave={handleSaveCompany}
+            />
         </div>
     );
 };

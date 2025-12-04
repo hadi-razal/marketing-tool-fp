@@ -17,7 +17,7 @@ export default function DrivePage() {
     };
 
     return (
-        <div className="flex h-full rounded-3xl bg-zinc-900/50 backdrop-blur-xl border border-white/5 overflow-hidden shadow-2xl">
+        <div className="flex h-full rounded-[32px] bg-[#09090b] border border-white/5 overflow-hidden">
             <DriveSidebar activeSection={activeSection} onNavigate={handleNavigate} />
             <FileExplorer
                 viewType={activeSection}

@@ -9,4 +9,5 @@ export interface Task {
     created_by?: string;
     related_to?: string;
     created_at?: string;
+    uid?: string;
 }

@@ -34,7 +34,7 @@ export const DriveSidebar: React.FC<DriveSidebarProps> = ({ activeSection = 'my-
     ];
 
     return (
-        <div className="w-64 flex-shrink-0 border-r border-white/10 bg-zinc-900/30 p-4 hidden md:flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+        <div className="w-64 flex-shrink-0 border-r border-white/10 p-4 hidden md:flex flex-col gap-6 overflow-y-auto custom-scrollbar">
             <div className="px-2">
                 <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Drive</h2>
                 <div className="flex flex-col gap-1">

@@ -13,7 +13,16 @@ export interface ZohoConfig {
 export const getZohoConfig = (): ZohoConfig | null => {
     if (typeof window === 'undefined') return null;
     const stored = localStorage.getItem('zoho_config');
-    return stored ? JSON.parse(stored) : null;
+    const parsed = stored ? JSON.parse(stored) : {};
+
+    return {
+        ...parsed,
+        clientId: parsed.clientId || process.env.NEXT_PUBLIC_ZOHO_CLIENT_ID,
+        clientSecret: parsed.clientSecret || process.env.NEXT_PUBLIC_ZOHO_CLIENT_SECRET,
+        ownerName: parsed.ownerName || process.env.NEXT_PUBLIC_ZOHO_OWNER_NAME || 'fairplatz2025',
+        appLinkName: parsed.appLinkName || process.env.NEXT_PUBLIC_ZOHO_APP_LINK_NAME || 'exhibitorsdb',
+        redirectUri: parsed.redirectUri || process.env.NEXT_PUBLIC_ZOHO_REDIRECT_URI || 'http://localhost:3000/zoho-callback',
+    };
 };
 
 export const saveZohoConfig = (config: ZohoConfig) => {

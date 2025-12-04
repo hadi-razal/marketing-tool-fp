@@ -1,18 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase';
 import { User, Bell, Shield, Monitor, LogOut, ChevronRight, Moon, Sun, Laptop, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const SettingsPage = () => {
     const [theme, setTheme] = useState('dark');
     const [notifications, setNotifications] = useState(true);
+    const [userName, setUserName] = useState('');
+    const [userEmail, setUserEmail] = useState('');
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserEmail(user.email || '');
+
+                const { data: userData } = await supabase
+                    .from('users')
+                    .select('name')
+                    .eq('uid', user.id)
+                    .single();
+
+                if (userData) {
+                    setUserName(userData.name || 'User');
+                }
+            }
+        };
+        fetchUser();
+    }, []);
 
     const sections = [
         {
             title: 'Profile',
             icon: User,
             items: [
-                { label: 'Personal Information', value: 'John Doe', action: 'Edit' },
-                { label: 'Email Address', value: 'john@fairplatz.com', action: 'Edit' },
+                { label: 'Personal Information', value: userName || 'Loading...', action: null },
+                { label: 'Email Address', value: userEmail || 'Loading...', action: null },
             ]
         },
         {

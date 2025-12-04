@@ -7,7 +7,7 @@ import { SoftInput } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -15,23 +15,13 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const supabase = createClient();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
 
-        // Mock Admin Login
-        if (email === 'admin' && password === 'admin') {
-            // Simulate API delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            // Set a mock cookie or local storage
-            localStorage.setItem('fp_user', JSON.stringify({ email: 'admin', role: 'admin' }));
-            router.push('/');
-            return;
-        }
-
-        // Supabase Login
         try {
             const { error } = await supabase.auth.signInWithPassword({
                 email,
@@ -39,7 +29,8 @@ export default function LoginPage() {
             });
 
             if (error) throw error;
-            router.push('/');
+            router.push('/dashboard');
+            router.refresh(); // Refresh to update middleware state
         } catch (err: any) {
             setError(err.message || 'Failed to login');
             setLoading(false);

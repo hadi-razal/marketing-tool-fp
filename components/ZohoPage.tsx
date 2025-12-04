@@ -16,7 +16,7 @@ export const ZohoPage = () => {
             <ZohoSettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
             {/* Zoho Sidebar */}
-            <div className="w-full lg:w-80 flex-shrink-0 flex flex-col h-full bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl overflow-hidden">
+            <div className="w-full lg:w-80 flex-shrink-0 flex flex-col h-full bg-[#09090b] border border-white/5 rounded-[32px] p-6 overflow-hidden">
                 <div className="flex items-center gap-3 mb-8">
                     <div className="p-2 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl shadow-lg shadow-orange-500/20">
                         <CloudLightning className="w-6 h-6 text-white" />
@@ -81,7 +81,7 @@ export const ZohoPage = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 lg:p-8 overflow-hidden flex flex-col shadow-xl">
+            <div className="flex-1 bg-[#09090b] border border-white/5 rounded-[32px] p-6 lg:p-8 overflow-hidden flex flex-col">
                 <div className="flex items-center gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">

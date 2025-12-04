@@ -22,10 +22,10 @@ const DATA_CENTERS = [
 export const ZohoSettingsModal: React.FC<ZohoSettingsModalProps> = ({ isOpen, onClose }) => {
     const [config, setConfig] = useState<ZohoConfig>({
         clientId: process.env.NEXT_PUBLIC_ZOHO_CLIENT_ID || '',
-        clientSecret: '',
-        redirectUri: 'http://localhost:3000/zoho-callback',
-        ownerName: 'fairplatz2025',
-        appLinkName: 'exhibitorsdb',
+        clientSecret: process.env.NEXT_PUBLIC_ZOHO_CLIENT_SECRET || '',
+        redirectUri: process.env.NEXT_PUBLIC_ZOHO_REDIRECT_URI || 'http://localhost:3000/zoho-callback',
+        ownerName: process.env.NEXT_PUBLIC_ZOHO_OWNER_NAME || 'fairplatz2025',
+        appLinkName: process.env.NEXT_PUBLIC_ZOHO_APP_LINK_NAME || 'exhibitorsdb',
         authToken: '',
         dc: 'com'
     });

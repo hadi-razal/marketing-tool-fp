@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { company, website, title, location, keywords, quantity } = body;
+        const { company, website, title, location, keywords, quantity, page } = body;
 
         const apiKey = process.env.APOLLO_API_KEY;
 
@@ -15,22 +15,37 @@ export async function POST(request: Request) {
             );
         }
 
-        console.log('Apollo Search Request:', { company, website, title, location, keywords, quantity });
+        console.log('Apollo Search Request:', { company, website, title, location, keywords, quantity, page });
 
         const payload: any = {
-            q_organization_domains_list: website ? [website] : undefined,
-            person_titles: title ? [title] : undefined,
-            person_locations: location ? [location] : undefined,
-            q_keywords: keywords || undefined,
             per_page: quantity || 10,
-            page: 1,
+            page: page || 1,
             include_similar_titles: true,
-            contact_email_status: ["verified", "likely to engage"]
         };
+
+        // Organization filters
+        if (company) {
+            payload.q_organization_name = company;
+        }
+        if (website) {
+            const cleanDomain = website.replace(/^https?:\/\//, '').split('/')[0];
+            payload.q_organization_domains_list = [cleanDomain];
+        }
+
+        // Person filters
+        if (title) {
+            payload.person_titles = [title];
+        }
+        if (location) {
+            payload.person_locations = [location];
+        }
+        if (keywords) {
+            payload.q_keywords = keywords;
+        }
 
         console.log('Apollo Search Payload:', JSON.stringify(payload, null, 2));
 
-        const response = await fetch('https://api.apollo.io/api/v1/mixed_people/api_search', {
+        const response = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -58,25 +73,47 @@ export async function POST(request: Request) {
         }
 
         const data = await response.json();
+        console.log('Apollo API Raw Response:', JSON.stringify(data, null, 2));
         console.log('Apollo API Response Success. Count:', data.people?.length);
 
         // Transform Apollo data to our app's format
-        const leads = data.people.map((person: any) => ({
+        const leads = (data.people || []).map((person: any) => ({
             id: person.id,
-            name: person.first_name + ' ' + (person.last_name || person.last_name_obfuscated || ''),
+            name: `${person.first_name || ''} ${person.last_name || ''}`.trim() || 'Unknown',
+            first_name: person.first_name,
+            last_name: person.last_name,
             title: person.title,
+            headline: person.headline,
             company: person.organization?.name || company || 'Unknown',
-            website: person.organization?.primary_domain || website || '',
-            location: (person.city ? person.city + ', ' : '') + (person.state || person.country || location || ''),
+            company_id: person.organization?.id || person.organization_id,
+            website: person.organization?.primary_domain || person.organization?.website_url || website || '',
+            company_logo: person.organization?.logo_url,
+            company_industry: person.organization?.industry,
+            company_size: person.organization?.estimated_num_employees,
+            location: [person.city, person.state, person.country].filter(Boolean).join(', ') || location || '',
+            city: person.city,
+            state: person.state,
+            country: person.country,
             email: person.email || (person.has_email ? 'Available (Unlock)' : 'N/A'),
-            phone: person.phone_numbers?.[0]?.sanitized_number || (person.has_direct_phone ? 'Available (Unlock)' : 'N/A'),
+            email_status: person.email_status,
+            phone: person.phone_numbers?.[0]?.sanitized_number || person.sanitized_phone || (person.has_direct_phone ? 'Available (Unlock)' : 'N/A'),
             linkedin: person.linkedin_url,
-            image: person.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.first_name)}&background=random`,
-            status: 'Verified',
-            score: 85,
+            twitter: person.twitter_url,
+            facebook: person.facebook_url,
+            github: person.github_url,
+            image: person.photo_url,
+            seniority: person.seniority,
+            departments: person.departments,
+            functions: person.functions,
+            status: person.email_status === 'verified' ? 'Verified' : (person.email ? 'Likely Valid' : 'Unverified'),
+            score: person.email_status === 'verified' ? 95 : (person.email ? 75 : 50),
+            photo_url: person.photo_url,
         }));
 
-        return NextResponse.json({ leads });
+        return NextResponse.json({
+            leads,
+            pagination: data.pagination
+        });
 
     } catch (error: any) {
         console.error('Apollo Search Error:', error);

@@ -10,4 +10,5 @@ export interface Task {
     related_to?: string;
     created_at?: string;
     uid?: string;
+    profile_url?: string;
 }

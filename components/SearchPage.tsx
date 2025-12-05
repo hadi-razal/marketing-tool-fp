@@ -6,7 +6,6 @@ import { SoftInput } from './ui/Input';
 import { ProfileCard } from './ProfileCard';
 import { CompanyCard } from './CompanyCard';
 import { CompanyDetailsModal } from './CompanyDetailsModal';
-import { SaveBatchModal } from './SaveBatchModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { motion } from 'framer-motion';
 import { databaseService } from '@/services/databaseService';
@@ -83,9 +82,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
             }
 
             if (searchType === 'people') {
-                setResults(data.leads || []);
-                if (data.leads?.length === 0) notify('No people found matching criteria', 'error');
-                else notify(`Found ${data.leads.length} people`, 'success');
+                // Check if people are already saved
+                const leads = data.leads || [];
+                const leadsWithStatus = await Promise.all(leads.map(async (lead: any) => {
+                    const isSaved = await databaseService.checkPersonSaved(lead.id);
+                    return { ...lead, isSaved };
+                }));
+                setResults(leadsWithStatus);
+                if (leads.length === 0) notify('No people found matching criteria', 'error');
+                else notify(`Found ${leads.length} people`, 'success');
             } else {
                 // Check if companies are already saved
                 const companies = data.companies || [];
@@ -185,6 +190,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
         }
     };
 
+    const handleSavePerson = async (person: any) => {
+        try {
+            await databaseService.savePerson(person);
+
+            // Update local state to reflect saved status
+            setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+            if (selectedLead && selectedLead.id === person.id) {
+                setSelectedLead({ ...selectedLead, isSaved: true });
+            }
+
+            notify('Person saved to database', 'success');
+        } catch (error) {
+            console.error('Failed to save person:', error);
+            notify('Failed to save person', 'error');
+        }
+    };
+
     const processFile = async (file: File) => {
         setLoading(true);
         setProcessingStatus('Parsing file...');
@@ -207,32 +229,76 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
         }, 1500);
     };
 
-    const initiateSave = () => {
-        setIsSaveModalOpen(true);
+    const handleSaveAll = async () => {
+        if (results.length === 0) return;
+
+        let savedCount = 0;
+        notify(`Saving ${results.length} people...`, 'loading');
+
+        for (const person of results) {
+            if (person.isSaved) continue;
+            try {
+                await databaseService.savePerson(person);
+                savedCount++;
+                setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+            } catch (error) {
+                console.error(`Failed to save ${person.name}:`, error);
+            }
+        }
+
+        if (savedCount > 0) {
+            notify(`Successfully saved ${savedCount} people`, 'success');
+        } else {
+            notify('All visible people are already saved', 'info');
+        }
     };
 
-    const confirmSave = (batchName: string) => {
-        const leadsToSave = results.map(r => ({ ...r, group_name: batchName || 'Untitled Batch' }));
-        onSave(leadsToSave);
-        setResults([]);
-        setIsSaveModalOpen(false);
-    };
+    const handleUnlock = async (lead: any, type: 'email' | 'phone') => {
+        try {
+            const response = await fetch('/api/apollo/enrich', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: lead.id,
+                    reveal_email: type === 'email',
+                    reveal_phone: type === 'phone'
+                }),
+            });
 
-    const defaultBatchName = mode === 'search'
-        ? `Search: ${filters.company}`
-        : `Bulk Import (${new Date().toLocaleDateString()})`;
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to unlock contact info');
+            }
+
+            const unlockedLead = { ...data.lead, isSaved: true };
+
+            // Save to database automatically
+            await databaseService.savePerson(unlockedLead);
+
+            // Update local state
+            setResults(prev => prev.map(p => p.id === lead.id ? unlockedLead : p));
+            if (selectedLead && selectedLead.id === lead.id) {
+                setSelectedLead(unlockedLead);
+            }
+
+            notify('Contact info unlocked and saved!', 'success');
+            return unlockedLead;
+        } catch (error: any) {
+            console.error('Unlock failed:', error);
+            notify(error.message || 'Failed to unlock contact info', 'error');
+            return null;
+        }
+    };
 
     return (
         <div className="flex flex-col lg:flex-row h-full gap-6">
-            <SaveBatchModal
-                isOpen={isSaveModalOpen}
-                onClose={() => setIsSaveModalOpen(false)}
-                onConfirm={confirmSave}
-                defaultName={defaultBatchName}
-            />
-
             {selectedLead && (
-                <LeadDetailModal lead={selectedLead} onClose={() => setSelectedLead(null)} />
+                <LeadDetailModal
+                    lead={selectedLead}
+                    onClose={() => setSelectedLead(null)}
+                    onUnlock={handleUnlock}
+                />
             )}
 
             {/* Search Sidebar / Panel */}
@@ -347,8 +413,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                         <p className="text-zinc-400 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
                     </div>
                     {results.length > 0 && searchType === 'people' && (
-                        <button onClick={initiateSave} className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-md font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-white/10 active:scale-95">
-                            <Save className="w-4 h-4" /> Save Batch
+                        <button onClick={handleSaveAll} className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-md font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-white/10 active:scale-95">
+                            <Save className="w-4 h-4" /> Save All Results
                         </button>
                     )}
                 </div>
@@ -396,8 +462,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                                             <ProfileCard
                                                 lead={lead}
                                                 actionIcon={Save}
-                                                onAction={() => onSave([lead])}
+                                                onAction={() => handleSavePerson(lead)}
                                                 onClick={() => setSelectedLead(lead)}
+                                                isSaved={lead.isSaved}
                                             />
                                         </motion.div>
                                     ))

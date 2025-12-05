@@ -1,84 +1,18 @@
+
 import React, { useState, useMemo } from 'react';
 import {
-    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Download
+    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { ProfileCard } from './ProfileCard';
 import { CompanyCard, Company } from './CompanyCard';
 import { CreatePersonModal } from './CreatePersonModal';
 import { CreateCompanyModal } from './CreateCompanyModal';
-
-// Mock Data for People
-const MOCK_PEOPLE = [
-    {
-        id: 'lead_1',
-        name: 'Sarah Connor',
-        title: 'Chief Technology Officer',
-        company: 'Skynet Systems',
-        email: 'sarah@skynet.com',
-        phone: '+1 (555) 123-4567',
-        location: 'Los Angeles, CA',
-        image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        group_name: 'Tech Leaders'
-    },
-    {
-        id: 'lead_2',
-        name: 'John Smith',
-        title: 'VP of Sales',
-        company: 'Global Corp',
-        email: 'john.smith@globalcorp.com',
-        phone: '+1 (555) 987-6543',
-        location: 'New York, NY',
-        image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        group_name: 'Sales Prospects'
-    },
-    {
-        id: 'lead_3',
-        name: 'Emily Chen',
-        title: 'Product Manager',
-        company: 'Innovate Inc',
-        email: 'emily@innovate.com',
-        phone: '+1 (555) 456-7890',
-        location: 'San Francisco, CA',
-        image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        group_name: 'Tech Leaders'
-    }
-];
-
-// Mock Data for Companies
-const MOCK_COMPANIES: Company[] = [
-    {
-        id: 'comp_1',
-        name: 'Skynet Systems',
-        industry: 'Artificial Intelligence',
-        website: 'https://skynet.com',
-        location: 'Los Angeles, CA',
-        size: '500+',
-        description: 'Leading the way in autonomous defense systems and AI research.',
-        logo: 'https://ui-avatars.com/api/?name=Skynet+Systems&background=0D8ABC&color=fff'
-    },
-    {
-        id: 'comp_2',
-        name: 'Global Corp',
-        industry: 'Conglomerate',
-        website: 'https://globalcorp.com',
-        location: 'New York, NY',
-        size: '1000+',
-        description: 'A multinational corporation with diverse interests in various sectors.',
-        logo: 'https://ui-avatars.com/api/?name=Global+Corp&background=ff5722&color=fff'
-    },
-    {
-        id: 'comp_3',
-        name: 'Innovate Inc',
-        industry: 'Software',
-        website: 'https://innovate.com',
-        location: 'San Francisco, CA',
-        size: '51-200',
-        description: 'Creating the next generation of productivity tools for teams.',
-        logo: 'https://ui-avatars.com/api/?name=Innovate+Inc&background=4caf50&color=fff'
-    }
-];
+import { CompanyDetailsModal } from './CompanyDetailsModal';
+import { LeadDetailModal } from './LeadDetailModal';
+import { CompanyCardSkeleton } from './CompanyCardSkeleton';
+import { databaseService } from '@/services/databaseService';
 
 interface DatabasePageProps {
     notify: (msg: string, type?: string) => void;
@@ -86,36 +20,92 @@ interface DatabasePageProps {
 
 export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [activeView, setActiveView] = useState<'people' | 'companies'>('people');
-    const [people, setPeople] = useState<any[]>(MOCK_PEOPLE);
-    const [companies, setCompanies] = useState<Company[]>(MOCK_COMPANIES);
+    const [people, setPeople] = useState<any[]>([]);
+    const [companies, setCompanies] = useState<Company[]>([]);
     const [dbSearch, setDbSearch] = useState<string>('');
+    const [loading, setLoading] = useState(false);
+
+    // Filter State
+    const [showFilters, setShowFilters] = useState(false);
+    const [filters, setFilters] = useState({
+        industry: '',
+        location: '',
+        employees: ''
+    });
 
     // Modal States
     const [isCreatePersonOpen, setIsCreatePersonOpen] = useState(false);
     const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
+    const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+    const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+    const [selectedPerson, setSelectedPerson] = useState<any>(null);
+    const [isPersonModalOpen, setIsPersonModalOpen] = useState(false);
 
-    const handleDeletePerson = (id: string) => {
-        setPeople(prev => prev.filter(p => p.id !== id));
-        notify('Person removed', 'success');
+    // Fetch data on mount
+    React.useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const [savedCompanies, savedPeople] = await Promise.all([
+                    databaseService.getSavedCompanies(),
+                    databaseService.getSavedPeople()
+                ]);
+                setCompanies(savedCompanies);
+                setPeople(savedPeople);
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                notify('Failed to load data', 'error');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    const handleDeletePerson = async (id: string) => {
+        try {
+            await databaseService.deletePerson(id);
+            setPeople(prev => prev.filter(p => p.id !== id));
+            notify('Person removed', 'success');
+        } catch (error) {
+            console.error('Failed to delete person:', error);
+            notify('Failed to delete person', 'error');
+        }
     };
 
-    const handleDeleteCompany = (id: string) => {
-        setCompanies(prev => prev.filter(c => c.id !== id));
-        notify('Company removed', 'success');
+    const handleDeleteCompany = async (id: string) => {
+        try {
+            await databaseService.deleteCompany(id);
+            setCompanies(prev => prev.filter(c => c.id !== id));
+            notify('Company removed', 'success');
+        } catch (error) {
+            console.error('Failed to delete company:', error);
+            notify('Failed to delete company', 'error');
+        }
     };
 
-    const handleCreatePerson = (newPerson: any) => {
-        setPeople(prev => [newPerson, ...prev]);
+    const handleCreatePerson = async (newPerson: any) => {
+        // Refresh list after creation
+        const savedPeople = await databaseService.getSavedPeople();
+        setPeople(savedPeople);
         notify('Person created successfully', 'success');
     };
 
-    const handleCreateCompany = (newCompany: any) => {
-        setCompanies(prev => [newCompany, ...prev]);
+    const handleCreateCompany = async (newCompany: any) => {
+        const savedCompanies = await databaseService.getSavedCompanies();
+        setCompanies(savedCompanies);
         notify('Company created successfully', 'success');
     };
 
+    const uniqueIndustries = useMemo(() => {
+        const industries = new Set(companies.map(c => c.industry).filter(Boolean));
+        return Array.from(industries).sort();
+    }, [companies]);
+
     const filteredData = useMemo(() => {
         const query = dbSearch.toLowerCase();
+
         if (activeView === 'people') {
             return people.filter(p =>
                 p.name.toLowerCase().includes(query) ||
@@ -123,15 +113,86 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 p.email.toLowerCase().includes(query)
             );
         } else {
-            return companies.filter(c =>
-                c.name.toLowerCase().includes(query) ||
-                c.industry.toLowerCase().includes(query)
-            );
+            return companies.filter(c => {
+                const matchesSearch =
+                    c.name.toLowerCase().includes(query) ||
+                    (c.industry || '').toLowerCase().includes(query);
+
+                const matchesIndustry = !filters.industry || c.industry === filters.industry;
+
+                const matchesLocation = !filters.location ||
+                    (c.location || '').toLowerCase().includes(filters.location.toLowerCase());
+
+                let matchesEmployees = true;
+                if (filters.employees && c.employees) {
+                    const count = c.employees;
+                    switch (filters.employees) {
+                        case '1-10': matchesEmployees = count >= 1 && count <= 10; break;
+                        case '11-50': matchesEmployees = count >= 11 && count <= 50; break;
+                        case '51-200': matchesEmployees = count >= 51 && count <= 200; break;
+                        case '201-500': matchesEmployees = count >= 201 && count <= 500; break;
+                        case '501-1000': matchesEmployees = count >= 501 && count <= 1000; break;
+                        case '1000+': matchesEmployees = count > 1000; break;
+                    }
+                } else if (filters.employees && !c.employees) {
+                    matchesEmployees = false;
+                }
+
+                return matchesSearch && matchesIndustry && matchesLocation && matchesEmployees;
+            });
         }
-    }, [people, companies, activeView, dbSearch]);
+    }, [people, companies, activeView, dbSearch, filters]);
+
+    const handleUnlock = async (lead: any, type: 'email' | 'phone') => {
+        try {
+            const response = await fetch('/api/apollo/enrich', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: lead.id,
+                    reveal_email: type === 'email',
+                    reveal_phone: type === 'phone'
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to unlock contact info');
+            }
+
+            const unlockedLead = { ...data.lead, isSaved: true };
+
+            // Save to database automatically
+            await databaseService.savePerson(unlockedLead);
+
+            // Update local state
+            setPeople(prev => prev.map(p => p.id === lead.id ? unlockedLead : p));
+            if (selectedPerson && selectedPerson.id === lead.id) {
+                setSelectedPerson(unlockedLead);
+            }
+
+            notify(`Contact ${type} unlocked and saved!`, 'success');
+            return unlockedLead;
+        } catch (error: any) {
+            console.error('Unlock failed:', error);
+            notify(error.message || 'Failed to unlock contact info', 'error');
+            return null;
+        }
+    };
 
     return (
         <div className="flex flex-col lg:flex-row h-full gap-6">
+            {selectedPerson && (
+                <LeadDetailModal
+                    lead={selectedPerson}
+                    onClose={() => {
+                        setSelectedPerson(null);
+                        setIsPersonModalOpen(false);
+                    }}
+                    onUnlock={handleUnlock}
+                />
+            )}
             {/* Database Sidebar */}
             <div className="w-full lg:w-72 flex-shrink-0 flex flex-col h-full bg-[#09090b] border border-white/5 rounded-[32px] p-6">
                 <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2.5">
@@ -190,6 +251,14 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         </div>
 
                         <div className="flex gap-3">
+                            {activeView === 'companies' && (
+                                <button
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border ${showFilters ? 'bg-zinc-800 text-white border-white/10' : 'bg-zinc-900 text-zinc-400 border-white/5 hover:text-white hover:bg-zinc-800'}`}
+                                >
+                                    <Filter className="w-3.5 h-3.5" /> Filters
+                                </button>
+                            )}
                             <button
                                 onClick={() => activeView === 'people' ? setIsCreatePersonOpen(true) : setIsCreateCompanyOpen(true)}
                                 className="bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-white/5"
@@ -200,8 +269,86 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                     </div>
                 </div>
 
+                {/* Filters Panel */}
+                <AnimatePresence>
+                    {showFilters && activeView === 'companies' && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden mb-6"
+                        >
+                            <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Industry Filter */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Industry</label>
+                                    <div className="relative">
+                                        <select
+                                            value={filters.industry}
+                                            onChange={(e) => setFilters(prev => ({ ...prev, industry: e.target.value }))}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                        >
+                                            <option value="">All Industries</option>
+                                            {uniqueIndustries.map(ind => (
+                                                <option key={ind} value={ind}>{ind}</option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                            <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Location Filter */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Location</label>
+                                    <div className="relative">
+                                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                        <input
+                                            type="text"
+                                            placeholder="City, Country..."
+                                            value={filters.location}
+                                            onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Employees Filter */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Employees</label>
+                                    <div className="relative">
+                                        <select
+                                            value={filters.employees}
+                                            onChange={(e) => setFilters(prev => ({ ...prev, employees: e.target.value }))}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                        >
+                                            <option value="">Any Size</option>
+                                            <option value="1-10">1-10 Employees</option>
+                                            <option value="11-50">11-50 Employees</option>
+                                            <option value="51-200">51-200 Employees</option>
+                                            <option value="201-500">201-500 Employees</option>
+                                            <option value="501-1000">501-1000 Employees</option>
+                                            <option value="1000+">1000+ Employees</option>
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                            <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                    {filteredData.length === 0 ? (
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
+                            {[...Array(6)].map((_, i) => (
+                                <CompanyCardSkeleton key={i} />
+                            ))}
+                        </div>
+                    ) : filteredData.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center opacity-40">
                             <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center mb-4 border border-white/5">
                                 <Database className="w-10 h-10 text-zinc-600" />
@@ -222,6 +369,10 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                             lead={person}
                                             actionIcon={Trash2}
                                             onAction={() => handleDeletePerson(person.id)}
+                                            onClick={() => {
+                                                setSelectedPerson(person);
+                                                setIsPersonModalOpen(true);
+                                            }}
                                         />
                                     </motion.div>
                                 ))
@@ -237,6 +388,10 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                             company={company}
                                             actionIcon={Trash2}
                                             onAction={() => handleDeleteCompany(company.id)}
+                                            onClick={() => {
+                                                setSelectedCompany(company);
+                                                setIsCompanyModalOpen(true);
+                                            }}
                                         />
                                     </motion.div>
                                 ))
@@ -256,6 +411,14 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 isOpen={isCreateCompanyOpen}
                 onClose={() => setIsCreateCompanyOpen(false)}
                 onSubmit={handleCreateCompany}
+            />
+            <CompanyDetailsModal
+                company={selectedCompany}
+                isOpen={isCompanyModalOpen}
+                onClose={() => setIsCompanyModalOpen(false)}
+                onSave={async (company) => {
+                    setIsCompanyModalOpen(false);
+                }}
             />
         </div>
     );

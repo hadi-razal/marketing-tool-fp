@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X, Menu, CheckSquare, BarChart2 } from 'lucide-react';
+import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X, Menu, CheckSquare, BarChart2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/Button';
 import Link from 'next/link';
@@ -17,6 +17,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
     const [isHovered, setIsHovered] = useState(false);
     const [userName, setUserName] = useState('');
     const [userEmail, setUserEmail] = useState('');
+    const [userProfileUrl, setUserProfileUrl] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -27,12 +28,13 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
 
                 const { data: userData } = await supabase
                     .from('users')
-                    .select('name')
+                    .select('name, profile_url')
                     .eq('uid', user.id)
                     .single();
 
                 if (userData) {
                     setUserName(userData.name || 'User');
+                    setUserProfileUrl(userData.profile_url || null);
                 }
             }
         };
@@ -44,6 +46,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
         { id: 'search', icon: Search, label: 'Search', href: '/search' },
         { id: 'database', icon: Database, label: 'Database', href: '/database' },
         { id: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/tasks' },
+        { id: 'ai', icon: Sparkles, label: 'Fairplatz AI', href: '/ai' },
         { id: 'zoho', icon: CloudLightning, label: 'Zoho (Legacy)', href: '/zoho' },
     ];
 
@@ -128,8 +131,12 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                             "flex items-center gap-3 p-3 rounded-md bg-white/5 border border-white/5 transition-all duration-300 group/profile cursor-pointer hover:bg-white/10",
                             isHovered ? "justify-start px-3" : "justify-center px-0 w-10 h-10 mx-auto"
                         )}>
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 text-white font-bold text-xs">
-                                {userName.substring(0, 2).toUpperCase() || 'US'}
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 text-white font-bold text-xs overflow-hidden">
+                                {userProfileUrl ? (
+                                    <img src={userProfileUrl} alt={userName} className="w-full h-full object-cover" />
+                                ) : (
+                                    userName.substring(0, 2).toUpperCase() || 'US'
+                                )}
                             </div>
                             <div className={cn("overflow-hidden transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>
                                 <p className="text-sm font-semibold text-white truncate">{userName || 'Loading...'}</p>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, Mail, Phone, Check, Linkedin } from 'lucide-react';
 
 interface Lead {
@@ -31,6 +31,10 @@ interface ProfileCardProps {
 
 const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name: string, className?: string }) => {
     const [imageError, setImageError] = useState(false);
+
+    useEffect(() => {
+        setImageError(false);
+    }, [src]);
 
     // Check if we have a valid image URL (not empty, not null, not a placeholder)
     const hasValidSrc = src && src.trim() !== '' && !imageError;

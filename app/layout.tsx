@@ -8,6 +8,9 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
+// Force dynamic rendering for all pages to ensure env vars are available
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Fairplatz Marketing Tool",
   description: "Advanced marketing management dashboard",

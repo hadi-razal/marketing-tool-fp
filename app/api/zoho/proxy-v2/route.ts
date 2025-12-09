@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 // In-memory token cache (will reset on cold start, but that's fine - we'll refresh)
 let cachedAccessToken: string | null = null;
 let tokenExpiresAt: number = 0;
+let refreshPromise: Promise<string> | null = null;
 
 const DATA_CENTER_URLS: Record<string, string> = {
     'com': 'https://accounts.zoho.com',
@@ -16,7 +17,7 @@ const DATA_CENTER_URLS: Record<string, string> = {
 };
 
 // Get access token from refresh token (server-side)
-async function getServerAccessToken(): Promise<string> {
+const getServerAccessToken = async (): Promise<string> => {
     const now = Date.now();
 
     // Return cached token if still valid (with 5 min buffer)
@@ -24,36 +25,70 @@ async function getServerAccessToken(): Promise<string> {
         return cachedAccessToken;
     }
 
-    const refreshToken = process.env.ZOHO_REFRESH_TOKEN;
-    const clientId = process.env.ZOHO_CLIENT_ID;
-    const clientSecret = process.env.ZOHO_CLIENT_SECRET;
-    const dc = process.env.ZOHO_DC || 'ae';
-
-    if (!refreshToken || !clientId || !clientSecret) {
-        throw new Error('Zoho credentials not configured. Please set ZOHO_REFRESH_TOKEN, ZOHO_CLIENT_ID, and ZOHO_CLIENT_SECRET in environment variables.');
+    // If a refresh is already in progress, return the existing promise
+    if (refreshPromise) {
+        return refreshPromise;
     }
 
-    const authBase = DATA_CENTER_URLS[dc] || DATA_CENTER_URLS['com'];
-    const tokenUrl = `${authBase}/oauth/v2/token?refresh_token=${refreshToken}&client_id=${clientId}&client_secret=${clientSecret}&grant_type=refresh_token`;
+    refreshPromise = (async () => {
+        try {
+            const refreshToken = process.env.ZOHO_REFRESH_TOKEN;
+            const clientId = process.env.ZOHO_CLIENT_ID;
+            const clientSecret = process.env.ZOHO_CLIENT_SECRET;
+            const dc = process.env.ZOHO_DC || 'com';
 
-    const res = await fetch(tokenUrl, { method: 'POST' });
-    const data = await res.json();
+            if (!refreshToken || !clientId || !clientSecret) {
+                console.error('Zoho Auth Error: Missing environment variables');
+                throw new Error('Zoho credentials not configured. Please set ZOHO_REFRESH_TOKEN, ZOHO_CLIENT_ID, and ZOHO_CLIENT_SECRET.');
+            }
 
-    if (data.error) {
-        console.error('Zoho token refresh failed:', data);
-        throw new Error(`Token refresh failed: ${data.error}`);
-    }
+            const authBase = DATA_CENTER_URLS[dc] || DATA_CENTER_URLS['com'];
+            const tokenUrl = `${authBase}/oauth/v2/token?refresh_token=${refreshToken}&client_id=${clientId}&client_secret=${clientSecret}&grant_type=refresh_token`;
 
-    if (!data.access_token) {
-        throw new Error('No access token in response');
-    }
+            console.log(`Zoho Auth: Refreshing token (DC: ${dc})...`);
 
-    // Cache the token (expires_in is in seconds)
-    cachedAccessToken = data.access_token;
-    tokenExpiresAt = now + (data.expires_in || 3600) * 1000;
+            const res = await fetch(tokenUrl, { method: 'POST' });
+            const data = await res.json();
 
-    return data.access_token;
-}
+            if (data.error) {
+                console.error('Zoho token refresh failed:', data);
+                if (data.error === 'invalid_code' || data.error === 'invalid_token') {
+                    throw new Error('ZOHO_REFRESH_TOKEN is invalid or expired. You likely need to generate a new Refresh Token (NOT an Authorization Code).');
+                }
+                if (data.error === 'Access Denied') {
+                    throw new Error('Rate limit exceeded (Access Denied). Please wait a few minutes before trying again.');
+                }
+                throw new Error(`Token refresh failed: ${data.error}`);
+            }
+
+            if (!data.access_token) {
+                console.error('Zoho response missing access_token:', data);
+                throw new Error('No access token in response from Zoho.');
+            }
+
+            console.log('Zoho Auth: Successfully refreshed access token');
+
+            // Cache the token (expires_in is in seconds)
+            cachedAccessToken = data.access_token;
+            tokenExpiresAt = now + (data.expires_in || 3600) * 1000;
+
+            return data.access_token;
+        } catch (err) {
+            // Clear promise so next attempt can try again
+            refreshPromise = null;
+            throw err;
+        } finally {
+            // We don't nullify refreshPromise here immediately if successful, 
+            // but we usually want to clear it after some time or let it resolve.
+            // Actually, keep it as null in finally is safer to allow retries if logic fails later.
+            // But if we return data.access_token, the promise resolves.
+            // Let's reset it to null only on error or complete.
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
+};
 
 export async function POST(req: NextRequest) {
     try {
@@ -117,4 +152,3 @@ export async function GET() {
 export async function OPTIONS() {
     return NextResponse.json({}, { status: 200 });
 }
-

@@ -16,7 +16,7 @@ export const getZohoConfig = (): ZohoConfig => {
     return {
         ownerName: process.env.NEXT_PUBLIC_ZOHO_OWNER_NAME || 'fairplatz2025',
         appLinkName: process.env.NEXT_PUBLIC_ZOHO_APP_LINK_NAME || 'exhibitorsdb',
-        dc: process.env.NEXT_PUBLIC_ZOHO_DC || 'ae',
+        dc: process.env.NEXT_PUBLIC_ZOHO_DC || 'com',
     };
 };
 

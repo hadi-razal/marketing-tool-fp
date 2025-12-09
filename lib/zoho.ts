@@ -21,7 +21,7 @@ export const getZohoConfig = (): ZohoConfig | null => {
         clientSecret: parsed.clientSecret || process.env.NEXT_PUBLIC_ZOHO_CLIENT_SECRET,
         ownerName: parsed.ownerName || process.env.NEXT_PUBLIC_ZOHO_OWNER_NAME || 'fairplatz2025',
         appLinkName: parsed.appLinkName || process.env.NEXT_PUBLIC_ZOHO_APP_LINK_NAME || 'exhibitorsdb',
-        redirectUri: parsed.redirectUri || process.env.NEXT_PUBLIC_ZOHO_REDIRECT_URI || 'http://localhost:3000/zoho-callback',
+        redirectUri: parsed.redirectUri || process.env.NEXT_PUBLIC_ZOHO_REDIRECT_URI || 'https://marketing-tool-fp.vercel.app/zoho-callback',
     };
 };
 

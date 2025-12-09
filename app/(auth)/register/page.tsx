@@ -1,10 +1,11 @@
 'use client';
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
+import { User, Lock, Mail, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { Modal } from '@/components/ui/Modal';
 
 export default function RegisterPage() {
     const [isLoading, setIsLoading] = useState(false);
@@ -12,6 +13,7 @@ export default function RegisterPage() {
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
     const [error, setError] = useState('');
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const router = useRouter();
     const supabase = createClient();
 
@@ -28,7 +30,7 @@ export default function RegisterPage() {
                     data: {
                         full_name: fullName,
                     },
-                    emailRedirectTo: `${location.origin}/auth/callback`,
+                    emailRedirectTo: `${location.origin}/auth/confirmed`,
                 },
             });
 
@@ -57,12 +59,17 @@ export default function RegisterPage() {
             }
 
             // Successful registration
-            router.push('/login?registered=true');
+            setShowSuccessModal(true);
         } catch (err: any) {
             setError(err.message);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleCloseModal = () => {
+        setShowSuccessModal(false);
+        router.push('/login');
     };
 
     return (
@@ -162,6 +169,38 @@ export default function RegisterPage() {
                     </div>
                 </div>
             </motion.div>
+
+            <Modal
+                isOpen={showSuccessModal}
+                onClose={handleCloseModal}
+                title="Registration Successful"
+                maxWidth="max-w-md"
+            >
+                <div className="p-6 text-center space-y-6">
+                    <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto border border-green-500/20">
+                        <CheckCircle2 className="w-8 h-8 text-green-500" />
+                    </div>
+
+                    <div className="space-y-2">
+                        <h3 className="text-xl font-bold text-white">Check Your Email</h3>
+                        <p className="text-zinc-400 text-sm leading-relaxed">
+                            We've sent a confirmation link to <span className="text-white font-medium">{email}</span>.
+                            Please check your inbox and verify your email to log in.
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={handleCloseModal}
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-green-500/20 hover:shadow-green-500/40 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                    >
+                        Go to Login <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <p className="text-xs text-zinc-500">
+                        Didn't receive the email? Check your spam folder or try again.
+                    </p>
+                </div>
+            </Modal>
         </div>
     );
 }

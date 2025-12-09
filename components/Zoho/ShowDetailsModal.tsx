@@ -31,6 +31,21 @@ const Section = ({ title, children, delay = 0 }: { title: string, children: Reac
 
 const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false }: any) => {
     if (!value) return null;
+
+    let displayValue = value;
+    let href = value;
+
+    // Handle Zoho object structure (e.g., { url: "..." })
+    if (typeof value === 'object' && value !== null) {
+        if ('url' in value) {
+            displayValue = value.url;
+            href = value.url;
+        } else {
+            // Fallback for other objects to avoid crash
+            return null;
+        }
+    }
+
     return (
         <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
             <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -42,11 +57,11 @@ const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = fals
                 </div>
                 <div className="text-zinc-100 font-medium break-words text-sm leading-relaxed">
                     {isLink ? (
-                        <a href={value} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5 transition-colors">
-                            {value} <ExternalLink className="w-3 h-3 opacity-70" />
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5 transition-colors">
+                            {displayValue} <ExternalLink className="w-3 h-3 opacity-70" />
                         </a>
                     ) : (
-                        value
+                        displayValue
                     )}
                 </div>
             </div>

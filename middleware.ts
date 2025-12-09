@@ -37,7 +37,9 @@ export async function middleware(req: NextRequest) {
 
     // If user is not signed in and the current path is not /login or /register,
     // redirect the user to /login
-    if (!session && !req.nextUrl.pathname.startsWith('/login') && !req.nextUrl.pathname.startsWith('/register')) {
+    // If user is not signed in and the current path is not /login or /register,
+    // redirect the user to /login
+    if (!session && !req.nextUrl.pathname.startsWith('/login') && !req.nextUrl.pathname.startsWith('/register') && !req.nextUrl.pathname.startsWith('/auth')) {
         return NextResponse.redirect(new URL('/login', req.url))
     }
 

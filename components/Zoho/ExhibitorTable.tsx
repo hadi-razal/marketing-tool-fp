@@ -153,7 +153,12 @@ export const ExhibitorTable = () => {
                     setData(res.data);
                     setPage(1);
                 } else {
-                    setData(prev => [...prev, ...res.data]);
+                    setData(prev => {
+                        const newItems = res.data;
+                        const uniqueItems = new Map(prev.map(item => [item.ID, item]));
+                        newItems.forEach((item: any) => uniqueItems.set(item.ID, item));
+                        return Array.from(uniqueItems.values());
+                    });
                     setPage(prev => prev + 1);
                 }
                 setHasMore(res.data.length === LIMIT);

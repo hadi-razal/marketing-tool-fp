@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User } from 'lucide-react';
+import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User, Sparkles, MessageCircle, TrendingUp, XCircle, Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
-import { databaseService, Comment } from '@/services/databaseService';
+import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
 import { createClient } from '@/lib/supabase';
 import { getBrandColor } from '@/lib/utils';
 
 interface LeadDetailModalProps {
-    lead: any;
+    lead: SavedPerson & { image?: string; isSaved?: boolean; saved_by?: string; saved_by_profile_url?: string };
     onClose: () => void;
-    onUnlock?: (lead: any, type: 'email' | 'phone') => Promise<any>;
+    onUnlock?: (lead: SavedPerson, type: 'email' | 'phone') => Promise<any>;
 }
 
 // Helper for date formatting
@@ -63,9 +63,11 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
 
 export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose, onUnlock }) => {
     const [localLead, setLocalLead] = useState(lead);
-    const [activeTab, setActiveTab] = useState<'overview' | 'comments'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'comments' | 'actions'>('overview');
     const [isUnlockingEmail, setIsUnlockingEmail] = useState(false);
     const [isUnlockingPhone, setIsUnlockingPhone] = useState(false);
+    const [contactStatus, setContactStatus] = useState(lead?.contact_status || 'New');
+    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
     // Comment state
     const [localComments, setLocalComments] = useState<Comment[]>([]);
@@ -80,6 +82,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
     useEffect(() => {
         setLocalLead(lead);
+        setContactStatus(lead?.contact_status || 'New');
     }, [lead]);
 
     useEffect(() => {
@@ -122,6 +125,22 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             }, 100);
         }
     }, [activeTab, localComments.length]);
+
+    const handleStatusUpdate = async (newStatus: string) => {
+        setIsUpdatingStatus(true);
+        try {
+            await databaseService.updatePersonStatus(localLead.id, newStatus);
+            setContactStatus(newStatus);
+            setLocalLead(prev => ({ ...prev, contact_status: newStatus }));
+        } catch (error) {
+            console.error('Failed to update status:', error);
+            alert('Failed to update status. Please try again.');
+        } finally {
+            setIsUpdatingStatus(false);
+        }
+    };
+
+    const STATUS_OPTIONS = ['New', 'Contacted', 'In Progress', 'Qualified', 'Unqualified', 'Customer'];
 
     if (!localLead) return null;
 
@@ -225,6 +244,16 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         });
     };
 
+    const getPositionColor = (status: string) => {
+        switch (status) {
+            case 'Customer': return 'bg-green-500/20 text-green-400 border-green-500/30';
+            case 'Qualified': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+            case 'In Progress': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+            case 'Contacted': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+            default: return 'bg-zinc-800 text-zinc-400 border-white/5';
+        }
+    };
+
     return (
         <AnimatePresence>
             <motion.div
@@ -260,9 +289,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         <div className="w-32 h-32 rounded-2xl bg-white p-1 border-4 border-[#09090b] shadow-2xl flex items-center justify-center overflow-hidden shrink-0 relative z-10">
                             <Avatar
                                 src={localLead.photo_url || localLead.image}
-                                name={localLead.name}
+                                name={localLead.name || ''}
                                 className="w-full h-full object-cover rounded-xl text-4xl"
-                                alt={localLead.name}
+                                alt={localLead.name || ''}
                             />
                             {localLead.email_status === 'verified' && (
                                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center border-2 border-[#09090b]">
@@ -355,6 +384,15 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
                             )}
                         </button>
+                        <button
+                            onClick={() => setActiveTab('actions')}
+                            className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'actions' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            Actions
+                            {activeTab === 'actions' && (
+                                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
+                            )}
+                        </button>
                     </div>
                 </div>
 
@@ -396,7 +434,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                         <p className="text-lg font-bold text-white truncate">{localLead.company || localLead.organization_name}</p>
                                                         {(localLead.website || localLead.company_website || localLead.organization_domain) && (
                                                             <a
-                                                                href={getSocialLink(localLead.website || localLead.company_website || localLead.organization_domain) || '#'}
+                                                                href={getSocialLink(localLead.website || localLead.company_website || localLead.organization_domain || '') || '#'}
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="text-sm text-zinc-500 hover:text-orange-400 flex items-center gap-1 mt-0.5 transition-colors"
@@ -502,7 +540,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                         </div>
                                                     </div>
                                                     <button
-                                                        onClick={() => copyToClipboard(localLead.email)}
+                                                        onClick={() => copyToClipboard(localLead.email || '')}
                                                         className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all p-2"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
@@ -519,7 +557,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                         <span className="text-sm text-zinc-300 font-medium">{localLead.phone}</span>
                                                     </div>
                                                     <button
-                                                        onClick={() => copyToClipboard(localLead.phone)}
+                                                        onClick={() => copyToClipboard(localLead.phone || '')}
                                                         className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all p-2"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
@@ -528,6 +566,96 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                             )}
                                         </div>
                                     </div>
+                                </div>
+                            </motion.div>
+                        ) : activeTab === 'actions' ? (
+                            <motion.div
+                                key="actions"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.2 }}
+                                className="flex-1 overflow-y-auto p-8 custom-scrollbar"
+                            >
+                                <div className="max-w-2xl mx-auto space-y-10">
+                                    <section>
+                                        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            <span className="w-8 h-[1px] bg-zinc-800"></span> Status
+                                        </h3>
+                                        <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-6">
+                                            <div className="flex flex-col gap-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <h4 className="text-lg font-bold text-white">Contact Status</h4>
+                                                        <p className="text-sm text-zinc-400">Update the progression status of this contact.</p>
+                                                    </div>
+                                                    <div className={`px-3 py-1 rounded-full text-xs font-bold border ${getPositionColor(contactStatus)}`}>
+                                                        {contactStatus}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-3 mt-6">
+                                                    {Object.entries({
+                                                        'Need to Contact': {
+                                                            icon: Phone,
+                                                            color: 'text-blue-400',
+                                                            border: 'border-blue-500/30',
+                                                            bg: 'bg-blue-500/10',
+                                                            desc: 'Priority for outreach'
+                                                        },
+                                                        'Good Lead': {
+                                                            icon: Sparkles,
+                                                            color: 'text-emerald-400',
+                                                            border: 'border-emerald-500/30',
+                                                            bg: 'bg-emerald-500/10',
+                                                            desc: 'High potential prospect'
+                                                        },
+                                                        'Not Interested': {
+                                                            icon: XCircle,
+                                                            color: 'text-red-400',
+                                                            border: 'border-red-500/30',
+                                                            bg: 'bg-red-500/10',
+                                                            desc: 'Closed / Unqualified'
+                                                        },
+                                                        'Customer': {
+                                                            icon: Trophy,
+                                                            color: 'text-yellow-400',
+                                                            border: 'border-yellow-500/30',
+                                                            bg: 'bg-yellow-500/10',
+                                                            desc: 'Converted client'
+                                                        }
+                                                    }).map(([status, config]) => {
+                                                        const Icon = config.icon;
+                                                        const isSelected = contactStatus === status;
+
+                                                        return (
+                                                            <button
+                                                                key={status}
+                                                                onClick={() => handleStatusUpdate(status)}
+                                                                disabled={isUpdatingStatus}
+                                                                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 gap-2 ${isSelected
+                                                                    ? `${config.bg} ${config.border} ring-1 ring-inset ring-white/10`
+                                                                    : 'bg-zinc-900 border-white/5 hover:bg-white/5 hover:border-white/10'
+                                                                    }`}
+                                                            >
+                                                                <div className={`p-2 rounded-full ${isSelected ? 'bg-white/10' : 'bg-white/5'} ${config.color}`}>
+                                                                    <Icon className="w-5 h-5" />
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <div className={`font-bold text-sm ${isSelected ? 'text-white' : 'text-zinc-400'}`}>
+                                                                        {status}
+                                                                    </div>
+                                                                    <div className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/70' : 'text-zinc-600'}`}>
+                                                                        {config.desc}
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
                                 </div>
                             </motion.div>
                         ) : (

@@ -21,6 +21,7 @@ export interface Company {
     founded_year?: number;
     isSaved?: boolean;
     saved_by?: string;
+    saved_by_profile_url?: string;
     comments?: Comment[];
 }
 

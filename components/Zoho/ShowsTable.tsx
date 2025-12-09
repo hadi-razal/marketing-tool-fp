@@ -41,7 +41,7 @@ export const ShowsTable = () => {
                 const BATCH_SIZE = 100;
 
                 for (let i = 0; i < MAX_PAGES; i++) {
-                    const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', undefined, i * BATCH_SIZE, BATCH_SIZE);
+                    const res = await zohoApi.getRecords('Show_List', undefined, i * BATCH_SIZE, BATCH_SIZE);
                     if (res.data && Array.isArray(res.data)) {
                         res.data.forEach((item: any) => {
                             if (item.Country) countries.add(item.Country);
@@ -83,14 +83,20 @@ export const ShowsTable = () => {
 
             const criteria = criteriaParts.length > 0 ? criteriaParts.join(' && ') : undefined;
 
-            const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, LIMIT);
+            const res = await zohoApi.getRecords('Show_List', criteria, from, LIMIT);
+            console.log('Shows Response:', res);
 
             if (res.code === 3000) {
                 if (reset) {
                     setData(res.data);
                     setPage(1);
                 } else {
-                    setData(prev => [...prev, ...res.data]);
+                    setData(prev => {
+                        const newItems = res.data;
+                        const uniqueItems = new Map(prev.map(item => [item.ID, item]));
+                        newItems.forEach((item: any) => uniqueItems.set(item.ID, item));
+                        return Array.from(uniqueItems.values());
+                    });
                     setPage(prev => prev + 1);
                 }
                 setHasMore(res.data.length === LIMIT);
@@ -140,7 +146,7 @@ export const ShowsTable = () => {
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure?')) return;
         try {
-            await zohoApi.deleteRecord('Event_and_Exhibitor_Admin_Only_Report', id);
+            await zohoApi.deleteRecord('Show_List', id);
             setData(prev => prev.filter(item => item.ID !== id));
         } catch (err: any) {
             alert(err.message);

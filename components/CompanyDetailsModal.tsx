@@ -5,7 +5,7 @@ import { Company } from './CompanyCard';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 
 import { getBrandColor } from '@/lib/utils';
-import { databaseService, Comment } from '@/services/databaseService';
+import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
 import { createClient } from '@/lib/supabase';
 
 interface CompanyDetailsModalProps {
@@ -72,7 +72,7 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
     const [isPostingComment, setIsPostingComment] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'overview' | 'comments' | 'people'>('overview');
-    const [companyPeople, setCompanyPeople] = useState<any[]>([]);
+    const [companyPeople, setCompanyPeople] = useState<SavedPerson[]>([]);
     const [isLoadingPeople, setIsLoadingPeople] = useState(false);
     const [replyingTo, setReplyingTo] = useState<{ id: string, userName: string, text: string, userProfileUrl?: string } | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
@@ -282,9 +282,9 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
                                         )}
                                         {company.saved_by && (
                                             <span className="flex items-center gap-1.5 text-zinc-500">
-                                                {(company as any).saved_by_profile_url ? (
+                                                {company.saved_by_profile_url ? (
                                                     <div className="w-4 h-4 rounded-full overflow-hidden border border-zinc-700">
-                                                        <img src={(company as any).saved_by_profile_url} alt={company.saved_by} className="w-full h-full object-cover" />
+                                                        <img src={company.saved_by_profile_url} alt={company.saved_by} className="w-full h-full object-cover" />
                                                     </div>
                                                 ) : (
                                                     <span className="w-1 h-1 rounded-full bg-zinc-600" />

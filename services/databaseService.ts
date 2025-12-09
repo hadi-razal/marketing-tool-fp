@@ -40,13 +40,19 @@ export interface SavedPerson {
     saved_uid?: string;
     first_name?: string;
     last_name?: string;
+    name?: string; // Alias for full_name or display name
     full_name?: string;
     title?: string;
     headline?: string;
     email?: string;
     email_status?: string;
+    contact_status?: string;
+    phone?: string;
+    sanitized_phone?: string;
     linkedin_url?: string;
+    linkedin?: string; // Alias
     photo_url?: string;
+    image?: string; // Alias
     twitter_url?: string;
     github_url?: string;
     facebook_url?: string;
@@ -55,9 +61,20 @@ export interface SavedPerson {
     city?: string;
     postal_code?: string;
     formatted_address?: string;
+    location?: string; // Alias
     time_zone?: string;
     organization_id?: string;
     organization_name?: string;
+    company?: string; // Alias for organization name
+    company_website?: string;
+    website?: string;
+    company_industry?: string;
+    description?: string;
+    about?: string;
+    comments?: Comment[];
+    isSaved?: boolean;
+    saved_by?: string;
+    saved_by_profile_url?: string;
     organization_domain?: string;
     departments?: string[];
     subdepartments?: string[];
@@ -384,6 +401,31 @@ export const databaseService = {
         if (user?.id && person?.full_name) {
             await logActivity(user.id, 'Person Deleted', `Deleted ${person.full_name} from database`);
         }
+    },
+
+    // Update person status
+    updatePersonStatus: async (id: string, status: string) => {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        const { data, error } = await supabase
+            .from('people')
+            .update({ contact_status: status })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error updating person status:', error);
+            throw error;
+        }
+
+        // Log activity
+        if (user?.id && data?.full_name) {
+            await logActivity(user.id, 'Status Updated', `Updated status for ${data.full_name} to ${status}`);
+        }
+
+        return data;
     },
     addComment: async (companyId: string, text: string) => {
         const supabase = createClient();
@@ -959,7 +1001,6 @@ async function logActivity(uid: string, label: string, status: string) {
         await supabase
             .from('activities')
             .insert({
-                uid,
                 label,
                 status,
                 created_at: new Date().toISOString()
@@ -1052,3 +1093,4 @@ function mapDbPersonToAppPerson(dbPerson: any, savedByName?: string, savedByProf
         ...dbPerson
     };
 }
+

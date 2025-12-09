@@ -4,6 +4,7 @@ import { MainSidebar } from '@/components/MainSidebar';
 import { Menu } from 'lucide-react';
 import { SplashIntro } from '@/components/SplashIntro';
 import { PageTransition } from '@/components/ui/PageTransition';
+import { FairplatzAIWidget } from '@/components/FairplatzAIWidget';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -40,6 +41,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                             {children}
                         </PageTransition>
                     </div>
+
+                    {/* Global AI Widget */}
+                    <FairplatzAIWidget />
                 </main>
             </div>
         </>

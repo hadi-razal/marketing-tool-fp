@@ -15,15 +15,23 @@ interface ExhibitorDetailsModalProps {
 
 const Field = ({ label, value, isLink = false, href }: { label: string, value: any, isLink?: boolean, href?: string }) => {
     if (!value) return null;
+
+    // Safety extraction
+    let displayValue = value;
+    if (typeof value === 'object' && value !== null) {
+        displayValue = value.value || value.url || JSON.stringify(value);
+    }
+    const linkUrl = href || (typeof value === 'string' ? value : (value.url || JSON.stringify(value)));
+
     return (
         <div className="flex flex-col gap-1">
             <span className="text-[10px] uppercase tracking-wider font-bold text-zinc-500">{label}</span>
             {isLink ? (
-                <a href={href || value} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 w-fit">
-                    {value} <ExternalLink className="w-3 h-3 opacity-50" />
+                <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 w-fit">
+                    {displayValue} <ExternalLink className="w-3 h-3 opacity-50" />
                 </a>
             ) : (
-                <span className="text-sm font-medium text-zinc-200">{value}</span>
+                <span className="text-sm font-medium text-zinc-200">{displayValue}</span>
             )}
         </div>
     );

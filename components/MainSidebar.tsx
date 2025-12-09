@@ -46,7 +46,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
         { id: 'search', icon: Search, label: 'Search', href: '/search' },
         { id: 'database', icon: Database, label: 'Database', href: '/database' },
         { id: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/tasks' },
-        { id: 'ai', icon: Sparkles, label: 'Fairplatz AI', href: '/ai' },
+        // { id: 'ai', icon: Sparkles, label: 'Fairplatz AI', href: '/ai' }, // Removed
         { id: 'zoho', icon: CloudLightning, label: 'Zoho (Legacy)', href: '/zoho' },
     ];
 
@@ -251,14 +251,10 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                 <div className="p-4 pt-2 flex flex-col gap-2">
                     <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">General</p>
                     {bottomItems.map((item) => (
-                        <Link
-                            key={item.id}
-                            href={item.href}
-                            className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-zinc-400 hover:bg-white/5 hover:text-zinc-100 transition-all duration-300 text-left"
-                        >
-                            <item.icon className="w-5 h-5 text-zinc-500 group-hover:text-zinc-300" />
+                        <button key={item.id} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-md text-zinc-400 hover:bg-white/5 hover:text-zinc-100 transition-colors text-left">
+                            <item.icon className="w-5 h-5" />
                             <span className="font-medium text-sm">{item.label}</span>
-                        </Link>
+                        </button>
                     ))}
                 </div>
             </div>

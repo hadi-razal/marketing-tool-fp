@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
     try {
-        const { message, history } = await request.json();
+        const { message, history, userName } = await request.json();
         const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
 
         if (!apiKey) {
@@ -15,30 +15,25 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Message is required' }, { status: 400 });
         }
 
-        // Initialize Supabase Client
-        // We use the ANON key here. In a real production app with RLS, this might be limited.
-        // If the user is authenticated in the app, we ideally want to forward their session,
-        // but for this server-side API simplified demo, we'll try fetching what's accessible.
-        // If RLS blocks this, we might need a Service Role key (careful!) or proper auth forwarding.
-        // For now, assuming the public data or locally accessible data is fine for the tool.
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        // Supabase client
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
 
-        // Fetch context data - RICHER DATA set for specific answers
-        // 1. Saved People
+        // Fetch saved people
         const { data: people } = await supabase
             .from('people')
             .select('name, title, organization_name, city, country, email, phone, linkedin_url')
-            .limit(50); // Increased limit slightly
+            .limit(50);
 
-        // 2. Saved Companies
+        // Fetch saved companies
         const { data: companies } = await supabase
             .from('companies')
             .select('name, industry, location, website, phone, description')
             .limit(20);
 
-        // Format context data string
+        // Format people context
         const peopleContext = people?.map(p =>
             `- NAME: ${p.name}
   TITLE: ${p.title} at ${p.organization_name}
@@ -48,6 +43,7 @@ export async function POST(request: Request) {
   LINKEDIN: ${p.linkedin_url || 'N/A'}`
         ).join('\n\n') || 'No saved people.';
 
+        // Format company context
         const companiesContext = companies?.map(c =>
             `- COMPANY: ${c.name}
   INDUSTRY: ${c.industry}
@@ -57,67 +53,62 @@ export async function POST(request: Request) {
   DESC: ${c.description || 'N/A'}`
         ).join('\n\n') || 'No saved companies.';
 
-        const ai = new GoogleGenAI({ apiKey });
+        // System prompt
+        const systemPrompt = `
+You are Fairplatz AI, a smart and helpful assistant.
 
-        const systemPrompt = `You are Fairplatz AI, an intelligent marketing assistant for Fairplatz.
+USER CONTEXT:
+User's name: "${userName || 'User'}"
 
-SCOPE RESTRICTION:
-You are STRICTLY limited to answering questions about:
-1. Trade shows, exhibitions, and B2B marketing strategies.
-2. The user's SAVED DATA (People and Companies) provided below.
-3. Sales outreach, email drafting, and lead generation.
+YOUR ROLE:
+You can use the saved data below about People and Companies, but you can also answer general questions with your full knowledge.
 
-You MUST REFUSE to answer irrelevant topics (e.g., cooking, coding unconnected to marketing, general world trivia) by politely stating you are a specialized marketing assistant.
-
-DATABASE CONTEXT:
-The following is the user's saved data from Supabase. Use this EXACT data to answer questions like "What is the email of [Name]?" or "Give me details about [Company]".
-
---- SAVED PEOPLE ---
+=== SAVED PEOPLE ===
 ${peopleContext}
 
---- SAVED COMPANIES ---
+=== SAVED COMPANIES ===
 ${companiesContext}
 
---- END DATA ---
+RULES:
+1. If user asks about someone/company in saved data → answer using saved data.
+2. If user asks general question → answer normally.
+3. Be clear, helpful, and professional.
+4. IMPORTANT: Keep your answers as short and concise as possible. Avoid fluff.
+`;
 
-INSTRUCTIONS:
-- When asked for details (email, phone, etc.), look them up in the provided data and answer accurately.
-- If data is "N/A", state that it is not available in the saved records.
-- Be helpful, professional, and concise.`;
-
-        // Build conversation with system prompt
-        // Note: SDK structure
-        const conversation = [
+        // Format conversation properly
+        const finalConversation = [
             {
-                role: 'user',
+                role: "model",
                 parts: [{ text: systemPrompt }]
             },
-            {
-                role: 'model',
-                parts: [{ text: 'Understood. I am Fairplatz AI, ready to help with marketing and your saved data.' }]
-            },
             ...(history || []).map((msg: any) => ({
-                role: msg.role === 'assistant' ? 'model' : 'user',
+                role: msg.role === "assistant" ? "model" : "user",
                 parts: [{ text: msg.content }]
             })),
             {
-                role: 'user',
+                role: "user",
                 parts: [{ text: message }]
             }
         ];
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: conversation,
+        // Initialize Gemini
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // Get AI response
+        const result = await model.generateContent({
+            contents: finalConversation
         });
 
-        const responseText = response.text;
-        return NextResponse.json({ response: responseText });
+        const text = result.response.text();
 
-    } catch (error: any) {
+        return NextResponse.json({ response: text });
+
+    } catch (error) {
         console.error('Gemini API Error:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to generate response' },
+            { error: error instanceof Error ? error.message : 'Failed to generate response' },
             { status: 500 }
         );
     }

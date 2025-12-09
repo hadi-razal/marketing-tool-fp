@@ -29,35 +29,11 @@ export const DatabaseTable = () => {
     const [availableCountries, setAvailableCountries] = useState<string[]>([]);
     const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
 
-    // Fetch unique values for filters
+    // Filter logic disabled for now as Country is not a direct field in the new report
     useEffect(() => {
-        const fetchFilters = async () => {
-            try {
-                const countries = new Set<string>();
-
-                // Fetch up to 5 pages (1000 records) to get a good sample of countries
-                const MAX_PAGES = 5;
-                const BATCH_SIZE = 100;
-
-                for (let i = 0; i < MAX_PAGES; i++) {
-                    const res = await zohoApi.getRecords('Database_Report', undefined, i * BATCH_SIZE, BATCH_SIZE);
-                    if (res.data && Array.isArray(res.data)) {
-                        res.data.forEach((item: any) => {
-                            if (item.Country) countries.add(item.Country);
-                        });
-
-                        if (res.data.length < BATCH_SIZE) break;
-                    } else {
-                        break;
-                    }
-                }
-
-                setAvailableCountries(Array.from(countries).sort());
-            } catch (err) {
-                console.error('Failed to fetch filter values', err);
-            }
-        };
-        fetchFilters();
+        // const fetchFilters = async () => { ... }
+        // fetchFilters();
+        setAvailableCountries([]);
     }, []);
 
     // Manual debounce
@@ -79,25 +55,28 @@ export const DatabaseTable = () => {
 
             // Search
             if (searchTerm) {
-                criteriaParts.push(`(Show.contains("${searchTerm}"))`);
+                // Use display_value for lookup fields to avoid 404 or invalid criteria
+                criteriaParts.push(`(Show.display_value.contains("${searchTerm}") || Company.display_value.contains("${searchTerm}"))`);
             }
 
-            // Filters
-            if (selectedCountries.length > 0) {
-                const countryCriteria = selectedCountries.map(c => `Country == "${c}"`).join(' || ');
-                criteriaParts.push(`(${countryCriteria})`);
-            }
+            // Filters - Disabled for now
+            // if (selectedCountries.length > 0) { ... }
 
             const criteria = criteriaParts.length > 0 ? criteriaParts.join(' && ') : undefined;
 
-            const res = await zohoApi.getRecords('Database_Report', criteria, from, LIMIT);
+            const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, LIMIT);
 
             if (res.code === 3000) {
                 if (reset) {
                     setData(res.data);
                     setPage(1);
                 } else {
-                    setData(prev => [...prev, ...res.data]);
+                    setData(prev => {
+                        const newItems = res.data;
+                        const uniqueItems = new Map(prev.map(item => [item.ID, item]));
+                        newItems.forEach((item: any) => uniqueItems.set(item.ID, item));
+                        return Array.from(uniqueItems.values());
+                    });
                     setPage(prev => prev + 1);
                 }
                 setHasMore(res.data.length === LIMIT);
@@ -137,7 +116,7 @@ export const DatabaseTable = () => {
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure?')) return;
         try {
-            await zohoApi.deleteRecord('Database_Report', id);
+            await zohoApi.deleteRecord('Event_and_Exhibitor_Admin_Only_Report', id);
             setData(prev => prev.filter(item => item.ID !== id));
         } catch (err: any) {
             alert(err.message);
@@ -159,6 +138,13 @@ export const DatabaseTable = () => {
         setIsDetailsOpen(true);
     };
 
+    // Helper to extract display value from object or return string
+    const getDisplayValue = (val: any) => {
+        if (!val) return '-';
+        if (typeof val === 'object') return val.display_value || val.value || JSON.stringify(val);
+        return val;
+    };
+
     return (
         <div className="h-full flex flex-col gap-6">
             <DatabaseFormModal
@@ -177,7 +163,7 @@ export const DatabaseTable = () => {
                     handleEdit(item);
                 }}
                 onDelete={handleDelete}
-                onAddToLeads={(item) => alert(`Added ${item.Company} to leads (Simulation)`)}
+                onAddToLeads={(item) => alert(`Added ${item.Company?.display_value || item.Company} to leads (Simulation)`)}
             />
 
             {/* Controls Toolbar */}
@@ -189,7 +175,7 @@ export const DatabaseTable = () => {
                         <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-orange-400 transition-colors" />
                         <input
                             type="text"
-                            placeholder="Search database..."
+                            placeholder="Search by Company or Show..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="w-full bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
@@ -199,7 +185,8 @@ export const DatabaseTable = () => {
 
                 {/* Actions Group */}
                 <div className="flex items-center gap-3">
-                    {/* Filter */}
+                    {/* Filter - Hidden/Disabled for now */}
+                    {/* 
                     <div className="relative">
                         <Button
                             variant="secondary"
@@ -209,20 +196,10 @@ export const DatabaseTable = () => {
                         >
                             Filters {selectedCountries.length > 0 && `(${selectedCountries.length})`}
                         </Button>
-
-                        <FilterPopover
-                            isOpen={isFilterOpen}
-                            onClose={() => setIsFilterOpen(false)}
-                            availableCountries={availableCountries}
-                            availableContinents={[]}
-                            selectedCountries={selectedCountries}
-                            selectedContinents={[]}
-                            onApply={handleApplyFilters}
-                            onClear={handleClearFilters}
-                        />
+                         // ... Popover ...
                     </div>
-
                     <div className="w-px h-8 bg-white/10 mx-1 hidden md:block" />
+                    */}
 
                     {/* Refresh */}
                     <Button
@@ -257,11 +234,11 @@ export const DatabaseTable = () => {
                     <table className="w-full text-left text-sm text-zinc-400">
                         <thead className="bg-zinc-900/80 text-zinc-400 uppercase text-[10px] font-bold sticky top-0 z-10 backdrop-blur-md border-b border-white/5 tracking-wider">
                             <tr>
+                                <th className="px-6 py-3">Company</th>
                                 <th className="px-6 py-3">Show</th>
-                                <th className="px-6 py-3">Exhibition Size</th>
-                                <th className="px-6 py-3 hidden md:table-cell">Starting Date</th>
-                                <th className="px-6 py-3 hidden lg:table-cell">City</th>
-                                <th className="px-6 py-3 hidden xl:table-cell">Country</th>
+                                <th className="px-6 py-3 hidden md:table-cell">Booth No</th>
+                                <th className="px-6 py-3 hidden lg:table-cell">Year</th>
+                                <th className="px-6 py-3 hidden xl:table-cell">Size (Sqm)</th>
                                 <th className="px-6 py-3 text-right">Action</th>
                             </tr>
                         </thead>
@@ -270,7 +247,7 @@ export const DatabaseTable = () => {
                                 Array.from({ length: 10 }).map((_, i) => (
                                     <tr key={i}>
                                         <td className="px-6 py-4"><Skeleton className="h-5 w-40" /></td>
-                                        <td className="px-6 py-4"><Skeleton className="h-5 w-16" /></td>
+                                        <td className="px-6 py-4"><Skeleton className="h-5 w-32" /></td>
                                         <td className="px-6 py-4 hidden md:table-cell"><Skeleton className="h-5 w-16" /></td>
                                         <td className="px-6 py-4 hidden lg:table-cell"><Skeleton className="h-5 w-16" /></td>
                                         <td className="px-6 py-4 text-right"><Skeleton className="h-8 w-24 ml-auto" /></td>
@@ -283,11 +260,11 @@ export const DatabaseTable = () => {
                                         onClick={() => handleRowClick(item)}
                                         className="hover:bg-white/[0.02] transition-colors group cursor-pointer border-b border-white/[0.02] last:border-0"
                                     >
-                                        <td className="px-6 py-3 font-medium text-zinc-200 text-sm">{item.Show || item.Event}</td>
-                                        <td className="px-6 py-3 text-sm text-zinc-400">{item.Exhibition_Size || item.Booth_Sqm}</td>
-                                        <td className="px-6 py-3 hidden md:table-cell text-sm text-zinc-400">{item.Starting_Date}</td>
-                                        <td className="px-6 py-3 hidden lg:table-cell text-sm text-zinc-400">{item.City}</td>
-                                        <td className="px-6 py-3 hidden xl:table-cell text-sm text-zinc-400">{item.Country}</td>
+                                        <td className="px-6 py-3 font-medium text-zinc-200 text-sm">{getDisplayValue(item.Company)}</td>
+                                        <td className="px-6 py-3 text-sm text-zinc-300">{getDisplayValue(item.Show)}</td>
+                                        <td className="px-6 py-3 hidden md:table-cell text-sm text-zinc-400">{getDisplayValue(item.Booth_No)}</td>
+                                        <td className="px-6 py-3 hidden lg:table-cell text-sm text-zinc-400">{getDisplayValue(item.Attended_year1)}</td>
+                                        <td className="px-6 py-3 hidden xl:table-cell text-sm text-zinc-400">{getDisplayValue(item.last_edition_booth_sqm)}</td>
                                         <td className="px-6 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                                             <button onClick={() => handleEdit(item)} className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => handleDelete(item.ID)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-zinc-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>

@@ -35,7 +35,9 @@ export const ZohoSettingsModal: React.FC<ZohoSettingsModalProps> = ({ isOpen, on
         if (isOpen) {
             const saved = getZohoConfig();
             if (saved) {
-                setConfig(prev => ({ ...prev, ...saved, dc: saved.dc || 'com' }));
+                setTimeout(() => {
+                    setConfig(prev => ({ ...prev, ...saved, dc: saved.dc || 'com' }));
+                }, 0);
             }
         }
     }, [isOpen]);

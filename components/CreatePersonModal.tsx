@@ -2,10 +2,23 @@ import React, { useState } from 'react';
 import { X, User, Briefcase, Building2, Mail, Phone, MapPin, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface PersonFormData {
+    name: string;
+    title: string;
+    company: string;
+    email: string;
+    phone: string;
+    location: string;
+    linkedin: string;
+    image: string;
+    id?: string;
+    created_at?: string;
+}
+
 interface CreatePersonModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (data: any) => void;
+    onSubmit: (data: PersonFormData) => void;
 }
 
 export const CreatePersonModal: React.FC<CreatePersonModalProps> = ({ isOpen, onClose, onSubmit }) => {

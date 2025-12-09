@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, Flag, Globe, Lock, AlertCircle, Check, Layout, Type, AlignLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Calendar, Flag, Globe, Lock, AlertCircle, Check, Layout, Type, AlignLeft, User, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Task } from '@/types/task';
-import { Button } from '../ui/Button';
+import { createClient } from '@/lib/supabase';
 
 interface TaskModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (task: Partial<Task>) => Promise<void>;
     initialData?: Task | null;
+}
+
+interface UserProfile {
+    uid: string;
+    name: string;
+    profile_url: string;
+    email: string;
 }
 
 export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalProps) => {
@@ -19,9 +26,35 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
         priority: 'Medium',
         status: 'Pending',
         visibility: 'Private',
-        related_to: ''
+        related_to: '',
+        assigned_to: []
     });
     const [loading, setLoading] = useState(false);
+    const [users, setUsers] = useState<UserProfile[]>([]);
+    const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
+    const assigneeRef = useRef<HTMLDivElement>(null);
+    const supabase = createClient();
+
+    useEffect(() => {
+        fetchUsers();
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (assigneeRef.current && !assigneeRef.current.contains(event.target as Node)) {
+                setIsAssigneeDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const fetchUsers = async () => {
+        const { data } = await supabase
+            .from('users')
+            .select('uid, name, profile_url, email');
+        if (data) setUsers(data);
+    };
 
     useEffect(() => {
         if (initialData) {
@@ -34,7 +67,8 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                 priority: 'Medium',
                 status: 'Pending',
                 visibility: 'Private',
-                related_to: ''
+                related_to: '',
+                assigned_to: []
             });
         }
     }, [initialData, isOpen]);
@@ -52,6 +86,23 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
         }
     };
 
+    const toggleAssignee = (uid: string) => {
+        setFormData(prev => {
+            const current = prev.assigned_to || [];
+            if (current.includes(uid)) {
+                return { ...prev, assigned_to: current.filter(id => id !== uid) };
+            } else {
+                return { ...prev, assigned_to: [...current, uid] };
+            }
+        });
+    };
+
+    const clearAssignees = () => {
+        setFormData(prev => ({ ...prev, assigned_to: [] }));
+    };
+
+    if (!isOpen) return null;
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -64,182 +115,226 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                         className="fixed inset-0 bg-black/80 backdrop-blur-md z-50"
                     />
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
-                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-[#09090b] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
+                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-[#09090b] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
                     >
                         {/* Header */}
-                        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-900/30">
+                        <div className="p-6 border-b border-white/5 flex items-center justify-between">
                             <div>
-                                <h2 className="text-xl font-bold text-white mb-1">
+                                <h2 className="text-xl font-bold text-white tracking-tight">
                                     {initialData ? 'Edit Task' : 'New Task'}
                                 </h2>
-                                <p className="text-sm text-zinc-400">
-                                    {initialData ? 'Update the details of your task below.' : 'Create a new task to track your progress.'}
+                                <p className="text-xs text-zinc-400 mt-1">
+                                    {initialData ? 'Update task details below.' : 'Create a new task to track progress.'}
                                 </p>
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-2 rounded-xl hover:bg-white/5 text-zinc-400 hover:text-white transition-colors"
+                                className="p-2 rounded-full hover:bg-white/5 text-zinc-400 hover:text-white transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
-                        {/* Scrollable Content */}
+                        {/* Content */}
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                            <form id="task-form" onSubmit={handleSubmit} className="space-y-8">
-                                {/* Main Info Section */}
-                                <div className="space-y-6">
-                                    {/* Title */}
-                                    <div className="space-y-3">
-                                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                            <Type className="w-3.5 h-3.5" />
-                                            Task Title
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={formData.title}
-                                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                            className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-5 py-4 text-lg text-white focus:outline-none focus:border-white/10 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-zinc-600"
-                                            placeholder="What needs to be done?"
-                                        />
-                                    </div>
+                            <form id="task-form" onSubmit={handleSubmit} className="space-y-6">
+                                {/* Title */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Task Title</label>
+                                    <input
+                                        type="text"
+                                        value={formData.title}
+                                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                        placeholder="What needs to be done?"
+                                        className="w-full bg-zinc-900/50 border border-white/10 rounded-md px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-zinc-600"
+                                        required
+                                    />
+                                </div>
 
-                                    {/* Description */}
-                                    <div className="space-y-3">
-                                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                            <AlignLeft className="w-3.5 h-3.5" />
-                                            Description
-                                        </label>
-                                        <textarea
-                                            value={formData.description}
-                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                            className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-5 py-4 text-white focus:outline-none focus:border-white/10 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-zinc-600 min-h-[120px] resize-none leading-relaxed"
-                                            placeholder="Add more details about this task..."
-                                        />
+                                {/* Description */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Description</label>
+                                    <textarea
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        placeholder="Add more details..."
+                                        rows={4}
+                                        className="w-full bg-zinc-900/50 border border-white/10 rounded-md px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-zinc-600 resize-none"
+                                    />
+                                </div>
+
+                                {/* Assigned To */}
+                                <div className="space-y-2" ref={assigneeRef}>
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Assigned To</label>
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
+                                            className="w-full flex items-center justify-between bg-zinc-900/50 border border-white/10 rounded-md px-4 py-3 text-sm text-zinc-300 hover:border-white/20 transition-all"
+                                        >
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <User className="w-4 h-4 text-zinc-500 shrink-0" />
+                                                {(formData.assigned_to?.length || 0) === 0 ? (
+                                                    <span className="text-zinc-500">All (Default)</span>
+                                                ) : (
+                                                    <div className="flex -space-x-2">
+                                                        {formData.assigned_to?.slice(0, 5).map(uid => {
+                                                            const user = users.find(u => u.uid === uid);
+                                                            return (
+                                                                <div key={uid} className="w-5 h-5 rounded-full ring-2 ring-[#09090b] bg-zinc-800 flex items-center justify-center overflow-hidden" title={user?.name}>
+                                                                    {user?.profile_url ? <img src={user.profile_url} alt="" className="w-full h-full object-cover" /> : <span className="text-[8px] font-bold">{user?.name?.[0]}</span>}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {(formData.assigned_to?.length || 0) > 5 && (
+                                                            <div className="w-5 h-5 rounded-full ring-2 ring-[#09090b] bg-zinc-800 flex items-center justify-center text-[8px] font-bold text-zinc-400">
+                                                                +{(formData.assigned_to?.length || 0) - 5}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${isAssigneeDropdownOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        <AnimatePresence>
+                                            {isAssigneeDropdownOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute top-full left-0 right-0 mt-2 bg-[#121214] border border-white/10 rounded-lg shadow-xl z-50 p-2 max-h-60 overflow-y-auto custom-scrollbar"
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { clearAssignees(); setIsAssigneeDropdownOpen(false); }}
+                                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${(formData.assigned_to?.length || 0) === 0 ? 'bg-blue-500/10 text-blue-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                                                            }`}
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center border border-white/5">
+                                                            <Globe className="w-4 h-4" />
+                                                        </div>
+                                                        <div className="flex-1 text-left">
+                                                            <div className="font-medium">All Users</div>
+                                                            <div className="text-[10px] opacity-70">Task visible to everyone</div>
+                                                        </div>
+                                                        {(formData.assigned_to?.length || 0) === 0 && <CheckCircle2 className="w-4 h-4" />}
+                                                    </button>
+
+                                                    <div className="h-px bg-white/5 my-2" />
+
+                                                    {users.map(user => {
+                                                        const isSelected = formData.assigned_to?.includes(user.uid);
+                                                        return (
+                                                            <button
+                                                                key={user.uid}
+                                                                type="button"
+                                                                onClick={() => toggleAssignee(user.uid)}
+                                                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${isSelected ? 'bg-blue-500/10 text-blue-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                                                                    }`}
+                                                            >
+                                                                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden border border-white/5">
+                                                                    {user.profile_url ? (
+                                                                        <img src={user.profile_url} alt="" className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <span className="font-bold">{user.name?.[0]}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1 text-left">
+                                                                    <div className="font-medium">{user.name}</div>
+                                                                    <div className="text-[10px] opacity-70">{user.email}</div>
+                                                                </div>
+                                                                {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
                                 </div>
 
-                                <div className="h-px bg-white/5" />
-
-                                {/* Details Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    {/* Left Column */}
-                                    <div className="space-y-6">
-                                        {/* Due Date */}
-                                        <div className="space-y-3">
-                                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                                <Calendar className="w-3.5 h-3.5" />
-                                                Due Date
-                                            </label>
-                                            <div className="relative group">
-                                                <input
-                                                    type="date"
-                                                    value={formData.due_date}
-                                                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                                                    className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/10 focus:ring-1 focus:ring-white/10 transition-all [color-scheme:dark]"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Related To */}
-                                        <div className="space-y-3">
-                                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                                <Layout className="w-3.5 h-3.5" />
-                                                Related To
-                                            </label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Due Date */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Due Date</label>
+                                        <div className="relative">
+                                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                                             <input
-                                                type="text"
-                                                value={formData.related_to}
-                                                onChange={(e) => setFormData({ ...formData, related_to: e.target.value })}
-                                                className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/10 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-zinc-600"
-                                                placeholder="e.g., Project X"
+                                                type="date"
+                                                value={formData.due_date}
+                                                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                                                className="w-full bg-zinc-900/50 border border-white/10 rounded-md pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all [color-scheme:dark]"
                                             />
                                         </div>
                                     </div>
 
-                                    {/* Right Column */}
-                                    <div className="space-y-6">
-                                        {/* Priority */}
-                                        <div className="space-y-3">
-                                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                                <Flag className="w-3.5 h-3.5" />
-                                                Priority
-                                            </label>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {(['Low', 'Medium', 'High'] as const).map((p) => (
-                                                    <button
-                                                        key={p}
-                                                        type="button"
-                                                        onClick={() => setFormData({ ...formData, priority: p })}
-                                                        className={`relative py-2.5 rounded-xl text-xs font-bold border transition-all duration-300 overflow-hidden group ${formData.priority === p
-                                                            ? p === 'High' ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                                                                : p === 'Medium' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                                                                    : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                                                            : 'bg-zinc-900/30 border-white/5 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
-                                                            }`}
-                                                    >
-                                                        <span className="relative z-10">{p}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                    {/* Priority */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Priority</label>
+                                        <div className="flex bg-zinc-900/50 border border-white/10 rounded-md p-1">
+                                            {['Low', 'Medium', 'High'].map(p => (
+                                                <button
+                                                    key={p}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, priority: p as any })}
+                                                    className={`flex-1 py-1.5 text-xs font-medium rounded transition-all ${formData.priority === p
+                                                            ? 'bg-zinc-800 text-white shadow-sm'
+                                                            : 'text-zinc-500 hover:text-zinc-300'
+                                                        }`}
+                                                >
+                                                    {p}
+                                                </button>
+                                            ))}
                                         </div>
+                                    </div>
+                                </div>
 
-                                        {/* Visibility */}
-                                        <div className="space-y-3">
-                                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                                <Globe className="w-3.5 h-3.5" />
-                                                Visibility
-                                            </label>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFormData({ ...formData, visibility: 'Private' })}
-                                                    className={`relative py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 transition-all duration-300 ${formData.visibility === 'Private'
-                                                        ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg shadow-black/20'
-                                                        : 'bg-zinc-900/30 border-white/5 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
-                                                        }`}
-                                                >
-                                                    <Lock className="w-3.5 h-3.5" /> Private
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFormData({ ...formData, visibility: 'Public' })}
-                                                    className={`relative py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 transition-all duration-300 ${formData.visibility === 'Public'
-                                                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                                        : 'bg-zinc-900/30 border-white/5 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
-                                                        }`}
-                                                >
-                                                    <Globe className="w-3.5 h-3.5" /> Public
-                                                </button>
-                                            </div>
-                                        </div>
+                                {/* Visibility */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Visibility</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {['Private', 'Public'].map(v => (
+                                            <button
+                                                key={v}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, visibility: v as any })}
+                                                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-md border text-sm font-medium transition-all ${formData.visibility === v
+                                                        ? 'bg-blue-500/10 border-blue-500/50 text-blue-500'
+                                                        : 'bg-zinc-900/50 border-white/10 text-zinc-400 hover:bg-white/5 hover:border-white/20'
+                                                    }`}
+                                            >
+                                                {v === 'Private' ? <Lock className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+                                                {v}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </form>
                         </div>
 
                         {/* Footer */}
-                        <div className="p-6 border-t border-white/5 bg-zinc-900/30 flex justify-end gap-3">
-                            <Button
-                                variant="secondary"
-                                onClick={onClose}
+                        <div className="p-6 border-t border-white/5 flex items-center justify-end gap-3 bg-zinc-900/50 backdrop-blur-sm">
+                            <button
                                 type="button"
-                                className="glass-button border-white/10 hover:border-white/20 text-zinc-400 hover:text-white px-6 rounded-xl"
+                                onClick={onClose}
+                                className="px-5 py-2.5 rounded-md text-xs font-bold text-zinc-400 hover:text-white transition-colors"
                             >
                                 Cancel
-                            </Button>
-                            <Button
-                                onClick={() => document.getElementById('task-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))}
-                                isLoading={loading}
-                                className="bg-white text-black hover:bg-zinc-200 border-0 shadow-lg shadow-white/10 px-8 rounded-xl font-bold"
+                            </button>
+                            <button
+                                type="submit"
+                                form="task-form"
+                                disabled={loading}
+                                className="px-6 py-2.5 rounded-md bg-white text-black text-xs font-bold hover:bg-zinc-200 transition-colors shadow-lg shadow-white/10 disabled:opacity-50 flex items-center gap-2"
                             >
-                                {initialData ? 'Save Changes' : 'Create Task'}
-                            </Button>
+                                {loading ? 'Saving...' : initialData ? 'Save Changes' : 'Create Task'}
+                                {!loading && <Check className="w-3.5 h-3.5" />}
+                            </button>
                         </div>
                     </motion.div>
                 </>

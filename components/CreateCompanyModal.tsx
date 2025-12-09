@@ -1,16 +1,64 @@
 import React, { useState } from 'react';
-import { X, Building2, Globe, MapPin, Users, FileText, Loader2, DollarSign, Calendar, Phone, Linkedin, Twitter, Facebook, Hash, CheckCircle2 } from 'lucide-react';
+import { X, Building2, Globe, MapPin, Users, FileText, Loader2, DollarSign, Calendar, Phone, Linkedin, Twitter, Facebook, Hash, CheckCircle2, LucideIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface CompanyFormData {
+    name: string;
+    industry: string;
+    website: string;
+    location: string;
+    size: string;
+    description: string;
+    logo: string;
+    revenue: string;
+    founded_year: string;
+    phone: string;
+    linkedin: string;
+    twitter: string;
+    facebook: string;
+    keywords: string;
+    id?: string;
+}
 
 interface CreateCompanyModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (data: any) => void;
+    onSubmit: (data: CompanyFormData) => void;
 }
+
+interface InputFieldProps {
+    label: string;
+    icon: LucideIcon;
+    value: string | number;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    placeholder?: string;
+    type?: string;
+    required?: boolean;
+    className?: string;
+}
+
+const InputField: React.FC<InputFieldProps> = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }) => (
+    <div className={`space-y-1.5 ${className}`}>
+        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+        <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Icon className="h-4 w-4 text-zinc-500 group-focus-within:text-indigo-500 transition-colors" />
+            </div>
+            <input
+                type={type}
+                required={required}
+                value={value}
+                onChange={onChange}
+                className="block w-full pl-10 pr-3 py-2.5 bg-zinc-900/50 border border-white/10 rounded-xl text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all hover:bg-white/5"
+                placeholder={placeholder}
+            />
+        </div>
+    </div>
+);
 
 export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, onClose, onSubmit }) => {
     const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<CompanyFormData>({
         name: '',
         industry: '',
         website: '',
@@ -40,25 +88,6 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
             revenue: '', founded_year: '', phone: '', linkedin: '', twitter: '', facebook: '', keywords: ''
         });
     };
-
-    const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
-        <div className={`space-y-1.5 ${className}`}>
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
-            <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Icon className="h-4 w-4 text-zinc-500 group-focus-within:text-indigo-500 transition-colors" />
-                </div>
-                <input
-                    type={type}
-                    required={required}
-                    value={value}
-                    onChange={onChange}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-zinc-900/50 border border-white/10 rounded-xl text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all hover:bg-white/5"
-                    placeholder={placeholder}
-                />
-            </div>
-        </div>
-    );
 
     return (
         <AnimatePresence>
@@ -112,7 +141,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Company Name"
                                             icon={Building2}
                                             value={formData.name}
-                                            onChange={(e: any) => setFormData({ ...formData, name: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                             placeholder="Acme Inc."
                                             required
                                             className="md:col-span-2"
@@ -121,7 +150,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Industry"
                                             icon={Hash}
                                             value={formData.industry}
-                                            onChange={(e: any) => setFormData({ ...formData, industry: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
                                             placeholder="Technology, SaaS..."
                                             required
                                         />
@@ -129,7 +158,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Website"
                                             icon={Globe}
                                             value={formData.website}
-                                            onChange={(e: any) => setFormData({ ...formData, website: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                                             placeholder="https://example.com"
                                             type="url"
                                         />
@@ -150,7 +179,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Location"
                                             icon={MapPin}
                                             value={formData.location}
-                                            onChange={(e: any) => setFormData({ ...formData, location: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                             placeholder="San Francisco, CA"
                                         />
 
@@ -179,14 +208,14 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Revenue"
                                             icon={DollarSign}
                                             value={formData.revenue}
-                                            onChange={(e: any) => setFormData({ ...formData, revenue: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, revenue: e.target.value })}
                                             placeholder="$1M - $10M"
                                         />
                                         <InputField
                                             label="Founded Year"
                                             icon={Calendar}
                                             value={formData.founded_year}
-                                            onChange={(e: any) => setFormData({ ...formData, founded_year: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, founded_year: e.target.value })}
                                             placeholder="2020"
                                             type="number"
                                         />
@@ -218,7 +247,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="LinkedIn"
                                             icon={Linkedin}
                                             value={formData.linkedin}
-                                            onChange={(e: any) => setFormData({ ...formData, linkedin: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
                                             placeholder="LinkedIn URL"
                                             type="url"
                                         />
@@ -226,7 +255,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Twitter"
                                             icon={Twitter}
                                             value={formData.twitter}
-                                            onChange={(e: any) => setFormData({ ...formData, twitter: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, twitter: e.target.value })}
                                             placeholder="Twitter URL"
                                             type="url"
                                         />
@@ -234,7 +263,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             label="Facebook"
                                             icon={Facebook}
                                             value={formData.facebook}
-                                            onChange={(e: any) => setFormData({ ...formData, facebook: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, facebook: e.target.value })}
                                             placeholder="Facebook URL"
                                             type="url"
                                         />
@@ -244,7 +273,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                         label="Keywords"
                                         icon={Hash}
                                         value={formData.keywords}
-                                        onChange={(e: any) => setFormData({ ...formData, keywords: e.target.value })}
+                                        onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
                                         placeholder="SaaS, B2B, Marketing, AI (comma separated)"
                                     />
                                 </section>

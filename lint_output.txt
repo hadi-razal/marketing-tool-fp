@@ -1,0 +1,610 @@
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CompanyCard.tsx
+   2:69  warning  'Trash2' is defined but never used                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+  54:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CompanyDetailsModal.tsx
+   47:13   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element     @next/next/no-img-element
+   75:56   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  116:8    warning  React Hook useEffect has a missing dependency: 'company.comments'. Either include it or remove the dependency array. If 'setLocalComments' needs the current value of 'company.comments', you can also switch to useReducer instead of useState and read 'company.comments' in the reducer  react-hooks/exhaustive-deps
+  253:41   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element     @next/next/no-img-element
+  285:62   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  287:57   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element     @next/next/no-img-element
+  287:79   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  497:85   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element     @next/next/no-img-element
+  573:109  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element     @next/next/no-img-element
+  633:73   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element     @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx
+    2:87   warning  'Phone' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+    8:22   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+   44:127  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  111:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:111:42
+  109 |
+  110 |                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+> 111 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  112 |                                             label="Company Name"
+  113 |                                             icon={Building2}
+  114 |                                             value={formData.name}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                             react-hooks/static-components
+  115:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  120:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:120:42
+  118 |                                             className="md:col-span-2"
+  119 |                                         />
+> 120 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  121 |                                             label="Industry"
+  122 |                                             icon={Hash}
+  123 |                                             value={formData.industry}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>             react-hooks/static-components
+  124:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  128:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:128:42
+  126 |                                             required
+  127 |                                         />
+> 128 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  129 |                                             label="Website"
+  130 |                                             icon={Globe}
+  131 |                                             value={formData.website}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                               react-hooks/static-components
+  132:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  149:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:149:42
+  147 |
+  148 |                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+> 149 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  150 |                                             label="Location"
+  151 |                                             icon={MapPin}
+  152 |                                             value={formData.location}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                                react-hooks/static-components
+  153:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  178:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:178:42
+  176 |                                         </div>
+  177 |
+> 178 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  179 |                                             label="Revenue"
+  180 |                                             icon={DollarSign}
+  181 |                                             value={formData.revenue}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                                                                           react-hooks/static-components
+  182:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  185:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:185:42
+  183 |                                             placeholder="$1M - $10M"
+  184 |                                         />
+> 185 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  186 |                                             label="Founded Year"
+  187 |                                             icon={Calendar}
+  188 |                                             value={formData.founded_year}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>  react-hooks/static-components
+  189:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  217:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:217:42
+  215 |
+  216 |                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+> 217 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  218 |                                             label="LinkedIn"
+  219 |                                             icon={Linkedin}
+  220 |                                             value={formData.linkedin}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                              react-hooks/static-components
+  221:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  225:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:225:42
+  223 |                                             type="url"
+  224 |                                         />
+> 225 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  226 |                                             label="Twitter"
+  227 |                                             icon={Twitter}
+  228 |                                             value={formData.twitter}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                           react-hooks/static-components
+  229:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  233:42   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:233:42
+  231 |                                             type="url"
+  232 |                                         />
+> 233 |                                         <InputField
+      |                                          ^^^^^^^^^^ This component is created during render
+  234 |                                             label="Facebook"
+  235 |                                             icon={Facebook}
+  236 |                                             value={formData.facebook}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                        react-hooks/static-components
+  237:59   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  243:38   error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:243:38
+  241 |                                     </div>
+  242 |
+> 243 |                                     <InputField
+      |                                      ^^^^^^^^^^ This component is created during render
+  244 |                                         label="Keywords"
+  245 |                                         icon={Hash}
+  246 |                                         value={formData.keywords}
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\CreateCompanyModal.tsx:44:24
+  42 |     };
+  43 |
+> 44 |     const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", required = false, className = "" }: any) => (
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |         <div className={`space-y-1.5 ${className}`}>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">{label} {required && <span className="text-red-500">*</span>}</label>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |         </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 61 |     );
+     | ^^^^^^ The component is created during render here
+  62 |
+  63 |     return (
+  64 |         <AnimatePresence>                                                                                                       react-hooks/static-components
+  247:55   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Dashboard\RecentActivity.tsx
+  32:70  error    Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  42:58  error    Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  42:69  error    Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  49:67  error    Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  64:8   warning  React Hook useEffect has a missing dependency: 'supabase'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Dashboard\RecentlySaved.tsx
+   6:16  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  36:37  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Dashboard\StatsGrid.tsx
+  13:104  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\DatabasePage.tsx
+   23:42  error    Unexpected any. Specify a different type                                                                                                                                                                                           @typescript-eslint/no-explicit-any
+   41:58  error    Unexpected any. Specify a different type                                                                                                                                                                                           @typescript-eslint/no-explicit-any
+   42:12  warning  'isPersonModalOpen' is assigned a value but never used                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   64:8   warning  React Hook React.useEffect has a missing dependency: 'notify'. Either include it or remove the dependency array. If 'notify' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+   88:39  warning  'newPerson' is defined but never used                                                                                                                                                                                              @typescript-eslint/no-unused-vars
+   88:50  error    Unexpected any. Specify a different type                                                                                                                                                                                           @typescript-eslint/no-explicit-any
+   95:40  warning  'newCompany' is defined but never used                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   95:52  error    Unexpected any. Specify a different type                                                                                                                                                                                           @typescript-eslint/no-explicit-any
+  146:39  error    Unexpected any. Specify a different type                                                                                                                                                                                           @typescript-eslint/no-explicit-any
+  177:25  error    Unexpected any. Specify a different type                                                                                                                                                                                           @typescript-eslint/no-explicit-any
+  419:32  warning  'company' is defined but never used                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Drive\DriveSidebar.tsx
+   2:21  warning  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+   2:28  warning  'Star' is defined but never used          @typescript-eslint/no-unused-vars
+   2:34  warning  'Trash2' is defined but never used        @typescript-eslint/no-unused-vars
+   2:64  warning  'Folder' is defined but never used        @typescript-eslint/no-unused-vars
+   2:72  warning  'ChevronRight' is defined but never used  @typescript-eslint/no-unused-vars
+  12:52  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Drive\FileCard.tsx
+  2:90   warning  'MoreVertical' is defined but never used  @typescript-eslint/no-unused-vars
+  2:104  warning  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  5:10   warning  'cn' is defined but never used            @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Drive\FileExplorer.tsx
+    2:93   warning  'FileIcon' is defined but never used                                                                                                      @typescript-eslint/no-unused-vars
+    2:103  warning  'Download' is defined but never used                                                                                                      @typescript-eslint/no-unused-vars
+    2:113  warning  'MoreVertical' is defined but never used                                                                                                  @typescript-eslint/no-unused-vars
+    2:127  warning  'Folder' is defined but never used                                                                                                        @typescript-eslint/no-unused-vars
+    2:144  warning  'ImageIcon' is defined but never used                                                                                                     @typescript-eslint/no-unused-vars
+    2:155  warning  'FileText' is defined but never used                                                                                                      @typescript-eslint/no-unused-vars
+    2:165  warning  'Music' is defined but never used                                                                                                         @typescript-eslint/no-unused-vars
+    2:172  warning  'Video' is defined but never used                                                                                                         @typescript-eslint/no-unused-vars
+    2:179  warning  'Trash2' is defined but never used                                                                                                        @typescript-eslint/no-unused-vars
+    2:187  warning  'Share2' is defined but never used                                                                                                        @typescript-eslint/no-unused-vars
+    3:10   warning  'motion' is defined but never used                                                                                                        @typescript-eslint/no-unused-vars
+   44:8    warning  React Hook useEffect has a missing dependency: 'propFolderId'. Either include it or remove the dependency array                           react-hooks/exhaustive-deps
+  141:27   error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+  150:8    warning  React Hook useEffect has missing dependencies: 'breadcrumbs.length' and 'onNavigate'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\FairplatzAIWidget.tsx
+    4:43  warning  'MessageSquare' is defined but never used                                                                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+  184:25  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  309:49  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\LeadDetailModal.tsx
+    2:166  warning  'User' is defined but never used                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+   12:72   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   48:13   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  116:8    warning  React Hook useEffect has a missing dependency: 'localLead.comments'. Either include it or remove the dependency array. You can also replace multiple useState variables with useReducer if 'setLocalComments' needs the current value of 'localLead.comments'                            react-hooks/exhaustive-deps
+  150:11   warning  'getEmailStatusColor' is assigned a value but never used                                                                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  295:56   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  297:49   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  297:73   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  554:77   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  630:101  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  690:65   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\MainSidebar.tsx
+    2:82   warning  'Menu' is defined but never used                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+    2:101  warning  'BarChart2' is defined but never used                                                                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+    2:112  warning  'Sparkles' is defined but never used                                                                                                                                                                                                                                                     @typescript-eslint/no-unused-vars
+  136:37   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\ProfileCard.tsx
+  36:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\ProfileCard.tsx:36:9
+  34 |
+  35 |     useEffect(() => {
+> 36 |         setImageError(false);
+     |         ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  37 |     }, [src]);
+  38 |
+  39 |     // Check if we have a valid image URL (not empty, not null, not a placeholder)  react-hooks/set-state-in-effect
+  49:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\SearchPage.tsx
+    3:53   warning  'LayoutGrid' is defined but never used                           @typescript-eslint/no-unused-vars
+    3:73   warning  'Filter' is defined but never used                               @typescript-eslint/no-unused-vars
+    3:99   warning  'Download' is defined but never used                             @typescript-eslint/no-unused-vars
+   41:21   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+   45:57   warning  'onSave' is defined but never used                               @typescript-eslint/no-unused-vars
+   51:44   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+   54:60   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+   58:12   warning  'isSaveModalOpen' is assigned a value but never used             @typescript-eslint/no-unused-vars
+   58:29   warning  'setIsSaveModalOpen' is assigned a value but never used          @typescript-eslint/no-unused-vars
+   59:54   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+   87:82   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+   97:90   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  118:25   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  152:90   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  168:25   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  176:47   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  193:45   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  210:32   warning  'file' is defined but never used                                 @typescript-eslint/no-unused-vars
+  220:30   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  256:39   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  287:25   error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  344:131  error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  345:133  error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  350:133  error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  354:128  error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  355:140  error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  396:92   error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  396:100  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  396:103  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  396:110  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  399:113  error    Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  447:147  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\SettingsPage.tsx
+  14:12  warning  'loading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Settings\ProfileUpload.tsx
+  186:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  343:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\SplashIntro.tsx
+  13:8  warning  React Hook useEffect has a missing dependency: 'onComplete'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Tasks\TaskDetailsModal.tsx
+    2:23  warning  'Flag' is defined but never used                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+    2:56  warning  'Clock' is defined but never used                                                                                                                                                                                                                                                        @typescript-eslint/no-unused-vars
+    2:63  warning  'CheckCircle2' is defined but never used                                                                                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  127:53  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Tasks\TaskModal.tsx
+  2:42  warning  'AlertCircle' is defined but never used  @typescript-eslint/no-unused-vars
+  2:55  warning  'Check' is defined but never used        @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\DatabaseDetailsModal.tsx
+   5:10  warning  'motion' is defined but never used        @typescript-eslint/no-unused-vars
+  10:11  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:20  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:26  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  16:86  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\DatabaseFormModal.tsx
+  12:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\DatabaseTable.tsx
+    8:10  warning  'SoftInput' is defined but never used                                                                                   @typescript-eslint/no-unused-vars
+   10:10  warning  'motion' is defined but never used                                                                                      @typescript-eslint/no-unused-vars
+   13:38  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+   17:54  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+   45:49  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+   78:17  error    'criteriaParts' is never reassigned. Use 'const' instead                                                                prefer-const
+  110:23  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+  116:8   warning  React Hook useCallback has a missing dependency: 'selectedCountries'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  121:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array            react-hooks/exhaustive-deps
+  123:54  warning  'continents' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+  142:23  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+  147:31  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+  157:35  error    Unexpected any. Specify a different type                                                                                @typescript-eslint/no-explicit-any
+  280:49  warning  'i' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ExhibitorDetailsModal.tsx
+   4:10   warning  'Globe' is defined but never used         @typescript-eslint/no-unused-vars
+   4:17   warning  'MapPin' is defined but never used        @typescript-eslint/no-unused-vars
+   4:45   warning  'Trash2' is defined but never used        @typescript-eslint/no-unused-vars
+   4:66   warning  'User' is defined but never used          @typescript-eslint/no-unused-vars
+   4:72   warning  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+   4:79   warning  'Info' is defined but never used          @typescript-eslint/no-unused-vars
+   4:85   warning  'Building2' is defined but never used     @typescript-eslint/no-unused-vars
+   4:96   warning  'Phone' is defined but never used         @typescript-eslint/no-unused-vars
+   5:10   warning  'motion' is defined but never used        @typescript-eslint/no-unused-vars
+  10:11   error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:20   error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:26   error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  16:80   error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  41:41   error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  74:110  warning  'onDelete' is defined but never used      @typescript-eslint/no-unused-vars
+  85:27   error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ExhibitorFormModal.tsx
+  12:19  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  30:32  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  70:8   warning  React Hook useEffect has a missing dependency: 'extractValue'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ExhibitorTable.tsx
+    3:50  warning  'ChevronDown' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+    8:10  warning  'SoftInput' is defined but never used                                                                                                 @typescript-eslint/no-unused-vars
+   12:38  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+   16:54  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+   42:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array                          react-hooks/exhaustive-deps
+   58:23  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+   63:37  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+   69:31  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+  100:49  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+  128:17  error    'criteriaParts' is never reassigned. Use 'const' instead                                                                              prefer-const
+  166:23  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+  177:8   warning  React Hook useEffect has missing dependencies: 'debouncedSearch' and 'fetchData'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  190:12  warning  'loadingDetails' is assigned a value but never used                                                                                   @typescript-eslint/no-unused-vars
+  192:41  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+  201:40  error    Unexpected any. Specify a different type                                                                                              @typescript-eslint/no-explicit-any
+  332:49  warning  'i' is defined but never used                                                                                                         @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ShowDetailsModal.tsx
+   4:132  warning  'X' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  10:11   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  11:20   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  32:86   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  87:33   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ShowFormModal.tsx
+   2:49  warning  'Hash' is defined but never used          @typescript-eslint/no-unused-vars
+  12:19  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ShowsTable.tsx
+    8:10  warning  'SoftInput' is defined but never used                                                                         @typescript-eslint/no-unused-vars
+   10:10  warning  'motion' is defined but never used                                                                            @typescript-eslint/no-unused-vars
+   13:38  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+   17:54  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+   46:49  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+   71:17  error    'criteriaParts' is never reassigned. Use 'const' instead                                                      prefer-const
+  103:23  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+  122:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  124:54  warning  'continents' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+  145:23  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+  150:31  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+  160:35  error    Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+  284:49  warning  'i' is defined but never used                                                                                 @typescript-eslint/no-unused-vars
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\TasksTable.tsx
+    3:100  warning  'ChevronDown' is defined but never used                                                                                                                                                                                                                                                  @typescript-eslint/no-unused-vars
+    3:139  warning  'User' is defined but never used                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+    3:203  warning  'LayoutGrid' is defined but never used                                                                                                                                                                                                                                                   @typescript-eslint/no-unused-vars
+    3:215  warning  'List' is defined but never used                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+    9:18   warning  'formatDistanceToNow' is defined but never used                                                                                                                                                                                                                                          @typescript-eslint/no-unused-vars
+   22:12   warning  'openStatusDropdownId' is assigned a value but never used                                                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+  102:8    warning  React Hook useEffect has missing dependencies: 'fetchTasks' and 'fetchUser'. Either include them or remove the dependency array                                                                                                                                                          react-hooks/exhaustive-deps
+  529:53   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ZohoSettingsModal.tsx
+   6:17  warning  'ExternalLink' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+  38:17  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\hadhi\Desktop\Programming\Fairplatz IT\fp-marketing-tool\components\Zoho\ZohoSettingsModal.tsx:38:17
+  36 |             const saved = getZohoConfig();
+  37 |             if (saved) {
+> 38 |                 setConfig(prev => ({ ...prev, ...saved, dc: saved.dc || 'com' }));
+     |                 ^^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |             }
+  40 |         }
+  41 |     }, [isOpen]);  react-hooks/set-state-in-effect
+
+✖ 224 problems (113 errors, 111 warnings)
+  3 errors and 0 warnings potentially fixable with the `--fix` option.
+

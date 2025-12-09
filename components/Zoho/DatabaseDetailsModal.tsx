@@ -15,6 +15,25 @@ interface DatabaseDetailsModalProps {
 
 const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false }: any) => {
     if (!value) return null;
+
+    let displayValue = value;
+    let href = value;
+
+    // Handle Zoho object structure
+    if (typeof value === 'object' && value !== null) {
+        if ('url' in value) {
+            displayValue = value.url;
+            href = value.url;
+        } else if ('display_value' in value) {
+            displayValue = value.display_value;
+        } else if ('value' in value) {
+            displayValue = value.value;
+        } else {
+            // Fallback for unknown objects to prevent crash
+            displayValue = JSON.stringify(value);
+        }
+    }
+
     return (
         <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
             <div className="flex items-start gap-3">
@@ -25,11 +44,11 @@ const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = fals
                     <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">{label}</div>
                     <div className="text-zinc-200 font-medium break-words text-sm leading-relaxed">
                         {isLink ? (
-                            <a href={value} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1.5 transition-colors truncate">
-                                {value} <LinkIcon className="w-3 h-3" />
+                            <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1.5 transition-colors truncate">
+                                {displayValue} <LinkIcon className="w-3 h-3" />
                             </a>
                         ) : (
-                            value
+                            displayValue
                         )}
                     </div>
                 </div>
@@ -40,6 +59,13 @@ const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = fals
 
 export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOpen, onClose, data, onEdit, onDelete, onAddToLeads }) => {
     if (!data) return null;
+
+    // Helper to extract display value safely
+    const getSafely = (val: any) => {
+        if (!val) return '';
+        if (typeof val === 'object') return val.display_value || val.value || val.url || '';
+        return val;
+    };
 
     // Helper to format date
     const formatDate = (dateStr: string) => {
@@ -53,29 +79,25 @@ export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOp
         });
     };
 
-    // Fields configuration based on user request
-    // ID, City, Country, Event, Event_logo, Event_Type, Exhibition_Size, Exhibitor_List_FILE, Exhibitor_List_Link, Floorplan, Floorplan_Link, Frequency, Industry, Last_edition_n_Exhibitors, Level, Modified_Time, Modified_User, Note1, Organiser, Starting_Date, Website, World_Area
-
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Record Details" maxWidth="max-w-4xl">
+        <Modal isOpen={isOpen} onClose={onClose} title="Participation Details" maxWidth="max-w-4xl">
             <div className="flex flex-col h-[80vh]">
                 {/* Header */}
                 <div className="p-6 border-b border-white/5 bg-zinc-900/50">
                     <h2 className="text-2xl font-bold text-white tracking-tight mb-2">
-                        {data.Event || data.Show || 'Unknown Event'}
+                        {getSafely(data.Company) || 'Unknown Company'}
                     </h2>
                     <div className="flex flex-wrap items-center gap-3">
                         <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
                             <Hash className="w-3 h-3" /> {data.ID}
                         </span>
-                        {data.City && (
+                        {/* Show Name in Header Subtitle */}
+                        <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
+                            <Layers className="w-3 h-3" /> {getSafely(data.Show)}
+                        </span>
+                        {data.Attended_year1 && (
                             <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
-                                <MapPin className="w-3 h-3" /> {data.City}, {data.Country}
-                            </span>
-                        )}
-                        {data.Starting_Date && (
-                            <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
-                                <Calendar className="w-3 h-3" /> {data.Starting_Date}
+                                <Calendar className="w-3 h-3" /> {data.Attended_year1}
                             </span>
                         )}
                     </div>
@@ -85,26 +107,14 @@ export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOp
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-black/20">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {/* Primary Info */}
-                        <DetailItem label="Event Type" value={data.Event_Type} icon={Layers} />
-                        <DetailItem label="Exhibition Size" value={data.Exhibition_Size} icon={Building2} />
-                        <DetailItem label="Industry" value={data.Industry} icon={Briefcase} />
-                        <DetailItem label="Frequency" value={data.Frequency} icon={Clock} />
-                        <DetailItem label="Level" value={data.Level} icon={Flag} />
-                        <DetailItem label="World Area" value={data.World_Area} icon={Globe} />
-                        <DetailItem label="Organiser" value={data.Organiser} icon={User} />
-                        <DetailItem label="Last Edition Exhibitors" value={data.Last_edition_n_Exhibitors} icon={User} />
+                        <DetailItem label="Company" value={data.Company} icon={Building2} />
+                        <DetailItem label="Show" value={data.Show} icon={Layers} />
+                        <DetailItem label="Booth No" value={data.Booth_No} icon={MapPin} />
+                        <DetailItem label="Size (Sqm)" value={data.last_edition_booth_sqm} icon={Building2} />
+                        <DetailItem label="Attended Year" value={data.Attended_year1} icon={Calendar} />
 
-                        {/* Links & Files */}
-                        <DetailItem label="Website" value={data.Website} icon={Globe} isLink fullWidth />
-                        <DetailItem label="Exhibitor List Link" value={data.Exhibitor_List_Link} icon={LinkIcon} isLink fullWidth />
-                        <DetailItem label="Floorplan Link" value={data.Floorplan_Link} icon={LinkIcon} isLink fullWidth />
-                        <DetailItem label="Exhibitor List File" value={data.Exhibitor_List_FILE} icon={FileText} fullWidth />
-                        <DetailItem label="Floorplan File" value={data.Floorplan} icon={FileText} fullWidth />
-                        <DetailItem label="Event Logo" value={data.Event_logo} icon={FileText} fullWidth />
-
-                        {/* Metadata */}
-                        <DetailItem label="Note" value={data.Note1} icon={Info} fullWidth />
-                        <DetailItem label="Modified User" value={data.Modified_User} icon={User} />
+                        {/* Additional fields if available in the new report */}
+                        <DetailItem label="Added Time" value={formatDate(data.Added_Time)} icon={Clock} />
                         <DetailItem label="Modified Time" value={formatDate(data.Modified_Time)} icon={Clock} />
                     </div>
                 </div>

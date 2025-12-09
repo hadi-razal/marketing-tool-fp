@@ -3,7 +3,7 @@ import { Building2, MapPin, Mail, Phone, Check, Linkedin } from 'lucide-react';
 
 interface Lead {
     id: string;
-    name: string;
+    name?: string;
     title?: string;
     company?: string;
     organization_name?: string;
@@ -31,10 +31,6 @@ interface ProfileCardProps {
 
 const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name: string, className?: string }) => {
     const [imageError, setImageError] = useState(false);
-
-    useEffect(() => {
-        setImageError(false);
-    }, [src]);
 
     // Check if we have a valid image URL (not empty, not null, not a placeholder)
     const hasValidSrc = src && src.trim() !== '' && !imageError;
@@ -84,6 +80,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
             <div className="p-4 flex items-start gap-3">
                 <div className="relative shrink-0">
                     <Avatar
+                        key={image || 'default'}
                         src={image}
                         name={name}
                         className="w-12 h-12 rounded-xl object-cover border border-white/10"

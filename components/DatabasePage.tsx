@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin
 } from 'lucide-react';
@@ -12,7 +11,7 @@ import { CreateCompanyModal } from './CreateCompanyModal';
 import { CompanyDetailsModal } from './CompanyDetailsModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { CompanyCardSkeleton } from './CompanyCardSkeleton';
-import { databaseService } from '@/services/databaseService';
+import { databaseService, SavedPerson } from '@/services/databaseService';
 
 interface DatabasePageProps {
     notify: (msg: string, type?: string) => void;
@@ -20,7 +19,7 @@ interface DatabasePageProps {
 
 export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [activeView, setActiveView] = useState<'people' | 'companies'>('people');
-    const [people, setPeople] = useState<any[]>([]);
+    const [people, setPeople] = useState<SavedPerson[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
     const [dbSearch, setDbSearch] = useState<string>('');
     const [loading, setLoading] = useState(false);
@@ -30,7 +29,8 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [filters, setFilters] = useState({
         industry: '',
         location: '',
-        employees: ''
+        employees: '',
+        contactStatus: [] as string[]
     });
 
     // Modal States
@@ -38,11 +38,10 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-    const [selectedPerson, setSelectedPerson] = useState<any>(null);
-    const [isPersonModalOpen, setIsPersonModalOpen] = useState(false);
+    const [selectedPerson, setSelectedPerson] = useState<SavedPerson | null>(null);
 
     // Fetch data on mount
-    React.useEffect(() => {
+    useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
@@ -61,57 +60,22 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         };
 
         fetchData();
-    }, []);
-
-    const handleDeletePerson = async (id: string) => {
-        try {
-            await databaseService.deletePerson(id);
-            setPeople(prev => prev.filter(p => p.id !== id));
-            notify('Person removed', 'success');
-        } catch (error) {
-            console.error('Failed to delete person:', error);
-            notify('Failed to delete person', 'error');
-        }
-    };
-
-    const handleDeleteCompany = async (id: string) => {
-        try {
-            await databaseService.deleteCompany(id);
-            setCompanies(prev => prev.filter(c => c.id !== id));
-            notify('Company removed', 'success');
-        } catch (error) {
-            console.error('Failed to delete company:', error);
-            notify('Failed to delete company', 'error');
-        }
-    };
-
-    const handleCreatePerson = async (newPerson: any) => {
-        // Refresh list after creation
-        const savedPeople = await databaseService.getSavedPeople();
-        setPeople(savedPeople);
-        notify('Person created successfully', 'success');
-    };
-
-    const handleCreateCompany = async (newCompany: any) => {
-        const savedCompanies = await databaseService.getSavedCompanies();
-        setCompanies(savedCompanies);
-        notify('Company created successfully', 'success');
-    };
-
-    const uniqueIndustries = useMemo(() => {
-        const industries = new Set(companies.map(c => c.industry).filter(Boolean));
-        return Array.from(industries).sort();
-    }, [companies]);
+    }, [notify]);
 
     const filteredData = useMemo(() => {
         const query = dbSearch.toLowerCase();
 
         if (activeView === 'people') {
-            return people.filter(p =>
-                p.name.toLowerCase().includes(query) ||
-                p.company.toLowerCase().includes(query) ||
-                p.email.toLowerCase().includes(query)
-            );
+            return people.filter(p => {
+                const matchesSearch =
+                    (p.name || '').toLowerCase().includes(query) ||
+                    (p.company || '').toLowerCase().includes(query) ||
+                    (p.email || '').toLowerCase().includes(query);
+
+                const matchesStatus = filters.contactStatus.length === 0 || filters.contactStatus.includes(p.contact_status || '');
+
+                return matchesSearch && matchesStatus;
+            });
         } else {
             return companies.filter(c => {
                 const matchesSearch =
@@ -143,7 +107,49 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         }
     }, [people, companies, activeView, dbSearch, filters]);
 
-    const handleUnlock = async (lead: any, type: 'email' | 'phone') => {
+    // ... (rest of code)
+
+    const handleDeletePerson = async (id: string) => {
+        try {
+            await databaseService.deletePerson(id);
+            setPeople(prev => prev.filter(p => p.id !== id));
+            notify('Person removed', 'success');
+        } catch (error) {
+            console.error('Failed to delete person:', error);
+            notify('Failed to delete person', 'error');
+        }
+    };
+
+    const handleDeleteCompany = async (id: string) => {
+        try {
+            await databaseService.deleteCompany(id);
+            setCompanies(prev => prev.filter(c => c.id !== id));
+            notify('Company removed', 'success');
+        } catch (error) {
+            console.error('Failed to delete company:', error);
+            notify('Failed to delete company', 'error');
+        }
+    };
+
+    const handleCreatePerson = async () => {
+        // Refresh list after creation
+        const savedPeople = await databaseService.getSavedPeople();
+        setPeople(savedPeople);
+        notify('Person created successfully', 'success');
+    };
+
+    const handleCreateCompany = async () => {
+        const savedCompanies = await databaseService.getSavedCompanies();
+        setCompanies(savedCompanies);
+        notify('Company created successfully', 'success');
+    };
+
+    const uniqueIndustries = useMemo(() => {
+        const industries = new Set(companies.map(c => c.industry).filter(Boolean));
+        return Array.from(industries).sort();
+    }, [companies]);
+
+    const handleUnlock = async (lead: SavedPerson, type: 'email' | 'phone') => {
         try {
             const response = await fetch('/api/apollo/enrich', {
                 method: 'POST',
@@ -174,9 +180,9 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
             notify(`Contact ${type} unlocked and saved!`, 'success');
             return unlockedLead;
-        } catch (error: any) {
+        } catch (error) {
             console.error('Unlock failed:', error);
-            notify(error.message || 'Failed to unlock contact info', 'error');
+            notify((error as Error).message || 'Failed to unlock contact info', 'error');
             return null;
         }
     };
@@ -188,7 +194,6 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                     lead={selectedPerson}
                     onClose={() => {
                         setSelectedPerson(null);
-                        setIsPersonModalOpen(false);
                     }}
                     onUnlock={handleUnlock}
                 />
@@ -251,14 +256,12 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         </div>
 
                         <div className="flex gap-3">
-                            {activeView === 'companies' && (
-                                <button
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border ${showFilters ? 'bg-zinc-800 text-white border-white/10' : 'bg-zinc-900 text-zinc-400 border-white/5 hover:text-white hover:bg-zinc-800'}`}
-                                >
-                                    <Filter className="w-3.5 h-3.5" /> Filters
-                                </button>
-                            )}
+                            <button
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border ${showFilters ? 'bg-zinc-800 text-white border-white/10' : 'bg-zinc-900 text-zinc-400 border-white/5 hover:text-white hover:bg-zinc-800'}`}
+                            >
+                                <Filter className="w-3.5 h-3.5" /> Filters
+                            </button>
                             <button
                                 onClick={() => activeView === 'people' ? setIsCreatePersonOpen(true) : setIsCreateCompanyOpen(true)}
                                 className="bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-white/5"
@@ -266,80 +269,124 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                 <Plus className="w-3.5 h-3.5" /> Add {activeView === 'people' ? 'Person' : 'Company'}
                             </button>
                         </div>
-                    </div>
-                </div>
+                    </div >
+                </div >
 
                 {/* Filters Panel */}
                 <AnimatePresence>
-                    {showFilters && activeView === 'companies' && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden mb-6"
-                        >
-                            <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* Industry Filter */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Industry</label>
-                                    <div className="relative">
-                                        <select
-                                            value={filters.industry}
-                                            onChange={(e) => setFilters(prev => ({ ...prev, industry: e.target.value }))}
-                                            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
-                                        >
-                                            <option value="">All Industries</option>
-                                            {uniqueIndustries.map(ind => (
-                                                <option key={ind} value={ind}>{ind}</option>
-                                            ))}
-                                        </select>
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                                            <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </div>
-                                    </div>
-                                </div>
+                    {
+                        showFilters && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden mb-6"
+                            >
+                                <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {activeView === 'companies' ? (
+                                        <>
+                                            {/* Industry Filter */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Industry</label>
+                                                <div className="relative">
+                                                    <select
+                                                        value={filters.industry}
+                                                        onChange={(e) => setFilters(prev => ({ ...prev, industry: e.target.value }))}
+                                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                                    >
+                                                        <option value="">All Industries</option>
+                                                        {uniqueIndustries.map(ind => (
+                                                            <option key={ind} value={ind}>{ind}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                        <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                                {/* Location Filter */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Location</label>
-                                    <div className="relative">
-                                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                                        <input
-                                            type="text"
-                                            placeholder="City, Country..."
-                                            value={filters.location}
-                                            onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
-                                            className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
-                                        />
-                                    </div>
-                                </div>
+                                            {/* Location Filter */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Location</label>
+                                                <div className="relative">
+                                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="City, Country..."
+                                                        value={filters.location}
+                                                        onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
+                                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
+                                                    />
+                                                </div>
+                                            </div>
 
-                                {/* Employees Filter */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Employees</label>
-                                    <div className="relative">
-                                        <select
-                                            value={filters.employees}
-                                            onChange={(e) => setFilters(prev => ({ ...prev, employees: e.target.value }))}
-                                            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
-                                        >
-                                            <option value="">Any Size</option>
-                                            <option value="1-10">1-10 Employees</option>
-                                            <option value="11-50">11-50 Employees</option>
-                                            <option value="51-200">51-200 Employees</option>
-                                            <option value="201-500">201-500 Employees</option>
-                                            <option value="501-1000">501-1000 Employees</option>
-                                            <option value="1000+">1000+ Employees</option>
-                                        </select>
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                                            <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                            {/* Employees Filter */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Employees</label>
+                                                <div className="relative">
+                                                    <select
+                                                        value={filters.employees}
+                                                        onChange={(e) => setFilters(prev => ({ ...prev, employees: e.target.value }))}
+                                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                                    >
+                                                        <option value="">Any Size</option>
+                                                        <option value="1-10">1-10 Employees</option>
+                                                        <option value="11-50">11-50 Employees</option>
+                                                        <option value="51-200">51-200 Employees</option>
+                                                        <option value="201-500">201-500 Employees</option>
+                                                        <option value="501-1000">501-1000 Employees</option>
+                                                        <option value="1000+">1000+ Employees</option>
+                                                    </select>
+                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                        <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        /* People Filters - Contact Status */
+                                        <div className="space-y-3 md:col-span-3">
+                                            <div className="flex flex-wrap gap-2">
+                                                {['Need to Contact', 'Good Lead', 'Not Interested', 'Customer'].map((status) => {
+                                                    const isActive = filters.contactStatus.includes(status);
+                                                    return (
+                                                        <button
+                                                            key={status}
+                                                            onClick={() => {
+                                                                setFilters(prev => {
+                                                                    const current = prev.contactStatus;
+                                                                    const isSelected = current.includes(status);
+                                                                    const newStatus = isSelected
+                                                                        ? current.filter(s => s !== status)
+                                                                        : [...current, status];
+                                                                    return { ...prev, contactStatus: newStatus };
+                                                                });
+                                                            }}
+                                                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${isActive
+                                                                ? 'bg-zinc-100 text-black border border-transparent'
+                                                                : 'bg-transparent text-zinc-500 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-300'
+                                                                }`}
+                                                        >
+                                                            {status}
+                                                        </button>
+                                                    );
+                                                })}
+                                                {filters.contactStatus.length > 0 && (
+                                                    <button
+                                                        onClick={() => setFilters(prev => ({ ...prev, contactStatus: [] }))}
+                                                        className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 transition-colors"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                            </motion.div>
+                        )
+                    }
+                </AnimatePresence >
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     {loading ? (
@@ -358,7 +405,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
                             {activeView === 'people' ? (
-                                filteredData.map((person, idx) => (
+                                (filteredData as SavedPerson[]).map((person, idx) => (
                                     <motion.div
                                         key={person.id}
                                         initial={{ opacity: 0, scale: 0.95 }}
@@ -371,13 +418,12 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                             onAction={() => handleDeletePerson(person.id)}
                                             onClick={() => {
                                                 setSelectedPerson(person);
-                                                setIsPersonModalOpen(true);
                                             }}
                                         />
                                     </motion.div>
                                 ))
                             ) : (
-                                filteredData.map((company, idx) => (
+                                (filteredData as Company[]).map((company, idx) => (
                                     <motion.div
                                         key={company.id}
                                         initial={{ opacity: 0, scale: 0.95 }}
@@ -399,10 +445,10 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         </div>
                     )}
                 </div>
-            </div>
+            </div >
 
             {/* Modals */}
-            <CreatePersonModal
+            < CreatePersonModal
                 isOpen={isCreatePersonOpen}
                 onClose={() => setIsCreatePersonOpen(false)}
                 onSubmit={handleCreatePerson}
@@ -416,10 +462,10 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 company={selectedCompany}
                 isOpen={isCompanyModalOpen}
                 onClose={() => setIsCompanyModalOpen(false)}
-                onSave={async (company) => {
+                onSave={async () => {
                     setIsCompanyModalOpen(false);
                 }}
             />
-        </div>
+        </div >
     );
 };

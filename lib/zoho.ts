@@ -1,93 +1,36 @@
 export interface ZohoConfig {
-    authToken?: string; // Legacy/Manual
-    accessToken?: string; // OAuth
-    refreshToken?: string; // OAuth
+    ownerName: string;
+    appLinkName: string;
+    dc?: string;
+    // Legacy fields - kept for backward compatibility but not used for auth
+    authToken?: string;
+    accessToken?: string;
+    refreshToken?: string;
     clientId?: string;
     clientSecret?: string;
     redirectUri?: string;
-    ownerName: string;
-    appLinkName: string;
-    dc?: string; // Data Center (com, eu, in, etc.)
 }
 
-export const getZohoConfig = (): ZohoConfig | null => {
-    if (typeof window === 'undefined') return null;
-    const stored = localStorage.getItem('zoho_config');
-    const parsed = stored ? JSON.parse(stored) : {};
-
+// Get Zoho config (for owner/app name, not for auth)
+export const getZohoConfig = (): ZohoConfig => {
     return {
-        ...parsed,
-        clientId: parsed.clientId || process.env.NEXT_PUBLIC_ZOHO_CLIENT_ID,
-        clientSecret: parsed.clientSecret || process.env.NEXT_PUBLIC_ZOHO_CLIENT_SECRET,
-        ownerName: parsed.ownerName || process.env.NEXT_PUBLIC_ZOHO_OWNER_NAME || 'fairplatz2025',
-        appLinkName: parsed.appLinkName || process.env.NEXT_PUBLIC_ZOHO_APP_LINK_NAME || 'exhibitorsdb',
-        redirectUri: parsed.redirectUri || process.env.NEXT_PUBLIC_ZOHO_REDIRECT_URI || 'https://marketing-tool-fp.vercel.app/zoho-callback',
+        ownerName: process.env.NEXT_PUBLIC_ZOHO_OWNER_NAME || 'fairplatz2025',
+        appLinkName: process.env.NEXT_PUBLIC_ZOHO_APP_LINK_NAME || 'exhibitorsdb',
+        dc: process.env.NEXT_PUBLIC_ZOHO_DC || 'ae',
     };
 };
 
+// Legacy function - kept for compatibility but does nothing now
 export const saveZohoConfig = (config: ZohoConfig) => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('zoho_config', JSON.stringify(config));
+    // No-op - authentication is now handled server-side
+    console.log('saveZohoConfig is deprecated - server-side auth is used');
 };
 
-const getAuthUrl = (dc: string = 'com') => {
-    const map: Record<string, string> = {
-        'com': 'https://accounts.zoho.com',
-        'eu': 'https://accounts.zoho.eu',
-        'in': 'https://accounts.zoho.in',
-        'ae': 'https://accounts.zoho.ae',
-        'com.au': 'https://accounts.zoho.com.au',
-        'com.cn': 'https://accounts.zoho.com.cn',
-    };
-    return map[dc] || map['com'];
-};
-
-const refreshAccessToken = async (config: ZohoConfig): Promise<string | null> => {
-    // Client Secret is optional here as it can be handled by the server
-    if (!config.refreshToken || !config.clientId) return null;
-
-    try {
-        const res = await fetch('/api/zoho/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                refreshToken: config.refreshToken,
-                clientId: config.clientId,
-                clientSecret: config.clientSecret, // Optional
-                dc: config.dc,
-                grantType: 'refresh_token'
-            })
-        });
-        const data = await res.json();
-
-        if (data.access_token) {
-            const newConfig = { ...config, accessToken: data.access_token };
-            saveZohoConfig(newConfig);
-            return data.access_token;
-        }
-        console.error('Failed to refresh token:', data);
-        // Clear invalid tokens to force re-login
-        saveZohoConfig({ ...config, accessToken: undefined, refreshToken: undefined });
-        return null;
-    } catch (error) {
-        console.error('Error refreshing token:', error);
-        return null;
-    }
-};
-
+// Fetch with server-side auth via proxy-v2
 const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    const config = getZohoConfig();
-    if (!config) throw new Error('Zoho configuration missing');
-
-    const token = config.accessToken || config.authToken;
-    if (!token) throw new Error('No access token found');
-
     const headers: Record<string, string> = {
         ...((options.headers as Record<string, string>) || {}),
-        'Authorization': `Zoho-oauthtoken ${token}`
     };
-
-
 
     // Do not send Content-Type for GET or when FormData is used
     if (options.method !== 'GET' && !(options.body instanceof FormData)) {
@@ -96,8 +39,8 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
 
     let bodyToSend = options.body;
 
-    // Use Proxy – No JSON.parse
-    let res = await fetch('/api/zoho/proxy-v2', {
+    // Use Proxy V2 - server handles authentication
+    const res = await fetch('/api/zoho/proxy-v2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -108,27 +51,14 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
         })
     });
 
-    if (res.status === 401 && config.refreshToken) {
-        const newToken = await refreshAccessToken(config);
-        if (newToken) {
-            headers['Authorization'] = `Zoho-oauthtoken ${newToken}`;
-
-            res = await fetch('/api/zoho/proxy-v2', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url,
-                    method: options.method || 'GET',
-                    headers,
-                    body: bodyToSend instanceof FormData ? null : bodyToSend ? JSON.parse(bodyToSend as string) : undefined
-                })
-            });
-        }
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(errorData.error || `Zoho API Error: ${res.statusText}`);
     }
 
-    if (!res.ok) throw new Error(`Zoho API Error: ${res.statusText}`);
     return res.json();
 };
+
 
 
 export const zohoApi = {

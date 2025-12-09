@@ -3,18 +3,14 @@ import React, { useState } from 'react';
 import { ExhibitorTable } from './Zoho/ExhibitorTable';
 import { DatabaseTable } from './Zoho/DatabaseTable';
 import { ShowsTable } from './Zoho/ShowsTable';
-import { ZohoSettingsModal } from './Zoho/ZohoSettingsModal';
-import { Settings, Database, Users, Calendar, CloudLightning, HardDrive } from 'lucide-react';
+import { Database, Users, Calendar, CloudLightning, HardDrive } from 'lucide-react';
 import { FileExplorer } from './Drive/FileExplorer';
 
 export const ZohoPage = () => {
     const [activeView, setActiveView] = useState('exhibitors');
-    const [showSettings, setShowSettings] = useState(false);
 
     return (
         <div className="flex flex-col lg:flex-row h-full relative gap-6">
-            <ZohoSettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
-
             {/* Zoho Sidebar */}
             <div className="w-full lg:w-80 flex-shrink-0 flex flex-col h-full bg-[#09090b] border border-white/5 rounded-[32px] p-6 overflow-hidden">
                 <div className="flex items-center gap-3 mb-8">
@@ -67,16 +63,6 @@ export const ZohoPage = () => {
                             <span className="font-medium text-sm">WorkDrive</span>
                         </button>
                     </div>
-                </div>
-
-                <div className="mt-auto pt-6 border-t border-white/5">
-                    <button
-                        onClick={() => setShowSettings(true)}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-400 hover:bg-white/5 hover:text-white transition-all duration-300 text-left"
-                    >
-                        <Settings className="w-5 h-5 text-zinc-500 group-hover:text-zinc-300" />
-                        <span className="font-medium text-sm">Connection Settings</span>
-                    </button>
                 </div>
             </div>
 

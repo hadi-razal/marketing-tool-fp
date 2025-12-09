@@ -3,6 +3,7 @@ import {
     FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 import { ProfileCard } from './ProfileCard';
 import { CompanyCard, Company } from './CompanyCard';
@@ -11,6 +12,7 @@ import { CreateCompanyModal } from './CreateCompanyModal';
 import { CompanyDetailsModal } from './CompanyDetailsModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { CompanyCardSkeleton } from './CompanyCardSkeleton';
+import { ConfirmModal } from './ui/ConfirmModal';
 import { databaseService, SavedPerson } from '@/services/databaseService';
 
 interface DatabasePageProps {
@@ -39,6 +41,14 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
     const [selectedPerson, setSelectedPerson] = useState<SavedPerson | null>(null);
+
+    // Confirmation modal state
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        type: 'company' | 'person' | null;
+        id: string | null;
+        name: string;
+    }>({ isOpen: false, type: null, id: null, name: '' });
 
     // Fetch data on mount
     useEffect(() => {
@@ -109,25 +119,40 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
     // ... (rest of code)
 
-    const handleDeletePerson = async (id: string) => {
-        try {
-            await databaseService.deletePerson(id);
-            setPeople(prev => prev.filter(p => p.id !== id));
-            notify('Person removed', 'success');
-        } catch (error) {
-            console.error('Failed to delete person:', error);
-            notify('Failed to delete person', 'error');
-        }
+    const handleDeletePersonClick = (person: SavedPerson) => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'person',
+            id: person.id,
+            name: person.name || 'this person'
+        });
     };
 
-    const handleDeleteCompany = async (id: string) => {
+    const handleDeleteCompanyClick = (company: Company) => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'company',
+            id: company.id,
+            name: company.name
+        });
+    };
+
+    const confirmDelete = async () => {
+        if (!confirmModal.id || !confirmModal.type) return;
+
         try {
-            await databaseService.deleteCompany(id);
-            setCompanies(prev => prev.filter(c => c.id !== id));
-            notify('Company removed', 'success');
+            if (confirmModal.type === 'person') {
+                await databaseService.deletePerson(confirmModal.id);
+                setPeople(prev => prev.filter(p => p.id !== confirmModal.id));
+                toast.success('Person removed successfully');
+            } else if (confirmModal.type === 'company') {
+                await databaseService.deleteCompany(confirmModal.id);
+                setCompanies(prev => prev.filter(c => c.id !== confirmModal.id));
+                toast.success('Company removed successfully');
+            }
         } catch (error) {
-            console.error('Failed to delete company:', error);
-            notify('Failed to delete company', 'error');
+            console.error(`Failed to delete ${confirmModal.type}:`, error);
+            toast.error(`Failed to delete ${confirmModal.type}. Please try again.`);
         }
     };
 
@@ -415,7 +440,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                         <ProfileCard
                                             lead={person}
                                             actionIcon={Trash2}
-                                            onAction={() => handleDeletePerson(person.id)}
+                                            onAction={() => handleDeletePersonClick(person)}
                                             onClick={() => {
                                                 setSelectedPerson(person);
                                             }}
@@ -433,7 +458,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                         <CompanyCard
                                             company={company}
                                             actionIcon={Trash2}
-                                            onAction={() => handleDeleteCompany(company.id)}
+                                            onAction={() => handleDeleteCompanyClick(company)}
                                             onClick={() => {
                                                 setSelectedCompany(company);
                                                 setIsCompanyModalOpen(true);
@@ -465,6 +490,15 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 onSave={async () => {
                     setIsCompanyModalOpen(false);
                 }}
+            />
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ isOpen: false, type: null, id: null, name: '' })}
+                onConfirm={confirmDelete}
+                title={`Delete ${confirmModal.type === 'company' ? 'Company' : 'Person'}`}
+                message={`Are you sure you want to delete "${confirmModal.name}"? This action cannot be undone.`}
+                confirmText="Delete"
+                isDestructive
             />
         </div >
     );

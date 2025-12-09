@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
+import { toast } from 'sonner';
 
 export default function RegisterPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
-    const [error, setError] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const router = useRouter();
     const supabase = createClient();
@@ -20,9 +20,19 @@ export default function RegisterPage() {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        setError('');
 
         try {
+            // Check if user already exists in public table
+            const { data: existingUser } = await supabase
+                .from('users')
+                .select('email')
+                .eq('email', email)
+                .single();
+
+            if (existingUser) {
+                throw new Error('This email is already registered. Please log in.');
+            }
+
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -61,7 +71,7 @@ export default function RegisterPage() {
             // Successful registration
             setShowSuccessModal(true);
         } catch (err: any) {
-            setError(err.message);
+            toast.error(err.message || 'Registration failed');
         } finally {
             setIsLoading(false);
         }
@@ -137,12 +147,6 @@ export default function RegisterPage() {
                                 />
                             </div>
                         </div>
-
-                        {error && (
-                            <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-3 rounded-xl text-center">
-                                {error}
-                            </div>
-                        )}
 
                         <button
                             type="submit"

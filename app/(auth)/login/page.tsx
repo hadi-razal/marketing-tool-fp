@@ -8,19 +8,18 @@ import { Button } from '@/components/ui/Button';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const supabase = createClient();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
 
         try {
             const { error } = await supabase.auth.signInWithPassword({
@@ -32,7 +31,7 @@ export default function LoginPage() {
             router.push('/dashboard');
             router.refresh(); // Refresh to update middleware state
         } catch (err: any) {
-            setError(err.message || 'Failed to login');
+            toast.error(err.message || 'Failed to login');
             setLoading(false);
         }
     };
@@ -77,16 +76,6 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
-
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-3 rounded-xl text-center"
-                            >
-                                {error}
-                            </motion.div>
-                        )}
 
                         <Button
                             type="submit"

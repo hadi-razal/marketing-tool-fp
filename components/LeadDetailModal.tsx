@@ -5,6 +5,7 @@ import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
 import { createClient } from '@/lib/supabase';
 import { getBrandColor } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface LeadDetailModalProps {
     lead: SavedPerson & { image?: string; isSaved?: boolean; saved_by?: string; saved_by_profile_url?: string };
@@ -78,6 +79,19 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
     const commentsEndRef = useRef<HTMLDivElement>(null);
 
+    // Confirmation Modal State
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        type: 'comment' | 'reply' | null;
+        id: string | null;
+        replyId?: string | null;
+    }>({
+        isOpen: false,
+        type: null,
+        id: null,
+        replyId: null
+    });
+
     const brandColor = getBrandColor(localLead?.name || 'Lead');
 
     useEffect(() => {
@@ -132,9 +146,10 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             await databaseService.updatePersonStatus(localLead.id, newStatus);
             setContactStatus(newStatus);
             setLocalLead(prev => ({ ...prev, contact_status: newStatus }));
+            toast.success(`Status updated to ${newStatus}`);
         } catch (error) {
             console.error('Failed to update status:', error);
-            alert('Failed to update status. Please try again.');
+            toast.error('Failed to update status. Please try again.');
         } finally {
             setIsUpdatingStatus(false);
         }
@@ -202,33 +217,46 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             }
             setLocalComments(updatedComments);
             setNewComment('');
+            toast.success(replyingTo ? 'Reply posted' : 'Comment posted');
         } catch (error) {
             console.error('Failed to post comment/reply:', error);
-            alert('Failed to post. Please try again.');
+            toast.error('Failed to post. Please try again.');
         } finally {
             setIsPostingComment(false);
         }
     };
 
-    const handleDeleteComment = async (commentId: string) => {
-        if (!confirm('Are you sure you want to delete this comment?')) return;
-        try {
-            const updatedComments = await databaseService.deletePersonComment(localLead.id, commentId);
-            setLocalComments(updatedComments);
-        } catch (error) {
-            console.error('Failed to delete comment:', error);
-            alert('Failed to delete comment. Please try again.');
-        }
+    const handleDeleteCommentClick = (commentId: string) => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'comment',
+            id: commentId
+        });
     };
 
-    const handleDeleteReply = async (commentId: string, replyId: string) => {
-        if (!confirm('Are you sure you want to delete this reply?')) return;
+    const handleDeleteReplyClick = (commentId: string, replyId: string) => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'reply',
+            id: commentId,
+            replyId: replyId
+        });
+    };
+
+    const confirmDelete = async () => {
+        if (!confirmModal.id || !confirmModal.type) return;
+
         try {
-            const updatedComments = await databaseService.deletePersonReply(localLead.id, commentId, replyId);
-            setLocalComments(updatedComments);
+            if (confirmModal.type === 'comment') {
+                const updatedComments = await databaseService.deletePersonComment(localLead.id, confirmModal.id);
+                setLocalComments(updatedComments);
+            } else if (confirmModal.type === 'reply' && confirmModal.replyId) {
+                const updatedComments = await databaseService.deletePersonReply(localLead.id, confirmModal.id, confirmModal.replyId);
+                setLocalComments(updatedComments);
+            }
         } catch (error) {
-            console.error('Failed to delete reply:', error);
-            alert('Failed to delete reply. Please try again.');
+            console.error('Failed to delete item:', error);
+            // Optional: Show error toast
         }
     };
 
@@ -703,7 +731,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                handleDeleteComment(comment.id);
+                                                                                handleDeleteCommentClick(comment.id);
                                                                             }}
                                                                             className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
                                                                             title="Delete comment"
@@ -772,7 +800,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
-                                                                                                    handleDeleteReply(comment.id, reply.id);
+                                                                                                    handleDeleteReplyClick(comment.id, reply.id);
                                                                                                 }}
                                                                                                 className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
                                                                                                 title="Delete reply"
@@ -878,6 +906,40 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                     </AnimatePresence>
                 </div>
             </motion.div>
+
+            {/* Confirmation Modal */}
+            {confirmModal.isOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-[#09090b] border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-2xl"
+                    >
+                        <h3 className="text-lg font-bold text-white mb-2">Delete {confirmModal.type}?</h3>
+                        <p className="text-zinc-400 text-sm mb-6">
+                            Are you sure you want to delete this {confirmModal.type}? This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                                className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    confirmDelete();
+                                    setConfirmModal({ ...confirmModal, isOpen: false });
+                                }}
+                                className="px-4 py-2 rounded-lg text-sm font-bold bg-red-500 hover:bg-red-600 text-white transition-colors shadow-lg shadow-red-500/20"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </AnimatePresence>
     );
 };

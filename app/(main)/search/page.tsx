@@ -2,5 +2,5 @@
 import { SearchPage } from '@/components/SearchPage';
 
 export default function Page() {
-    return <SearchPage onSave={() => { }} notify={() => { }} />;
+    return <SearchPage onSave={() => { }} />;
 }

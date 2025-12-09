@@ -7,6 +7,7 @@ export interface Task {
     status: 'Pending' | 'In Progress' | 'Completed';
     visibility: 'Public' | 'Private';
     created_by?: string;
+    created_at?: string;
     related_to?: string;
     assigned_to?: string[];
     assigned_to_profiles?: { uid: string, name: string, photo_url: string }[];

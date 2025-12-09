@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase';
 import { Camera, X, Upload, Trash2, ZoomIn, ZoomOut, Loader2, Eye } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface ProfileUploadProps {
     currentImageUrl?: string | null;
@@ -132,9 +133,10 @@ export const ProfileUpload = ({ currentImageUrl, onUpdate, uid }: ProfileUploadP
             onUpdate(publicUrl);
             setIsModalOpen(false);
             setImageSrc(null);
+            toast.success('Profile picture updated');
         } catch (error) {
             console.error('Error uploading profile picture:', error);
-            alert(`Failed to upload profile picture: ${(error as any).message}`);
+            toast.error(`Failed to upload profile picture: ${(error as any).message}`);
         } finally {
             setLoading(false);
         }
@@ -166,9 +168,10 @@ export const ProfileUpload = ({ currentImageUrl, onUpdate, uid }: ProfileUploadP
             // For now, just unlinking is safer/easier.
 
             onUpdate(null);
+            toast.success('Profile picture removed');
         } catch (error) {
             console.error('Error removing profile picture:', error);
-            alert('Failed to remove profile picture.');
+            toast.error('Failed to remove profile picture.');
         } finally {
             setLoading(false);
         }

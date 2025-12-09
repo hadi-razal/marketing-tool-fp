@@ -4,6 +4,7 @@ import { SoftInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { zohoApi } from '@/lib/zoho';
+import { toast } from 'sonner';
 
 interface ExhibitorFormModalProps {
     isOpen: boolean;
@@ -78,9 +79,10 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                 await zohoApi.addRecord('Exhibitor', formData);
             }
             onSuccess();
+            toast.success('Exhibitor saved successfully');
             onClose();
         } catch (error) {
-            alert('Failed to save record');
+            toast.error('Failed to save record');
             console.error(error);
         } finally {
             setLoading(false);

@@ -1,25 +1,30 @@
 import React from 'react';
-import { Building2, Phone, ListTodo, TrendingUp } from 'lucide-react';
+import { Building2, Users, Sparkles, TrendingUp } from 'lucide-react';
 
 interface StatsGridProps {
     stats: {
         totalCompanies: number;
-        contacted: number;
-        pendingTasks: number;
+        totalPeople: number;
+        totalGoodLeads: number;
         avgLevel: number;
     };
 }
 
 const StatCard = ({ label, value, icon: Icon, accent }: { label: string; value: string | number; icon: any; accent: string }) => (
-    <div className="group relative bg-zinc-900/50 hover:bg-zinc-900 rounded-2xl p-5 transition-all duration-200 border border-white/[0.04] hover:border-white/[0.08]">
-        <div className="flex items-start justify-between">
-            <div className="space-y-3">
-                <p className="text-zinc-500 text-xs font-medium uppercase tracking-wide">{label}</p>
-                <p className="text-2xl font-semibold text-white">{value}</p>
+    <div className="group relative overflow-hidden bg-zinc-900/40 backdrop-blur-sm rounded-md p-5 border border-white/5 hover:border-white/10 transition-all duration-300 hover:bg-zinc-900/60 shadow-lg shadow-black/20">
+        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full bg-gradient-to-br ${accent} opacity-5 group-hover:opacity-10 transition-opacity blur-2xl`} />
+
+        <div className="relative flex items-start justify-between">
+            <div className="space-y-4">
+                <div className={`w-10 h-10 rounded-md bg-gradient-to-br ${accent} bg-opacity-10 border border-white/5 flex items-center justify-center`}>
+                    <Icon className="w-5 h-5 text-white/90" />
+                </div>
+                <div>
+                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-2xl font-bold text-white tracking-tight">{value}</p>
+                </div>
             </div>
-            <div className={`p-2.5 rounded-xl ${accent}`}>
-                <Icon className="w-4 h-4" />
-            </div>
+            {/* Optional sparkline or indicator could go here */}
         </div>
     </div>
 );
@@ -28,28 +33,28 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats }) => {
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-                label="Companies"
+                label="Total Companies"
                 value={stats.totalCompanies.toLocaleString()}
                 icon={Building2}
-                accent="bg-blue-500/10 text-blue-400"
+                accent="from-blue-500 to-indigo-500"
             />
             <StatCard
-                label="Contacted"
-                value={stats.contacted.toLocaleString()}
-                icon={Phone}
-                accent="bg-emerald-500/10 text-emerald-400"
+                label="Saved People"
+                value={stats.totalPeople.toLocaleString()}
+                icon={Users}
+                accent="from-violet-500 to-purple-500"
             />
             <StatCard
-                label="Pending Tasks"
-                value={stats.pendingTasks}
-                icon={ListTodo}
-                accent="bg-amber-500/10 text-amber-400"
+                label="Good Leads"
+                value={stats.totalGoodLeads}
+                icon={Sparkles}
+                accent="from-emerald-500 to-teal-500"
             />
             <StatCard
                 label="Avg. Level"
                 value={stats.avgLevel.toFixed(1)}
                 icon={TrendingUp}
-                accent="bg-violet-500/10 text-violet-400"
+                accent="from-orange-500 to-amber-500"
             />
         </div>
     );

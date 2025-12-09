@@ -1001,6 +1001,7 @@ async function logActivity(uid: string, label: string, status: string) {
         await supabase
             .from('activities')
             .insert({
+                uid,
                 label,
                 status,
                 created_at: new Date().toISOString()

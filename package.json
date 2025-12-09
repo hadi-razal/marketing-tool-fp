@@ -12,6 +12,7 @@
     "@google/generative-ai": "^0.24.1",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/auth-helpers-react": "^0.15.0",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -24,6 +25,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.5.0",
     "remark-gfm": "^4.0.1",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

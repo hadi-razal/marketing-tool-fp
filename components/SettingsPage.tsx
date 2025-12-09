@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
-import { User, Monitor, LogOut, Moon, Sun, Laptop, Mail } from 'lucide-react';
+import { User, Monitor, LogOut, Moon, Sun, Laptop, Mail, Briefcase, Loader2, Save } from 'lucide-react';
 import { ProfileUpload } from './Settings/ProfileUpload';
 import { cn } from './ui/Button';
+import { toast } from 'sonner';
 
 export const SettingsPage = () => {
     const [theme, setTheme] = useState('dark');
     const [notifications, setNotifications] = useState(true);
     const [userName, setUserName] = useState('');
+    const [userRole, setUserRole] = useState('');
     const [userEmail, setUserEmail] = useState('');
     const [profileUrl, setProfileUrl] = useState<string | null>(null);
     const [uid, setUid] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Track original values to detect changes
+    const [originalName, setOriginalName] = useState('');
+    const [originalRole, setOriginalRole] = useState('');
+
+    // Check if there are unsaved changes
+    const hasChanges = userName !== originalName || userRole !== originalRole;
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -22,13 +32,18 @@ export const SettingsPage = () => {
 
                 const { data: userData } = await supabase
                     .from('users')
-                    .select('name, profile_url')
+                    .select('name, profile_url, role')
                     .eq('uid', user.id)
                     .single();
 
                 if (userData) {
-                    setUserName(userData.name || 'User');
+                    const name = userData.name || 'User';
+                    const role = userData.role || '';
+                    setUserName(name);
+                    setOriginalName(name);
                     setProfileUrl(userData.profile_url || null);
+                    setUserRole(role);
+                    setOriginalRole(role);
                 }
                 setUid(user.id);
             }
@@ -36,6 +51,32 @@ export const SettingsPage = () => {
         };
         fetchUser();
     }, []);
+
+    const handleSaveProfile = async () => {
+        if (!uid) return;
+
+        setIsSaving(true);
+        try {
+            const supabase = createClient();
+            const { error } = await supabase
+                .from('users')
+                .update({ name: userName, role: userRole })
+                .eq('uid', uid);
+
+            if (error) throw error;
+
+            // Update original values after successful save
+            setOriginalName(userName);
+            setOriginalRole(userRole);
+
+            toast.success('Profile updated successfully');
+        } catch (error) {
+            console.error('Failed to save profile:', error);
+            toast.error('Failed to save profile. Please try again.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     return (
         <div className="h-full max-w-3xl mx-auto pb-20 pt-8 px-6">
@@ -47,11 +88,25 @@ export const SettingsPage = () => {
             <div className="space-y-6">
                 {/* Profile Section */}
                 <section className="bg-zinc-900/30 border border-white/5 rounded-xl p-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-2 rounded-lg bg-zinc-800/50 text-white border border-white/5">
-                            <User className="w-4 h-4" />
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-zinc-800/50 text-white border border-white/5">
+                                <User className="w-4 h-4" />
+                            </div>
+                            <h2 className="text-base font-bold text-white">Profile</h2>
                         </div>
-                        <h2 className="text-base font-bold text-white">Profile</h2>
+                        <button
+                            onClick={handleSaveProfile}
+                            disabled={isSaving || !hasChanges}
+                            className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-zinc-200 text-black text-sm font-bold rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-white/5"
+                        >
+                            {isSaving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4" />
+                            )}
+                            {isSaving ? 'Saving...' : 'Save'}
+                        </button>
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-8">
@@ -77,6 +132,19 @@ export const SettingsPage = () => {
                                     className="w-full bg-zinc-900 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-white/20 transition-colors placeholder:text-zinc-600"
                                     placeholder="Your name"
                                 />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Role</label>
+                                <div className="relative">
+                                    <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                                    <input
+                                        type="text"
+                                        value={userRole}
+                                        onChange={(e) => setUserRole(e.target.value)}
+                                        className="w-full bg-zinc-900 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-white/20 transition-colors placeholder:text-zinc-600"
+                                        placeholder="e.g. Marketing Manager"
+                                    />
+                                </div>
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Email Address</label>

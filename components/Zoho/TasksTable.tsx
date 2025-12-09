@@ -5,8 +5,10 @@ import { createClient } from '@/lib/supabase';
 import { Task } from '@/types/task';
 import { TaskModal } from '../Tasks/TaskModal';
 import { TaskDetailsModal } from '../Tasks/TaskDetailsModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, formatDistanceToNow, isPast, parseISO, isValid } from 'date-fns';
+import { toast } from 'sonner';
 
 export const TasksTable = () => {
     const [data, setData] = useState<Task[]>([]);
@@ -16,6 +18,13 @@ export const TasksTable = () => {
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [viewTask, setViewTask] = useState<Task | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        taskId: string | null;
+    }>({
+        isOpen: false,
+        taskId: null
+    });
     const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
     const [currentUserName, setCurrentUserName] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -153,7 +162,7 @@ export const TasksTable = () => {
     const handleSaveTask = async (taskData: Partial<Task>) => {
         try {
             if (!currentUserId) {
-                alert('User not found. Please log in again.');
+                toast.error('User not found. Please log in again.');
                 return;
             }
 
@@ -177,12 +186,14 @@ export const TasksTable = () => {
                     .eq('id', selectedTask.id) as any;
                 if (error) throw error;
                 logActivity('Edited', 'edited a task');
+                toast.success('Task updated successfully');
             } else {
                 const { error } = await supabase
                     .from('tasks')
                     .insert([payload]) as any;
                 if (error) throw error;
                 logActivity('Added', 'added a new task');
+                toast.success('Task created successfully');
             }
             fetchTasks();
         } catch (error) {
@@ -218,6 +229,7 @@ export const TasksTable = () => {
                 fetchTasks();
             } else {
                 logActivity(`Marked as ${newStatus}`, `marked a task as ${newStatus}`);
+                toast.success(`Task marked as ${newStatus}`);
                 fetchTasks();
             }
         } catch (error) {
@@ -240,15 +252,22 @@ export const TasksTable = () => {
                 fetchTasks();
             } else {
                 logActivity(`Visibility changed to ${newVisibility}`, `changed task visibility to ${newVisibility}`);
+                toast.success(`Task visibility changed to ${newVisibility}`);
             }
         } catch (error) {
             console.error('Error updating visibility:', error);
         }
     };
 
-    const handleDeleteTask = async (id: string) => {
+    const handleDeleteTaskClick = (id: string) => {
         setOpenActionMenuId(null);
-        if (!confirm('Are you sure you want to delete this task?')) return;
+        setConfirmModal({ isOpen: true, taskId: id });
+    };
+
+    const confirmDeleteTask = async () => {
+        if (!confirmModal.taskId) return;
+        const id = confirmModal.taskId;
+
         try {
             const { error } = await supabase
                 .from('tasks')
@@ -256,6 +275,7 @@ export const TasksTable = () => {
                 .eq('id', id) as any;
             if (error) throw error;
             logActivity('Deleted', 'deleted a task');
+            toast.success('Task deleted');
             fetchTasks();
         } catch (error) {
             console.error('Error deleting task:', error);
@@ -350,6 +370,16 @@ export const TasksTable = () => {
 
     return (
         <div className="h-full flex flex-col">
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmDeleteTask}
+                title="Delete Task"
+                message="Are you sure you want to delete this task? This action cannot be undone."
+                confirmText="Delete Task"
+                isDestructive={true}
+            />
+
             <TaskModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
@@ -662,7 +692,7 @@ export const TasksTable = () => {
                                                                     </button>
                                                                     <div className="h-px bg-white/5 my-1" />
                                                                     <button
-                                                                        onClick={() => handleDeleteTask(item.id)}
+                                                                        onClick={() => handleDeleteTaskClick(item.id)}
                                                                         className="w-full text-left px-3 py-2.5 rounded-md text-xs font-medium text-red-500 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors"
                                                                     >
                                                                         <Trash2 className="w-3.5 h-3.5" />

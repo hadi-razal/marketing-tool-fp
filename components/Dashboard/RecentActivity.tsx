@@ -24,7 +24,7 @@ export const RecentActivity = () => {
                     .from('activities')
                     .select('*')
                     .order('created_at', { ascending: false })
-                    .limit(8);
+                    .limit(10);
 
                 if (error) throw error;
 
@@ -66,48 +66,71 @@ export const RecentActivity = () => {
     const getIcon = (label: string) => {
         const l = label.toLowerCase();
         if (l.includes('completed')) return CheckCircle2;
-        if (l.includes('add') || l.includes('new')) return Plus;
-        if (l.includes('edit')) return Edit2;
+        if (l.includes('add') || l.includes('new') || l.includes('save')) return Plus;
+        if (l.includes('edit') || l.includes('update')) return Edit2;
         if (l.includes('delete')) return Trash2;
         if (l.includes('visibility')) return Eye;
         return Circle;
     };
 
-    const getColor = (label: string) => {
+    const getColors = (label: string) => {
         const l = label.toLowerCase();
-        if (l.includes('completed')) return 'text-emerald-400';
-        if (l.includes('add')) return 'text-blue-400';
-        if (l.includes('edit')) return 'text-amber-400';
-        if (l.includes('delete')) return 'text-red-400';
-        return 'text-zinc-500';
+        if (l.includes('completed')) return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' };
+        if (l.includes('add') || l.includes('new') || l.includes('save')) return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' };
+        if (l.includes('edit') || l.includes('update')) return { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' };
+        if (l.includes('delete')) return { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' };
+        return { bg: 'bg-zinc-500/10', text: 'text-zinc-400', border: 'border-zinc-500/20' };
     };
 
     return (
-        <div className="bg-zinc-900/50 rounded-2xl p-5 border border-white/[0.04]">
-            <h3 className="text-sm font-medium text-white mb-5">Recent Activity</h3>
+        <div className="bg-zinc-900/40 backdrop-blur-sm rounded-2xl p-6 border border-white/5 shadow-lg relative overflow-hidden h-full">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
-            <div className="space-y-1">
+            <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
+                <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                Recent Activity
+            </h3>
+
+            <div className="space-y-4 relative">
+                {/* Vertical Line */}
+                <div className="absolute left-[19px] top-2 bottom-4 w-[1px] bg-zinc-800/50 -z-10" />
+
                 {loading ? (
-                    <p className="text-zinc-500 text-sm py-4">Loading...</p>
+                    <div className="flex flex-col gap-4">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex gap-4 animate-pulse">
+                                <div className="w-10 h-10 rounded-full bg-zinc-800" />
+                                <div className="flex-1 space-y-2">
+                                    <div className="h-4 w-3/4 bg-zinc-800 rounded" />
+                                    <div className="h-3 w-1/4 bg-zinc-800 rounded" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : activities.length === 0 ? (
-                    <p className="text-zinc-500 text-sm py-4">No recent activity</p>
+                    <div className="text-center py-12">
+                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-3 border border-white/5">
+                            <Circle className="w-6 h-6 text-zinc-600" />
+                        </div>
+                        <p className="text-zinc-500 text-sm">No recent activity found</p>
+                    </div>
                 ) : (
-                    activities.map((activity) => {
+                    activities.map((activity, index) => {
                         const Icon = getIcon(activity.label);
-                        const colorClass = getColor(activity.label);
+                        const colors = getColors(activity.label);
 
                         return (
-                            <div
-                                key={activity.id}
-                                className="flex items-start gap-3 py-3 border-b border-white/[0.03] last:border-0"
-                            >
-                                <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${colorClass}`} />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-zinc-300 leading-snug">
-                                        <span className="font-medium text-white">{activity.user_name}</span>
-                                        {' '}{activity.status}
+                            <div key={activity.id} className="group flex items-start gap-4">
+                                <div className={`relative z-10 w-10 h-10 rounded-xl ${colors.bg} ${colors.border} border flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 duration-200`}>
+                                    <Icon className={`w-5 h-5 ${colors.text}`} />
+                                </div>
+                                <div className="flex-1 py-1 min-w-0">
+                                    <p className="text-sm text-zinc-300 leading-relaxed font-medium">
+                                        <span className="text-white font-bold">{activity.user_name}</span>
+                                        <span className="mx-1.5 text-zinc-500">•</span>
+                                        {activity.status}
                                     </p>
-                                    <p className="text-xs text-zinc-600 mt-1">
+                                    <p className="text-xs text-zinc-500 mt-1 font-medium">
                                         {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
                                     </p>
                                 </div>

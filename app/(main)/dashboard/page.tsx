@@ -2,27 +2,16 @@
 import React, { useEffect, useState } from 'react';
 import { StatsGrid } from '@/components/Dashboard/StatsGrid';
 import { RecentActivity } from '@/components/Dashboard/RecentActivity';
-import { FPLevelDistribution } from '@/components/Dashboard/FPLevelDistribution';
-import { RecentlySaved } from '@/components/Dashboard/RecentlySaved';
-import { zohoApi } from '@/lib/zoho';
 import { createClient } from '@/lib/supabase';
 
 export default function DashboardPage() {
     const [stats, setStats] = useState({
         totalCompanies: 0,
-        contacted: 142,
-        pendingTasks: 4,
+        totalPeople: 0,
+        totalGoodLeads: 0,
         avgLevel: 2.4,
     });
 
-    const [fpLevels, setFpLevels] = useState({
-        level1: 45,
-        level2: 32,
-        level3: 18,
-        level4: 12
-    });
-
-    const [recentCompanies, setRecentCompanies] = useState<any[]>([]);
     const [userName, setUserName] = useState<string>('');
 
     // Get greeting based on time of day
@@ -36,10 +25,30 @@ export default function DashboardPage() {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await zohoApi.getRecordCount('Exhibitor_List');
-                if (res.code === 3000) {
-                    setStats(prev => ({ ...prev, totalCompanies: parseInt(res.count) || 0 }));
-                }
+                const supabase = createClient();
+
+                // Fetch total companies
+                const { count: companyCount } = await supabase
+                    .from('companies')
+                    .select('*', { count: 'exact', head: true });
+
+                // Fetch total people
+                const { count: peopleCount } = await supabase
+                    .from('people')
+                    .select('*', { count: 'exact', head: true });
+
+                // Fetch good leads
+                const { count: goodLeadsCount } = await supabase
+                    .from('people')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('contact_status', 'Good Lead');
+
+                setStats(prev => ({
+                    ...prev,
+                    totalCompanies: companyCount || 0,
+                    totalPeople: peopleCount || 0,
+                    totalGoodLeads: goodLeadsCount || 0
+                }));
             } catch (err) {
                 console.error('Failed to fetch dashboard stats', err);
             }
@@ -48,8 +57,17 @@ export default function DashboardPage() {
         const fetchUser = async () => {
             const supabase = createClient();
             const { data: { user } } = await supabase.auth.getUser();
-            if (user?.user_metadata?.name) {
-                setUserName(user.user_metadata.name);
+
+            if (user) {
+                const { data: userData } = await supabase
+                    .from('users')
+                    .select('name')
+                    .eq('uid', user.id)
+                    .single();
+
+                if (userData?.name) {
+                    setUserName(userData.name);
+                }
             }
         };
 
@@ -69,20 +87,12 @@ export default function DashboardPage() {
                 {/* Stats */}
                 <StatsGrid stats={stats} />
 
-                {/* Main Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Activity - 2 columns */}
-                    <div className="lg:col-span-2">
-                        <RecentActivity />
-                    </div>
-
-                    {/* Right Column */}
-                    <div className="space-y-6">
-                        <FPLevelDistribution levels={fpLevels} />
-                        <RecentlySaved companies={recentCompanies} />
-                    </div>
+                {/* Main Content */}
+                <div className="w-full">
+                    <RecentActivity />
                 </div>
             </div>
         </div>
     );
 }
+

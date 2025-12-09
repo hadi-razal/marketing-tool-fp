@@ -9,6 +9,7 @@ import { CompanyDetailsModal } from './CompanyDetailsModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { motion } from 'framer-motion';
 import { databaseService } from '@/services/databaseService';
+import { toast } from 'sonner';
 
 // Mock Data Services (Moved from page.tsx)
 const enrichCompanyData = async (inputName: string, inputDomain: string, quantity: number) => {
@@ -39,10 +40,9 @@ const enrichCompanyData = async (inputName: string, inputDomain: string, quantit
 
 interface SearchPageProps {
     onSave: (leads: any[]) => void;
-    notify: (msg: string, type?: string) => void;
 }
 
-export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
+export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
     const [mode, setMode] = useState<'search' | 'import'>('search');
     const [searchType, setSearchType] = useState<'people' | 'companies'>('people');
     const [filters, setFilters] = useState({ company: '', website: '', title: '', location: '', keywords: '', quantity: 9 });
@@ -59,8 +59,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
     const [selectedLead, setSelectedLead] = useState<any>(null);
 
     const handleSearch = async () => {
-        if (searchType === 'people' && (!filters.company && !filters.website && !filters.keywords)) return notify('Company, Website or Keywords required', 'error');
-        if (searchType === 'companies' && (!filters.company && !filters.website && !filters.keywords)) return notify('Company Name, Website or Keywords required', 'error');
+        if (searchType === 'people' && (!filters.company && !filters.website && !filters.keywords)) return toast.error('Company, Website or Keywords required');
+        if (searchType === 'companies' && (!filters.company && !filters.website && !filters.keywords)) return toast.error('Company Name, Website or Keywords required');
 
         setLoading(true);
         setResults([]);
@@ -89,8 +89,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                     return { ...lead, isSaved };
                 }));
                 setResults(leadsWithStatus);
-                if (leads.length === 0) notify('No people found matching criteria', 'error');
-                else notify(`Found ${leads.length} people`, 'success');
+                if (leads.length === 0) toast.error('No people found matching criteria');
+                else toast.success(`Found ${leads.length} people`);
             } else {
                 // Check if companies are already saved
                 const companies = data.companies || [];
@@ -110,14 +110,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                 }
 
                 if (companies.length === 0) {
-                    notify('No companies found matching criteria', 'error');
+                    toast.error('No companies found matching criteria');
                     setHasMore(false);
                 }
-                else notify(`Found ${companies.length} companies`, 'success');
+                else toast.success(`Found ${companies.length} companies`);
             }
         } catch (error: any) {
             console.error('Search failed:', error);
-            notify(error.message || 'Failed to fetch data', 'error');
+            toast.error(error.message || 'Failed to fetch data');
         } finally {
             setLoading(false);
         }
@@ -147,7 +147,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
 
             if (companies.length === 0) {
                 setHasMore(false);
-                notify('No more companies to load', 'info');
+                toast.info('No more companies to load');
             } else {
                 const companiesWithStatus = await Promise.all(companies.map(async (comp: any) => {
                     const isSaved = await databaseService.checkCompanySaved(comp.id);
@@ -167,7 +167,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
 
         } catch (error: any) {
             console.error('Load more failed:', error);
-            notify(error.message || 'Failed to load more data', 'error');
+            toast.error(error.message || 'Failed to load more data');
         } finally {
             setLoadingMore(false);
         }
@@ -183,10 +183,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                 setSelectedCompany({ ...selectedCompany, isSaved: true });
             }
 
-            notify('Company saved to database', 'success');
+            toast.success('Company saved to database');
         } catch (error) {
             console.error('Failed to save company:', error);
-            notify('Failed to save company', 'error');
+            toast.error('Failed to save company');
         }
     };
 
@@ -200,10 +200,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                 setSelectedLead({ ...selectedLead, isSaved: true });
             }
 
-            notify('Person saved to database', 'success');
+            toast.success('Person saved to database');
         } catch (error) {
             console.error('Failed to save person:', error);
-            notify('Failed to save person', 'error');
+            toast.error('Failed to save person');
         }
     };
 
@@ -225,7 +225,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
             setResults(allEnriched);
             setLoading(false);
             setProcessingStatus('');
-            notify(`Bulk Search complete: Found ${allEnriched.length} total leads`, 'success');
+            toast.success(`Bulk Search complete: Found ${allEnriched.length} total leads`);
         }, 1500);
     };
 
@@ -233,7 +233,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
         if (results.length === 0) return;
 
         let savedCount = 0;
-        notify(`Saving ${results.length} people...`, 'loading');
+        toast.loading(`Saving ${results.length} people...`);
 
         for (const person of results) {
             if (person.isSaved) continue;
@@ -247,9 +247,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
         }
 
         if (savedCount > 0) {
-            notify(`Successfully saved ${savedCount} people`, 'success');
+            toast.success(`Successfully saved ${savedCount} people`);
         } else {
-            notify('All visible people are already saved', 'info');
+            toast.info('All visible people are already saved');
         }
     };
 
@@ -282,11 +282,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave, notify }) => {
                 setSelectedLead(unlockedLead);
             }
 
-            notify('Contact info unlocked and saved!', 'success');
+            toast.success('Contact info unlocked and saved!');
             return unlockedLead;
         } catch (error: any) {
             console.error('Unlock failed:', error);
-            notify(error.message || 'Failed to unlock contact info', 'error');
+            toast.error(error.message || 'Failed to unlock contact info');
             return null;
         }
     };

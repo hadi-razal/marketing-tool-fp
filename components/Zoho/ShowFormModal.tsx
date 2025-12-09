@@ -4,6 +4,7 @@ import { SoftInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { zohoApi } from '@/lib/zoho';
+import { toast } from 'sonner';
 
 interface ShowFormModalProps {
     isOpen: boolean;
@@ -53,9 +54,10 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                 await zohoApi.addRecord('Show_Details', formData);
             }
             onSuccess();
+            toast.success('Record saved successfully');
             onClose();
         } catch (error) {
-            alert('Failed to save record');
+            toast.error('Failed to save record');
             console.error(error);
         } finally {
             setLoading(false);

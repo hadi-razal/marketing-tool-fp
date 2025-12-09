@@ -7,6 +7,7 @@ import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 import { getBrandColor } from '@/lib/utils';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
 import { createClient } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface CompanyDetailsModalProps {
     company: Company | null;
@@ -158,9 +159,10 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
         try {
             const updatedComments = await databaseService.deleteComment(company.id, commentId);
             setLocalComments(updatedComments);
+            toast.success('Comment deleted');
         } catch (error) {
             console.error('Failed to delete comment:', error);
-            alert('Failed to delete comment. Please try again.');
+            toast.error('Failed to delete comment. Please try again.');
         }
     };
 
@@ -170,9 +172,10 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
         try {
             const updatedComments = await databaseService.deleteReply(company.id, commentId, replyId);
             setLocalComments(updatedComments);
+            toast.success('Reply deleted');
         } catch (error) {
             console.error('Failed to delete reply:', error);
-            alert('Failed to delete reply. Please try again.');
+            toast.error('Failed to delete reply. Please try again.');
         }
     };
 
@@ -194,9 +197,10 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
             }
             setLocalComments(updatedComments);
             setNewComment('');
+            toast.success(replyingTo ? 'Reply posted' : 'Comment posted');
         } catch (error) {
             console.error('Failed to post comment/reply:', error);
-            alert('Failed to post. Please try again.');
+            toast.error('Failed to post. Please try again.');
         } finally {
             setIsPostingComment(false);
         }
@@ -471,7 +475,7 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </div> 
                                     </motion.div>
                                 ) : activeTab === 'comments' ? (
                                     <motion.div
@@ -720,8 +724,8 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
                                                                     <div className="flex items-center gap-3">
                                                                         <Avatar
                                                                             src={person.image || person.photo_url}
-                                                                            alt={person.name}
-                                                                            name={person.name}
+                                                                            alt={person.name ?? ''}
+                                                                            name={person.name ?? ''}
                                                                             className="w-8 h-8 rounded-full object-cover text-xs"
                                                                         />
                                                                         <div>

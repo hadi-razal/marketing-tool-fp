@@ -4,6 +4,7 @@ import { SoftInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { zohoApi } from '@/lib/zoho';
+import { toast } from 'sonner';
 
 interface DatabaseFormModalProps {
     isOpen: boolean;
@@ -43,9 +44,10 @@ export const DatabaseFormModal: React.FC<DatabaseFormModalProps> = ({ isOpen, on
                 await zohoApi.addRecord('Database_Form', formData);
             }
             onSuccess();
+            toast.success('Record saved successfully');
             onClose();
         } catch (error) {
-            alert('Failed to save record');
+            toast.error('Failed to save record');
             console.error(error);
         } finally {
             setLoading(false);

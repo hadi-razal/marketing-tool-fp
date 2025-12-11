@@ -397,15 +397,15 @@ export const TasksTable = () => {
             <div className="relative z-30 flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-md backdrop-blur-xl shadow-xl mb-6">
                 {/* Search */}
                 <div className="relative flex-1 group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-purple-500/10 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     <div className="relative flex items-center">
-                        <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-blue-400 transition-colors" />
+                        <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-orange-400 transition-colors" />
                         <input
                             type="text"
                             placeholder="Search tasks..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-md pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
+                            className="w-full bg-black/20 border border-white/10 rounded-md pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
                         />
                     </div>
                 </div>
@@ -417,7 +417,7 @@ export const TasksTable = () => {
                         <button
                             onClick={() => setIsFilterOpen(!isFilterOpen)}
                             className={`h-11 px-5 flex items-center gap-2 rounded-md font-medium text-xs transition-colors border ${activeFiltersCount > 0
-                                ? 'bg-blue-500/10 border-blue-500/50 text-blue-500'
+                                ? 'bg-orange-500/10 border-orange-500/50 text-orange-500'
                                 : 'bg-transparent border-white/10 text-zinc-400 hover:text-white hover:border-white/20'
                                 }`}
                         >
@@ -512,7 +512,7 @@ export const TasksTable = () => {
                     {/* Add Button */}
                     <button
                         onClick={handleAddClick}
-                        className="h-11 px-6 flex items-center gap-2 rounded-md bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95 group"
+                        className="h-11 px-6 flex items-center gap-2 rounded-md bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-medium shadow-lg shadow-orange-500/20 transition-all active:scale-95 group"
                     >
                         <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" />
                         <span className="hidden sm:inline">Add Task</span>

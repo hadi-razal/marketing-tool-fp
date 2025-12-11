@@ -14,6 +14,10 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: "Fairplatz Marketing Tool",
   description: "Advanced marketing management dashboard",
+  icons: {
+    icon: '/FPICON_white.png',
+    apple: '/FPICON_black.png',
+  },
 };
 
 export default function RootLayout({

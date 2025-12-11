@@ -65,6 +65,7 @@ export const FairplatzAIWidget: React.FC = () => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [userName, setUserName] = useState('');
+    const [userRole, setUserRole] = useState('');
     const [userProfileUrl, setUserProfileUrl] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -79,12 +80,13 @@ export const FairplatzAIWidget: React.FC = () => {
             if (user) {
                 const { data: userData } = await supabase
                     .from('users')
-                    .select('name, profile_url')
+                    .select('name, profile_url, role')
                     .eq('uid', user.id)
                     .single();
 
                 if (userData) {
                     setUserName(userData.name || 'User');
+                    setUserRole(userData.role || '');
                     setUserProfileUrl(userData.profile_url || null);
                 }
             }
@@ -163,7 +165,8 @@ export const FairplatzAIWidget: React.FC = () => {
                 body: JSON.stringify({
                     message: messageText,
                     history,
-                    userName
+                    userName,
+                    userRole
                 }),
             });
 
@@ -245,8 +248,9 @@ export const FairplatzAIWidget: React.FC = () => {
                             <motion.div
                                 animate={{ rotate: [0, -10, 10, -10, 10, 0] }}
                                 transition={{ repeat: Infinity, repeatDelay: 5, duration: 2 }}
+                                className="w-full h-full flex items-center justify-center"
                             >
-                                <Sparkles className="w-7 h-7 text-white drop-shadow-md" />
+                                <img src="/FPICON_white.png" alt="AI" className="w-8 h-8 object-contain drop-shadow-md" />
                             </motion.div>
                             {/* Pulse Ring */}
                             <div className="absolute inset-0 rounded-2xl border-2 border-white/20 animate-ping opacity-20" />
@@ -304,12 +308,12 @@ export const FairplatzAIWidget: React.FC = () => {
                                         animate={{ opacity: 1, y: 0 }}
                                         className={`flex gap-4 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
                                     >
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-md ${message.role === 'assistant'
-                                            ? 'bg-gradient-to-br from-orange-500 to-red-600'
-                                            : 'bg-zinc-800'
+                                        <div className={`w-8 h-8 flex items-center justify-center shrink-0 ${message.role === 'assistant'
+                                            ? ''
+                                            : 'rounded-lg bg-zinc-800 shadow-md'
                                             }`}>
                                             {message.role === 'assistant' ? (
-                                                <Sparkles className="w-4 h-4 text-white" />
+                                                <img src="/FPICON_white.png" alt="AI" className="w-8 h-8 object-contain" />
                                             ) : userProfileUrl ? (
                                                 <img src={userProfileUrl} alt={userName} className="w-full h-full rounded-lg object-cover" />
                                             ) : (
@@ -349,8 +353,8 @@ export const FairplatzAIWidget: React.FC = () => {
                                         animate={{ opacity: 1, y: 0 }}
                                         className="flex gap-4"
                                     >
-                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shrink-0 shadow-lg shadow-orange-500/20">
-                                            <Sparkles className="w-4 h-4 text-white" />
+                                        <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                                            <img src="/FPICON_white.png" alt="AI" className="w-8 h-8 object-contain" />
                                         </div>
                                         <div className="bg-zinc-900 border border-white/5 rounded-2xl rounded-tl-sm p-4 flex items-center gap-3">
                                             <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />

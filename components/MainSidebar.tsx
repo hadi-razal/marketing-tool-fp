@@ -86,12 +86,11 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                 >
                     {/* Header */}
                     <div className={cn("p-6 flex items-center gap-3 transition-all duration-300", isHovered ? "justify-start" : "justify-center px-2")}>
-                        <div className="w-10 h-10 rounded-md bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
-                            <CloudLightning className="w-6 h-6 text-white" />
+                        <div className={cn("w-10 h-10 flex items-center justify-center shrink-0 transition-opacity duration-300", isHovered ? "opacity-0 w-0 overflow-hidden hidden" : "opacity-100")}>
+                            <img src="/FPICON_white.png" alt="Fairplatz" className="w-8 h-8 object-contain" />
                         </div>
                         <div className={cn("transition-opacity duration-300 overflow-hidden whitespace-nowrap", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>
-                            <h1 className="font-bold text-lg text-white leading-tight">Fairplatz</h1>
-                            <p className="text-xs text-zinc-400">Marketing Tool</p>
+                            <img src="/FP_white.png" alt="Fairplatz" className="h-10 object-contain" />
                         </div>
                     </div>
 
@@ -197,8 +196,8 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                 {/* Header */}
                 <div className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-md bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
-                            <CloudLightning className="w-6 h-6 text-white" />
+                        <div className="w-10 h-10 flex items-center justify-center">
+                            <img src="/FPICON_white.png" alt="Fairplatz" className="w-6 h-6 object-contain" />
                         </div>
                         <div>
                             <h1 className="font-bold text-lg text-white leading-tight">Fairplatz</h1>

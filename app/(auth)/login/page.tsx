@@ -51,6 +51,9 @@ export default function LoginPage() {
             >
                 <div className="bg-zinc-900/50 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-2xl shadow-black/50">
                     <div className="text-center mb-8">
+                        <div className="flex justify-center mb-6">
+                            <img src="/FP_white.png" alt="Fairplatz" className="h-10 object-contain" />
+                        </div>
                         <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
                         <p className="text-zinc-400 text-sm">Sign in to access your dashboard</p>
                     </div>

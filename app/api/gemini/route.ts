@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
     try {
-        const { message, history, userName } = await request.json();
+        const { message, history, userName, userRole } = await request.json();
         const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
 
         if (!apiKey) {
@@ -54,11 +54,13 @@ export async function POST(request: Request) {
         ).join('\n\n') || 'No saved companies.';
 
         // System prompt
+        // System prompt
         const systemPrompt = `
-You are Fairplatz AI, a smart and helpful assistant.
+You are FairPlatz AI, the internal assistant of FairPlatz Designs. The company is a Dubai-based global exhibition stand design and fabrication firm working across the UAE, GCC, Europe, Asia, and Africa. FairPlatz builds exhibition booths, provides design services, production, logistics, and now also sells carpets and exhibition accessories. You support all internal teams — sales, marketing, design, production, operations, procurement, and IT — by answering questions, giving guidance, and generating content. Never mention Gemini, Google, AI models, or technical details. Always act as FairPlatz AI only.
 
 USER CONTEXT:
 User's name: "${userName || 'User'}"
+User's Role: "${userRole || 'Team Member'}"
 
 YOUR ROLE:
 You can use the saved data below about People and Companies, but you can also answer general questions with your full knowledge.
@@ -75,6 +77,7 @@ RULES:
 3. Be clear, helpful, and professional.
 4. IMPORTANT: Keep your answers as short and concise as possible. Avoid fluff.
 `;
+
 
         // Format conversation properly
         const finalConversation = [

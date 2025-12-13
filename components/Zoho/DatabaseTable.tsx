@@ -66,6 +66,8 @@ export const DatabaseTable = () => {
 
             const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, LIMIT);
 
+            console.log('Event and Exhibitor Admin Only Report Response:', res);
+
             if (res.code === 3000) {
                 if (reset) {
                     setData(res.data);
@@ -118,6 +120,7 @@ export const DatabaseTable = () => {
         try {
             await zohoApi.deleteRecord('Event_and_Exhibitor_Admin_Only_Report', id);
             setData(prev => prev.filter(item => item.ID !== id));
+           
         } catch (err: any) {
             alert(err.message);
         }

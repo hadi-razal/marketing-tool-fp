@@ -56,7 +56,9 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
         throw new Error(errorData.error || `Zoho API Error: ${res.statusText}`);
     }
 
-    return res.json();
+    const json = await res.json();
+    console.log(`[Zoho API] ${options.method || 'GET'} ${url} Response:`, json);
+    return json;
 };
 
 

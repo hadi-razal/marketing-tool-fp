@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Globe, MapPin, Hash, ExternalLink, Trash2, Edit2, Plus, User, Clock, Info, Building2, Phone } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Globe, Hash, ExternalLink, Edit2, Plus, Building2, Calendar, MapPin, Layers } from 'lucide-react';
+import { zohoApi } from '@/lib/zoho';
+import { Skeleton } from '../ui/Skeleton';
 
 interface ExhibitorDetailsModalProps {
     isOpen: boolean;
@@ -80,6 +81,45 @@ const SubformTable = ({ data }: { data: any[] }) => {
 };
 
 export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ isOpen, onClose, data, onEdit, onDelete, onAddToLeads }) => {
+    const [activeTab, setActiveTab] = useState<'overview' | 'shows'>('overview');
+    const [shows, setShows] = useState<any[]>([]);
+    const [loadingShows, setLoadingShows] = useState(false);
+
+    // Reset tab when data changes
+    useEffect(() => {
+        if (isOpen) {
+            setActiveTab('overview');
+            setShows([]);
+        }
+    }, [isOpen, data?.ID]);
+
+    // Fetch shows when tab changes
+    useEffect(() => {
+        if (activeTab === 'shows' && shows.length === 0 && data) {
+            const fetchShows = async () => {
+                try {
+                    // User requested to filter by ParentID matched to Company ID
+                    const criteria = `(ParentID == "${data.ID}")`;
+                    console.log('Fetching Shows with criteria:', criteria);
+
+                    const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, 0, 200);
+
+                    console.log('Exhibitor Shows Response:', res);
+                    if (res.code === 3000) {
+                        setShows(res.data);
+                    } else {
+                        setShows([]);
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch shows:', err);
+                } finally {
+                    setLoadingShows(false);
+                }
+            };
+            fetchShows();
+        }
+    }, [activeTab, data]);
+
     if (!data) return null;
 
     const formatDate = (dateStr: string) => {
@@ -130,49 +170,142 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                     </div>
                 </div>
 
+                {/* Tab Navigation */}
+                <div className="px-8 border-b border-white/5 bg-black/20 sticky top-0 z-30 backdrop-blur-xl mb-4">
+                    <div className="flex gap-8">
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview'
+                                ? 'text-orange-500 border-orange-500'
+                                : 'text-zinc-400 border-transparent hover:text-white'
+                                }`}
+                        >
+                            Overview
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('shows')}
+                            className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'shows'
+                                ? 'text-orange-500 border-orange-500'
+                                : 'text-zinc-400 border-transparent hover:text-white'
+                                }`}
+                        >
+                            Shows
+                            {shows.length > 0 && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-orange-500/10 text-orange-400 text-xs border border-orange-500/20">
+                                    {shows.length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                </div>
+
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-4 space-y-8">
+                <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-4 space-y-8 min-h-[400px]">
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-4">
-                        <Field label="Type" value={data.Company_Type || data.Type} />
-                        <Field label="Events" value={Array.isArray(data.Events) ? data.Events.join(', ') : data.Events} />
-                    </div>
+                    {activeTab === 'overview' ? (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-4">
+                                <Field label="Type" value={data.Company_Type || data.Type} />
+                                <Field label="Events" value={Array.isArray(data.Events) ? data.Events.join(', ') : data.Events} />
+                            </div>
 
-                    {(website || linkedin || data.Contact_Details) && (
-                        <Section title="Contact & Web">
-                            <Field label="Website" value={website} isLink href={website} />
-                            <Field label="LinkedIn" value={linkedin} isLink href={linkedin} />
-                            <Field label="Contact" value={data.Contact_Details} />
-                        </Section>
-                    )}
+                            {(website || linkedin || data.Contact_Details) && (
+                                <Section title="Contact & Web">
+                                    <Field label="Website" value={website} isLink href={website} />
+                                    <Field label="LinkedIn" value={linkedin} isLink href={linkedin} />
+                                    <Field label="Contact" value={data.Contact_Details} />
+                                </Section>
+                            )}
 
-                    {(data.City || data.Country || data.Area || data.World_Area) && (
-                        <Section title="Location">
-                            <Field label="City" value={data.City} />
-                            <Field label="Country" value={data.Country} />
-                            <Field label="Area" value={data.Area || data.World_Area} />
-                        </Section>
-                    )}
+                            {(data.City || data.Country || data.Area || data.World_Area) && (
+                                <Section title="Location">
+                                    <Field label="City" value={data.City} />
+                                    <Field label="Country" value={data.Country} />
+                                    <Field label="Area" value={data.Area || data.World_Area} />
+                                </Section>
+                            )}
 
-                    {data.People && (
-                        <SubformTable data={data.People} />
-                    )}
+                            {data.People && (
+                                <SubformTable data={data.People} />
+                            )}
 
-                    {data.Notes && (
-                        <div className="space-y-2">
-                            <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Notes</h3>
-                            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{data.Notes}</p>
+                            {data.Notes && (
+                                <div className="space-y-2">
+                                    <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Notes</h3>
+                                    <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{data.Notes}</p>
+                                </div>
+                            )}
+
+                            <div className="pt-4 border-t border-white/5">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <Field label="Added By" value={data.Added_User} />
+                                    <Field label="Added Time" value={formatDate(data.Added_Time)} />
+                                    <Field label="Modified By" value={data.Modified_User} />
+                                    <Field label="Modified Time" value={formatDate(data.Modified_Time)} />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="space-y-4">
+                            {loadingShows ? (
+                                Array.from({ length: 3 }).map((_, i) => (
+                                    <div key={i} className="flex items-center gap-4 p-4 border border-white/5 rounded-xl bg-white/5">
+                                        <Skeleton className="w-10 h-10 rounded-lg" />
+                                        <div className="space-y-2 flex-1">
+                                            <Skeleton className="h-4 w-48" />
+                                            <Skeleton className="h-3 w-32" />
+                                        </div>
+                                    </div>
+                                ))
+                            ) : shows.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
+                                    <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
+                                        <Layers className="w-8 h-8 opacity-40" />
+                                    </div>
+                                    <p className="text-lg font-medium">No shows found</p>
+                                    <p className="text-sm opacity-60">This exhibitor is not linked to any shows.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {shows.map((item: any) => {
+                                        // Helper to safely get display value from any field
+                                        const getValue = (val: any) => {
+                                            if (!val) return null;
+                                            if (typeof val === 'object') return val.display_value || val.value || JSON.stringify(val);
+                                            return val;
+                                        };
+
+                                        const showName = getValue(item.Show);
+                                        const companyName = getValue(item.Company);
+                                        const booth = getValue(item.Booth_No);
+                                        const year = getValue(item.Attended_year1);
+                                        const size = getValue(item.last_edition_booth_sqm);
+
+                                        return (
+                                            <div key={item.ID} className="group p-4 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-orange-500/20 rounded-xl transition-all duration-300 flex items-center justify-between">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800 text-zinc-400 border border-white/10">
+                                                        <Calendar className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-white font-medium group-hover:text-orange-400 transition-colors">
+                                                            {showName || 'Unknown Show'}
+                                                        </h4>
+                                                        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 mt-1">
+                                                            {companyName && <span className="flex items-center gap-1 font-medium text-zinc-400">{companyName}</span>}
+                                                            {booth && <span className="flex items-center gap-1">Booth: {booth}</span>}
+                                                            {year && <span className="flex items-center gap-1">Year: {year}</span>}
+                                                            {size && <span className="flex items-center gap-1">Size: {size} sqm</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
-
-                    <div className="pt-4 border-t border-white/5">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <Field label="Added By" value={data.Added_User} />
-                            <Field label="Added Time" value={formatDate(data.Added_Time)} />
-                            <Field label="Modified By" value={data.Modified_User} />
-                            <Field label="Modified Time" value={formatDate(data.Modified_Time)} />
-                        </div>
-                    </div>
                 </div>
 
                 {/* Minimal Footer */}

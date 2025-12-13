@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User, Sparkles, MessageCircle, TrendingUp, XCircle, Trophy } from 'lucide-react';
+import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User, Sparkles, XCircle, Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';

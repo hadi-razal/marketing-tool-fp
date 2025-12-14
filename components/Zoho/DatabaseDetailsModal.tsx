@@ -141,13 +141,6 @@ export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOp
                     >
                         Edit
                     </Button>
-                    <Button
-                        onClick={() => onAddToLeads(data)}
-                        className="h-10 px-6 text-sm font-medium bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20"
-                        leftIcon={<Plus className="w-4 h-4" />}
-                    >
-                        Add to Leads
-                    </Button>
                 </div>
             </div>
         </Modal>

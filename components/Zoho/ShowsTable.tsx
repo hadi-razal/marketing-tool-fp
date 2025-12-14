@@ -100,15 +100,22 @@ export const ShowsTable = () => {
                     setPage(prev => prev + 1);
                 }
                 setHasMore(res.data.length === LIMIT);
-            } else if (res.code === 3001 || res.message?.includes('No data')) {
+            } else if (res.code === 3001 || res.message?.includes('No data') || res.message?.includes('Not Found')) {
                 if (reset) setData([]);
                 setHasMore(false);
+                setError(''); // Clear error, show empty state instead
             } else {
-                setError('Failed to fetch data. Check API connection.');
+                // For other errors, just show empty results
+                if (reset) setData([]);
+                setHasMore(false);
+                setError('');
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'An error occurred');
+            // Don't show error, just show empty results
+            if (reset) setData([]);
+            setHasMore(false);
+            setError('');
         } finally {
             setLoading(false);
         }
@@ -164,6 +171,7 @@ export const ShowsTable = () => {
     };
 
     const handleRowClick = (item: any) => {
+        console.log('Show details from Zoho (row click):', item);
         setSelectedItem(item);
         setIsDetailsOpen(true);
     };
@@ -241,7 +249,7 @@ export const ShowsTable = () => {
                         isLoading={loading}
                         className="glass-button h-11 w-11 p-0 flex items-center justify-center border-white/10 hover:border-white/20 text-zinc-400 hover:text-white"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        {!loading && <RefreshCw className="w-4 h-4" />}
                     </Button>
 
                     {/* Add Button */}
@@ -255,13 +263,6 @@ export const ShowsTable = () => {
                 </div>
             </div>
 
-            {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm flex items-center gap-2 animate-fade-in">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    {error}
-                </div>
-            )}
 
             <div className="flex-1 glass-panel rounded-2xl overflow-hidden flex flex-col border border-white/5 bg-black/40">
                 <div className="overflow-x-auto custom-scrollbar flex-1">
@@ -286,6 +287,18 @@ export const ShowsTable = () => {
                                         <td className="px-6 py-4 text-right"><Skeleton className="h-8 w-24 ml-auto" /></td>
                                     </tr>
                                 ))
+                            ) : data.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-8">
+                                        <div className="flex flex-col items-center justify-start text-zinc-500 gap-4">
+                                            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
+                                                <Search className="w-8 h-8 opacity-40" />
+                                            </div>
+                                            <p className="text-lg font-medium">No records found</p>
+                                            <p className="text-sm opacity-60">Try adjusting your search terms</p>
+                                        </div>
+                                    </td>
+                                </tr>
                             ) : (
                                 data.map((item, i) => (
                                     <tr
@@ -321,14 +334,6 @@ export const ShowsTable = () => {
                         </div>
                     )}
                 </div>
-                {!loading && data.length === 0 && (
-                    <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-4 min-h-[300px]">
-                        <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
-                            <Search className="w-8 h-8 opacity-40" />
-                        </div>
-                        <p className="text-lg font-medium">No records found</p>
-                    </div>
-                )}
             </div>
         </div>
     );

@@ -1,12 +1,14 @@
 import React from 'react';
-import { Building2, Users, Sparkles, TrendingUp } from 'lucide-react';
+import { Building2, Users, Sparkles, Phone, Clock, ListTodo } from 'lucide-react';
 
 interface StatsGridProps {
     stats: {
         totalCompanies: number;
         totalPeople: number;
         totalGoodLeads: number;
-        avgLevel: number;
+        contacted: number;
+        followupNeeded: number;
+        pendingTasks: number;
     };
 }
 
@@ -31,7 +33,7 @@ const StatCard = ({ label, value, icon: Icon, accent }: { label: string; value: 
 
 export const StatsGrid: React.FC<StatsGridProps> = ({ stats }) => {
     return (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard
                 label="Total Companies"
                 value={stats.totalCompanies.toLocaleString()}
@@ -51,10 +53,22 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats }) => {
                 accent="from-emerald-500 to-teal-500"
             />
             <StatCard
-                label="Avg. Level"
-                value={stats.avgLevel.toFixed(1)}
-                icon={TrendingUp}
+                label="Contacted"
+                value={stats.contacted.toLocaleString()}
+                icon={Phone}
                 accent="from-orange-500 to-amber-500"
+            />
+            <StatCard
+                label="Followup Needed"
+                value={stats.followupNeeded.toLocaleString()}
+                icon={Clock}
+                accent="from-yellow-500 to-orange-500"
+            />
+            <StatCard
+                label="Total Tasks"
+                value={stats.pendingTasks.toLocaleString()}
+                icon={ListTodo}
+                accent="from-cyan-500 to-blue-500"
             />
         </div>
     );

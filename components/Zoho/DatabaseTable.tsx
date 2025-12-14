@@ -82,15 +82,22 @@ export const DatabaseTable = () => {
                     setPage(prev => prev + 1);
                 }
                 setHasMore(res.data.length === LIMIT);
-            } else if (res.code === 3001 || res.message?.includes('No data')) {
+            } else if (res.code === 3001 || res.message?.includes('No data') || res.message?.includes('Not Found')) {
                 if (reset) setData([]);
                 setHasMore(false);
+                setError(''); // Clear error, show empty state instead
             } else {
-                setError('Failed to fetch data. Check API connection.');
+                // For other errors, just show empty results
+                if (reset) setData([]);
+                setHasMore(false);
+                setError('');
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'An error occurred');
+            // Don't show error, just show empty results
+            if (reset) setData([]);
+            setHasMore(false);
+            setError('');
         } finally {
             setLoading(false);
         }
@@ -211,7 +218,7 @@ export const DatabaseTable = () => {
                         isLoading={loading}
                         className="glass-button h-11 w-11 p-0 flex items-center justify-center border-white/10 hover:border-white/20 text-zinc-400 hover:text-white"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        {!loading && <RefreshCw className="w-4 h-4" />}
                     </Button>
 
                     {/* Add Button */}
@@ -225,12 +232,6 @@ export const DatabaseTable = () => {
                 </div>
             </div>
 
-            {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm flex items-center gap-2 animate-fade-in">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    {error}
-                </div>
-            )}
 
             <div className="flex-1 glass-panel rounded-2xl overflow-hidden flex flex-col border border-white/5 bg-black/40">
                 <div className="overflow-x-auto custom-scrollbar flex-1">

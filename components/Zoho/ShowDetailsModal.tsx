@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Globe, MapPin, Calendar, Hash, ExternalLink, Trash2, Edit2, Link as LinkIcon, FileText, Layers, Users, Clock, User, Info, X, Building2 } from 'lucide-react';
+import { Globe, MapPin, Calendar, Hash, ExternalLink, Trash2, Edit2, Link as LinkIcon, FileText, Layers, Users, Clock, User, Info, X, Building2, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { zohoApi } from '@/lib/zoho';
 import { Skeleton } from '../ui/Skeleton';
@@ -31,11 +31,12 @@ const Section = ({ title, children, delay = 0 }: { title: string, children: Reac
     </motion.div>
 );
 
-const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false }: any) => {
+const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false, onDownload }: any) => {
     if (!value) return null;
 
     let displayValue = value;
     let href = value;
+    let isFileUrl = false;
 
     // Handle Zoho object structure (e.g., { url: "..." })
     if (typeof value === 'object' && value !== null) {
@@ -48,6 +49,17 @@ const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = fals
         }
     }
 
+    // Check if it's a file download URL
+    if (typeof displayValue === 'string' && displayValue.includes('/download?filepath=')) {
+        isFileUrl = true;
+    }
+
+    const handleDownload = async () => {
+        if (onDownload && value) {
+            await onDownload(value);
+        }
+    };
+
     return (
         <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
             <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -57,11 +69,22 @@ const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = fals
                     {Icon && <Icon className="w-3.5 h-3.5 text-zinc-600 group-hover:text-orange-500/70 transition-colors" />}
                     {label}
                 </div>
-                <div className="text-zinc-100 font-medium break-words text-sm leading-relaxed">
+                <div className="text-zinc-100 font-medium break-words text-sm leading-relaxed flex items-center gap-2">
                     {isLink ? (
                         <a href={href} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5 transition-colors">
                             {displayValue} <ExternalLink className="w-3 h-3 opacity-70" />
                         </a>
+                    ) : isFileUrl ? (
+                        <>
+                            <span className="text-zinc-400 text-xs truncate flex-1">{displayValue}</span>
+                            <button
+                                onClick={handleDownload}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 hover:text-orange-300 rounded-lg transition-colors text-xs font-medium border border-orange-500/30"
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                Download
+                            </button>
+                        </>
                     ) : (
                         displayValue
                     )}
@@ -75,6 +98,13 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     const [activeTab, setActiveTab] = useState<'overview' | 'exhibitors'>('overview');
     const [exhibitors, setExhibitors] = useState<any[]>([]);
     const [loadingExhibitors, setLoadingExhibitors] = useState(false);
+
+    // Log show details when modal opens or data changes
+    useEffect(() => {
+        if (isOpen && data) {
+            console.log('Show details from Zoho (modal):', data);
+        }
+    }, [isOpen, data]);
 
     // Reset tab when data changes
     useEffect(() => {
@@ -114,6 +144,66 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     }, [activeTab, data]);
 
     if (!data) return null;
+
+    // Helper to download file from Zoho
+    const handleFileDownload = async (fileUrl: string) => {
+        try {
+            // Get Zoho config for authentication
+            const config = JSON.parse(localStorage.getItem('zoho_config') || '{}');
+            if (!config.accessToken) {
+                alert('Zoho authentication required');
+                return;
+            }
+
+            // Extract filepath from URL if it's a query parameter
+            let downloadUrl = fileUrl;
+            let filename = 'floorplan.pdf';
+
+            // If it's a relative URL, construct the full URL
+            if (fileUrl.startsWith('/api/v2/')) {
+                downloadUrl = `https://creator.zoho.com${fileUrl}`;
+            } else if (!fileUrl.startsWith('http')) {
+                // If it's just a path, construct full URL
+                downloadUrl = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/report/Show_List/${data.ID}/Floorplan/download?filepath=${fileUrl}`;
+            }
+
+            // Extract filename from filepath parameter
+            try {
+                const urlObj = new URL(downloadUrl);
+                const filepath = urlObj.searchParams.get('filepath');
+                if (filepath) {
+                    filename = filepath.split('/').pop() || filepath.split('\\').pop() || 'floorplan.pdf';
+                }
+            } catch (e) {
+                // If URL parsing fails, use default filename
+            }
+
+            // Fetch the file with authentication
+            const response = await fetch(downloadUrl, {
+                headers: {
+                    'Authorization': `Zoho-oauthtoken ${config.accessToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+            }
+
+            // Get the blob and trigger download
+            const blob = await response.blob();
+            const downloadLink = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadLink;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(downloadLink);
+            document.body.removeChild(a);
+        } catch (error: any) {
+            console.error('Download error:', error);
+            alert(`Download failed: ${error.message}`);
+        }
+    };
 
     // Helper to format date
     const formatDate = (dateStr: string) => {
@@ -244,7 +334,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                                 <DetailItem label="Exhibitor List (Link)" value={data.Exhibitor_List_Link} icon={LinkIcon} isLink />
                                 <DetailItem label="Exhibitor List (File)" value={data.Exhibitor_List_FILE} icon={FileText} />
                                 <DetailItem label="Floorplan (Link)" value={data.Floorplan_Link} icon={LinkIcon} isLink />
-                                <DetailItem label="Floorplan (File)" value={data.Floorplan} icon={FileText} />
+                                <DetailItem label="Floorplan (File)" value={data.Floorplan} icon={FileText} onDownload={handleFileDownload} />
                             </Section>
 
                             {/* System Info */}
@@ -315,7 +405,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                                                         </h4>
                                                         <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
                                                             {booth && <span className="flex items-center gap-1">Booth: {booth}</span>}
-                                                            {year && <span className="flex items-center gap-1">Year: {year}</span>}
+                                                            <span className="flex items-center gap-1">Year: {year || 'Not available'}</span>
                                                             {size && <span className="flex items-center gap-1">Size: {size} sqm</span>}
                                                             {country && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {country}</span>}
                                                             {websiteUrl && (

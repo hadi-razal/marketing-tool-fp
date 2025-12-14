@@ -156,11 +156,19 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         }
     };
 
-    const handleCreatePerson = async () => {
-        // Refresh list after creation
-        const savedPeople = await databaseService.getSavedPeople();
-        setPeople(savedPeople);
-        notify('Person created successfully', 'success');
+    const handleCreatePerson = async (personData: any) => {
+        try {
+            // Save the person to the database
+            await databaseService.savePerson(personData);
+            
+            // Refresh list after creation
+            const savedPeople = await databaseService.getSavedPeople();
+            setPeople(savedPeople);
+            notify('Person created and saved successfully', 'success');
+        } catch (error) {
+            console.error('Failed to create person:', error);
+            notify('Failed to create person', 'error');
+        }
     };
 
     const handleCreateCompany = async () => {
@@ -372,7 +380,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                         /* People Filters - Contact Status */
                                         <div className="space-y-3 md:col-span-3">
                                             <div className="flex flex-wrap gap-2">
-                                                {['Need to Contact', 'Good Lead', 'Not Interested', 'Customer'].map((status) => {
+                                                {['Need to Contact', 'Good Lead', 'Not Interested', 'Need a Follow Up'].map((status) => {
                                                     const isActive = filters.contactStatus.includes(status);
                                                     return (
                                                         <button

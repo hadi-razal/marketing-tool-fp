@@ -43,9 +43,10 @@ export const ZohoPage = () => {
                             <span className="font-medium text-sm">Shows</span>
                         </button>
 
+                        {/* Event Participation - Hidden for now */}
                         <button
                             onClick={() => setActiveView('database')}
-                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'database' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                            className={`hidden w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-left group ${activeView === 'database' ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
                         >
                             <Database className={`w-5 h-5 ${activeView === 'database' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
                             <span className="font-medium text-sm">Event Participation</span>

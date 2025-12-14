@@ -200,7 +200,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-4 space-y-8 min-h-[400px]">
+                <div className="flex-1 overflow-y-auto custom-scrollbar px-8 pt-2 pb-4 space-y-8 min-h-[400px]">
 
                     {activeTab === 'overview' ? (
                         <>
@@ -294,7 +294,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                                         <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 mt-1">
                                                             {companyName && <span className="flex items-center gap-1 font-medium text-zinc-400">{companyName}</span>}
                                                             {booth && <span className="flex items-center gap-1">Booth: {booth}</span>}
-                                                            {year && <span className="flex items-center gap-1">Year: {year}</span>}
+                                                            <span className="flex items-center gap-1">Year: {year || 'Not available'}</span>
                                                             {size && <span className="flex items-center gap-1">Size: {size} sqm</span>}
                                                         </div>
                                                     </div>
@@ -312,7 +312,6 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 <div className="p-6 border-t border-white/5 bg-zinc-900/50 backdrop-blur-sm flex justify-end gap-3">
                     <Button variant="ghost" onClick={onClose} className="text-zinc-400 hover:text-white">Close</Button>
                     <Button onClick={() => onEdit(data)} variant="secondary" className="glass-button" leftIcon={<Edit2 className="w-4 h-4" />}>Edit</Button>
-                    <Button onClick={() => onAddToLeads(data)} className="bg-green-600 hover:bg-green-500 text-white border-0" leftIcon={<Plus className="w-4 h-4" />}>Add to Leads</Button>
                 </div>
             </div>
         </Modal>

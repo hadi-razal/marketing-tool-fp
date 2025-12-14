@@ -117,7 +117,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             }
         } catch (error: any) {
             console.error('Search failed:', error);
-            toast.error(error.message || 'Failed to fetch data');
+            // Show "No results" instead of API error
+            setResults([]);
+            setHasMore(false);
+            // Don't show error toast, just show empty results
         } finally {
             setLoading(false);
         }
@@ -167,7 +170,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
         } catch (error: any) {
             console.error('Load more failed:', error);
-            toast.error(error.message || 'Failed to load more data');
+            // Just stop loading more instead of showing error
+            setHasMore(false);
         } finally {
             setLoadingMore(false);
         }

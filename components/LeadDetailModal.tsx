@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User, Sparkles, XCircle, Trophy } from 'lucide-react';
+import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User, Sparkles, XCircle, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
@@ -155,7 +155,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         }
     };
 
-    const STATUS_OPTIONS = ['New', 'Contacted', 'In Progress', 'Qualified', 'Unqualified', 'Customer'];
+    const STATUS_OPTIONS = ['New', 'Contacted', 'In Progress', 'Qualified', 'Unqualified', 'Need a Follow Up'];
 
     if (!localLead) return null;
 
@@ -274,7 +274,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
     const getPositionColor = (status: string) => {
         switch (status) {
-            case 'Customer': return 'bg-green-500/20 text-green-400 border-green-500/30';
+            case 'Need a Follow Up': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
             case 'Qualified': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
             case 'In Progress': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             case 'Contacted': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
@@ -605,7 +605,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 transition={{ duration: 0.2 }}
                                 className="flex-1 overflow-y-auto p-8 custom-scrollbar"
                             >
-                                <div className="max-w-2xl mx-auto space-y-10">
+                                <div className="max-w-xl space-y-10">
                                     <section>
                                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                                             <span className="w-8 h-[1px] bg-zinc-800"></span> Status
@@ -622,7 +622,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-3 mt-6">
+                                                <div className="grid grid-cols-2 gap-1.5 mt-6">
                                                     {Object.entries({
                                                         'Need to Contact': {
                                                             icon: Phone,
@@ -645,12 +645,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                             bg: 'bg-red-500/10',
                                                             desc: 'Closed / Unqualified'
                                                         },
-                                                        'Customer': {
-                                                            icon: Trophy,
+                                                        'Need a Follow Up': {
+                                                            icon: Clock,
                                                             color: 'text-yellow-400',
                                                             border: 'border-yellow-500/30',
                                                             bg: 'bg-yellow-500/10',
-                                                            desc: 'Converted client'
+                                                            desc: 'Requires follow-up action'
                                                         }
                                                     }).map(([status, config]) => {
                                                         const Icon = config.icon;
@@ -661,19 +661,19 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 key={status}
                                                                 onClick={() => handleStatusUpdate(status)}
                                                                 disabled={isUpdatingStatus}
-                                                                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 gap-2 ${isSelected
+                                                                className={`flex flex-col items-center justify-center p-1.5 rounded-lg border transition-all duration-200 gap-1 ${isSelected
                                                                     ? `${config.bg} ${config.border} ring-1 ring-inset ring-white/10`
                                                                     : 'bg-zinc-900 border-white/5 hover:bg-white/5 hover:border-white/10'
                                                                     }`}
                                                             >
-                                                                <div className={`p-2 rounded-full ${isSelected ? 'bg-white/10' : 'bg-white/5'} ${config.color}`}>
-                                                                    <Icon className="w-5 h-5" />
+                                                                <div className={`p-1 rounded-full ${isSelected ? 'bg-white/10' : 'bg-white/5'} ${config.color}`}>
+                                                                    <Icon className="w-3.5 h-3.5" />
                                                                 </div>
                                                                 <div className="text-center">
-                                                                    <div className={`font-bold text-sm ${isSelected ? 'text-white' : 'text-zinc-400'}`}>
+                                                                    <div className={`font-bold text-[11px] leading-tight ${isSelected ? 'text-white' : 'text-zinc-400'}`}>
                                                                         {status}
                                                                     </div>
-                                                                    <div className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/70' : 'text-zinc-600'}`}>
+                                                                    <div className={`text-[9px] leading-tight ${isSelected ? 'text-white/70' : 'text-zinc-600'}`}>
                                                                         {config.desc}
                                                                     </div>
                                                                 </div>
@@ -863,8 +863,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                             )}
 
                                             <div
-                                                className="flex items-end gap-2 bg-zinc-900/50 border border-white/10 rounded-xl p-2 focus-within:border-[var(--brand-color)]/50 focus-within:ring-1 focus-within:ring-[var(--brand-color)]/50 transition-all"
-                                                style={{ '--brand-color': brandColor } as React.CSSProperties}
+                                                className="flex items-end gap-2 bg-zinc-900/50 border border-white/10 rounded-xl p-2 transition-all"
                                             >
                                                 <textarea
                                                     placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : "Add a note..."}

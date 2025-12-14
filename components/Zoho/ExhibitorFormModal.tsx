@@ -73,17 +73,41 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
     const handleSubmit = async () => {
         setLoading(true);
         try {
+            // Map form data to API format - convert Area to World_Area
+            const { Area, ...restData } = formData;
+            const apiData = {
+                ...restData,
+                World_Area: Area || ''
+            };
+
             if (initialData?.ID) {
-                await zohoApi.updateRecord('Exhibitor_List', initialData.ID, formData);
+                await zohoApi.updateRecord('Exhibitor_List', initialData.ID, apiData);
             } else {
-                await zohoApi.addRecord('Exhibitor', formData);
+                // Try 'Exhibitor' first (common form name pattern, similar to 'Show_Details')
+                // If that fails, try 'Exhibitor_List' as fallback
+                try {
+                    await zohoApi.addRecord('Exhibitor', apiData);
+                } catch (firstError: any) {
+                    console.log('Trying with form name "Exhibitor" failed, trying "Exhibitor_List"...', firstError);
+                    await zohoApi.addRecord('Exhibitor_List', apiData);
+                }
             }
             onSuccess();
             toast.success('Exhibitor saved successfully');
             onClose();
-        } catch (error) {
-            toast.error('Failed to save record');
-            console.error(error);
+        } catch (error: any) {
+            // Extract detailed error message from Zoho API response
+            let errorMessage = 'Failed to save record';
+            if (error?.message) {
+                errorMessage = error.message;
+            } else if (error?.error) {
+                errorMessage = typeof error.error === 'string' ? error.error : JSON.stringify(error.error);
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            }
+            
+            toast.error(errorMessage);
+            console.error('Exhibitor save error details:', error);
         } finally {
             setLoading(false);
         }

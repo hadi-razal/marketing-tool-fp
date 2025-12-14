@@ -654,8 +654,7 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
                                                     )}
 
                                                     <div
-                                                        className="flex items-end gap-2 bg-zinc-900/50 border border-white/10 rounded-xl p-2 focus-within:border-[var(--brand-color)]/50 focus-within:ring-1 focus-within:ring-[var(--brand-color)]/50 transition-all"
-                                                        style={{ '--brand-color': brandColor } as React.CSSProperties}
+                                                        className="flex items-end gap-2 bg-zinc-900/50 border border-white/10 rounded-xl p-2 transition-all"
                                                     >
                                                         <textarea
                                                             placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : "Add a note..."}

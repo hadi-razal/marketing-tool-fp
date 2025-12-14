@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { SoftInput } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
@@ -52,7 +53,14 @@ export default function LoginPage() {
                 <div className="bg-zinc-900/50 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-2xl shadow-black/50">
                     <div className="text-center mb-8">
                         <div className="flex justify-center mb-6">
-                            <img src="/FP_white.png" alt="Fairplatz" className="h-10 object-contain" />
+                            <Image 
+                                src="/FP_white.png" 
+                                alt="Fairplatz" 
+                                width={120}
+                                height={40}
+                                className="h-10 w-auto object-contain"
+                                priority
+                            />
                         </div>
                         <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
                         <p className="text-zinc-400 text-sm">Sign in to access your dashboard</p>

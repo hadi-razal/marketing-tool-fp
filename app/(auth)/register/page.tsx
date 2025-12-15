@@ -106,6 +106,7 @@ export default function RegisterPage() {
                                 width={120}
                                 height={40}
                                 className="h-10 w-auto object-contain"
+                                unoptimized
                                 priority
                             />
                         </div>

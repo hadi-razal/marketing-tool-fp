@@ -203,48 +203,99 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-8 pt-2 pb-4 space-y-8 min-h-[400px]">
 
                     {activeTab === 'overview' ? (
-                        <>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-4">
-                                <Field label="Type" value={data.Company_Type || data.Type} />
-                                <Field label="Events" value={Array.isArray(data.Events) ? data.Events.join(', ') : data.Events} />
-                            </div>
-
-                            {(website || linkedin || data.Contact_Details) && (
-                                <Section title="Contact & Web">
-                                    <Field label="Website" value={website} isLink href={website} />
-                                    <Field label="LinkedIn" value={linkedin} isLink href={linkedin} />
-                                    <Field label="Contact" value={data.Contact_Details} />
-                                </Section>
+                        <div className="space-y-3">
+                            {(data.Company_Type || data.Type) && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Type</span>
+                                    <span className="text-sm text-zinc-200">{data.Company_Type || data.Type}</span>
+                                </div>
                             )}
-
+                            {data.Events && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Events</span>
+                                    <span className="text-sm text-zinc-200">
+                                        {Array.isArray(data.Events) ? data.Events.join(', ') : data.Events}
+                                    </span>
+                                </div>
+                            )}
+                            {website && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Website</span>
+                                    <a href={website} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
+                                        {website}
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                </div>
+                            )}
+                            {linkedin && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">LinkedIn</span>
+                                    <a href={linkedin} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
+                                        {linkedin}
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                </div>
+                            )}
+                            {data.Contact_Details && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Contact</span>
+                                    <span className="text-sm text-zinc-200">{data.Contact_Details}</span>
+                                </div>
+                            )}
                             {(data.City || data.Country || data.Area || data.World_Area) && (
-                                <Section title="Location">
-                                    <Field label="City" value={data.City} />
-                                    <Field label="Country" value={data.Country} />
-                                    <Field label="Area" value={data.Area || data.World_Area} />
-                                </Section>
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Location</span>
+                                    <span className="text-sm text-zinc-200">
+                                        {[data.City, data.Country, data.Area || data.World_Area].filter(Boolean).join(', ')}
+                                    </span>
+                                </div>
                             )}
-
-                            {data.People && (
-                                <SubformTable data={data.People} />
+                            {data.People && data.People.length > 0 && (
+                                <div className="pt-2 border-t border-white/10">
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">People</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-sm text-zinc-400">
+                                                <thead className="text-zinc-500 font-bold text-[10px] uppercase tracking-wider">
+                                                    <tr>
+                                                        <th className="pb-2 pr-4">Name</th>
+                                                        <th className="pb-2 pr-4">Role</th>
+                                                        <th className="pb-2 pr-4">Email</th>
+                                                        <th className="pb-2 pr-4">Mobile</th>
+                                                        <th className="pb-2">Website</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-white/5">
+                                                    {data.People.map((item: any, i: number) => (
+                                                        <tr key={i} className="group">
+                                                            <td className="py-2 pr-4 text-zinc-300 font-medium group-hover:text-white transition-colors">{item.Name}</td>
+                                                            <td className="py-2 pr-4">{item.Role}</td>
+                                                            <td className="py-2 pr-4">{item.Mail}</td>
+                                                            <td className="py-2 pr-4">{item.Mobile}</td>
+                                                            <td className="py-2">{item.website || item.Website}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
-
                             {data.Notes && (
-                                <div className="space-y-2">
-                                    <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Notes</h3>
-                                    <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{data.Notes}</p>
+                                <div className="pt-2 border-t border-white/10">
+                                    <div className="flex items-start gap-3 py-2.5">
+                                        <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Notes</span>
+                                        <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap flex-1">{data.Notes}</p>
+                                    </div>
                                 </div>
                             )}
-
-                            <div className="pt-4 border-t border-white/5">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <Field label="Added By" value={data.Added_User} />
-                                    <Field label="Added Time" value={formatDate(data.Added_Time)} />
-                                    <Field label="Modified By" value={data.Modified_User} />
-                                    <Field label="Modified Time" value={formatDate(data.Modified_Time)} />
+                            {data.Added_Time && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Added Time</span>
+                                    <span className="text-sm text-zinc-200">{formatDate(data.Added_Time)}</span>
                                 </div>
-                            </div>
-                        </>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-4">
                             {loadingShows ? (

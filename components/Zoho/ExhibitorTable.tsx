@@ -367,7 +367,6 @@ export const ExhibitorTable = () => {
                                         <td className="px-6 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                                             <button onClick={() => handleAddToLeads(item)} className="p-1.5 hover:bg-green-500/20 rounded-lg text-zinc-400 hover:text-green-500 transition-colors" title="Add to Leads"><Plus className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => handleEdit(item)} className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => handleDelete(item.ID)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-zinc-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </td>
                                     </tr>
                                 ))

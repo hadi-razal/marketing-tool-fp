@@ -130,6 +130,7 @@ export const DatabaseDetailsModal: React.FC<DatabaseDetailsModalProps> = ({ isOp
                         }}
                         className="h-10 px-4 text-sm font-medium bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 hover:border-red-500/30"
                         leftIcon={<Trash2 className="w-4 h-4" />}
+                        disabled
                     >
                         Delete
                     </Button>

@@ -452,6 +452,8 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                             onClick={() => {
                                                 setSelectedPerson(person);
                                             }}
+                                            actionType="delete"
+                                            isSaved={true}
                                         />
                                     </motion.div>
                                 ))

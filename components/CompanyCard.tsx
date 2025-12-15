@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, MapPin, Users, Globe, ArrowRight, CheckCircle2, Trash2, Calendar, MessageSquare } from 'lucide-react';
+import { Building2, MapPin, Users, Globe, ArrowRight, Trash2, Calendar, MessageSquare } from 'lucide-react';
 import { getBrandColor } from '@/lib/utils';
 import { Comment } from '@/services/databaseService';
 
@@ -75,11 +75,6 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
 
                 {/* Action Buttons */}
                 <div className="flex gap-2">
-                    {company.isSaved && (
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500" title="Saved">
-                            <CheckCircle2 className="w-4 h-4" />
-                        </div>
-                    )}
                     {onAction && ActionIcon && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onAction(); }}

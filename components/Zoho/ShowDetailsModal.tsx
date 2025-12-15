@@ -98,6 +98,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     const [activeTab, setActiveTab] = useState<'overview' | 'exhibitors'>('overview');
     const [exhibitors, setExhibitors] = useState<any[]>([]);
     const [loadingExhibitors, setLoadingExhibitors] = useState(false);
+    const [isNoteExpanded, setIsNoteExpanded] = useState(false);
 
     // Log show details when modal opens or data changes
     useEffect(() => {
@@ -109,10 +110,17 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     // Reset tab when data changes
     useEffect(() => {
         if (isOpen) {
+            console.log('Resetting tab to overview, clearing exhibitors');
             setActiveTab('overview');
             setExhibitors([]);
+            setIsNoteExpanded(false);
         }
     }, [isOpen, data?.ID]);
+
+    // Debug: Log activeTab changes
+    useEffect(() => {
+        console.log('Active Tab changed to:', activeTab);
+    }, [activeTab]);
 
     // Fetch exhibitors when tab changes
     useEffect(() => {
@@ -120,21 +128,130 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
             const fetchExhibitors = async () => {
                 setLoadingExhibitors(true);
                 try {
-                    // Attempting (Show == ID) as Show.ID caused 404, and quotes caused Type Mismatch.
-                    // Show is a lookup field, usually requires direct ID comparison (Number).
-                    const criteria = `(Show == ${data.ID})`;
-                    console.log('Fetching Exhibitors with criteria:', criteria);
-
-                    const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, 0, 200);
-
-                    console.log('Event Exhibitors Response:', res);
-                    if (res.code === 3000) {
-                        setExhibitors(res.data);
-                    } else {
+                    console.log('=== FETCHING EXHIBITORS ===');
+                    console.log('Show Data:', data);
+                    console.log('Show ID:', data.ID);
+                    
+                    if (!data.ID) {
+                        console.warn('No show ID available');
                         setExhibitors([]);
+                        return;
                     }
+
+                    // Try different criteria formats - Show.ID is NUMBER type, so don't use quotes
+                    const criteriaOptions = [
+                        `(Show.ID == ${data.ID})`,           // Number comparison without quotes
+                        `(Show.ID == "${data.ID}")`,         // With quotes (might work)
+                        `(Show == ${data.ID})`,              // Direct Show comparison
+                        `(Show == "${data.ID}")`,            // Direct Show with quotes
+                    ];
+                    
+                    let allExhibitors: any[] = [];
+                    let criteria = '';
+                    let foundWorkingCriteria = false;
+                    
+                    // Try each criteria format
+                    for (const testCriteria of criteriaOptions) {
+                        try {
+                            console.log('Trying criteria:', testCriteria);
+                            const testRes = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', testCriteria, 0, 10);
+                            
+                            console.log('Test Response:', testRes);
+                            console.log('Response Code:', testRes.code);
+                            
+                            if (testRes.code === 3000) {
+                                criteria = testCriteria;
+                                foundWorkingCriteria = true;
+                                console.log('✅ Working criteria found:', criteria);
+                                break;
+                            } else if (testRes.code === 3001) {
+                                // No records but criteria is valid
+                                criteria = testCriteria;
+                                foundWorkingCriteria = true;
+                                console.log('✅ Criteria is valid (no records found):', criteria);
+                                break;
+                            }
+                        } catch (err) {
+                            console.log('Criteria failed:', testCriteria, err);
+                            continue;
+                        }
+                    }
+                    
+                    // If no criteria worked, fetch all and filter client-side
+                    if (!foundWorkingCriteria) {
+                        console.log('⚠️ No working criteria found, fetching all and filtering client-side');
+                        criteria = undefined;
+                    }
+                    
+                    // Fetch all matching exhibitors in batches
+                    let from = 0;
+                    const limit = 200;
+                    let hasMore = true;
+                    
+                    // Fetch in batches until we have all matching records
+                    while (hasMore) {
+                        console.log(`Fetching batch from ${from} with criteria: ${criteria || 'none'}...`);
+                        const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, limit);
+                        
+                        console.log(`Batch Response (from ${from}):`, res);
+                        console.log('Response Code:', res.code);
+                        console.log('Response Data:', res.data);
+                        console.log('Response Data Length:', res.data?.length);
+                        
+                        if (res.code === 3000 && res.data && Array.isArray(res.data)) {
+                            let batchData = res.data;
+                            
+                            // Always filter client-side to ensure we only get exhibitors from this Show
+                            // Match by Show.ID (must match exactly - this is from Show, not Event Participation)
+                            batchData = res.data.filter((item: any) => {
+                                const itemShowId = item.Show?.ID || item.Show?.id || item.Show_ID;
+                                const currentShowId = data.ID;
+                                
+                                // Convert both to strings for comparison to handle type mismatches
+                                const itemShowIdStr = String(itemShowId);
+                                const currentShowIdStr = String(currentShowId);
+                                
+                                const matches = itemShowIdStr === currentShowIdStr;
+                                
+                                if (matches) {
+                                    console.log('✅ Match found - Show.ID:', itemShowId, '=== Current Show.ID:', currentShowId);
+                                }
+                                
+                                return matches;
+                            });
+                            
+                            console.log(`Filtered batch: ${batchData.length} of ${res.data.length} match Show.ID: ${data.ID}`);
+                            
+                            allExhibitors = [...allExhibitors, ...batchData];
+                            hasMore = res.data.length === limit;
+                            from += limit;
+                        } else {
+                            hasMore = false;
+                            if (res.code !== 3000 && res.code !== 3001) {
+                                console.warn('Query failed with code:', res.code);
+                                console.warn('Response:', res);
+                            }
+                        }
+                    }
+                    
+                    console.log('Total Exhibitors Fetched:', allExhibitors.length);
+                    console.log('All Exhibitors (filtered by Show.ID):', allExhibitors);
+                    console.log('Current Show.ID:', data.ID);
+                    console.log('=== END FETCHING EXHIBITORS ===');
+                    
+                    // Final filter to ensure all exhibitors match this Show.ID
+                    const finalFiltered = allExhibitors.filter((item: any) => {
+                        const itemShowId = String(item.Show?.ID || item.Show?.id || item.Show_ID || '');
+                        const currentShowId = String(data.ID || '');
+                        return itemShowId === currentShowId;
+                    });
+                    
+                    console.log('Final filtered count:', finalFiltered.length);
+                    setExhibitors(finalFiltered);
                 } catch (err) {
-                    console.error('Failed to fetch exhibitors:', err);
+                    console.error('❌ Failed to fetch exhibitors:', err);
+                    console.error('Error Details:', JSON.stringify(err, null, 2));
+                    setExhibitors([]);
                 } finally {
                     setLoadingExhibitors(false);
                 }
@@ -221,26 +338,26 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
         <Modal isOpen={isOpen} onClose={onClose} title="Show Details" maxWidth="max-w-5xl">
             <div className="relative">
                 {/* Hero Header */}
-                <div className="relative glass-panel border-b border-white/5 p-8 overflow-hidden rounded-t-2xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent opacity-50" />
-                    <div className="absolute -top-24 -right-24 w-64 h-64 bg-orange-500/20 rounded-full blur-3xl" />
+                <div className="relative glass-panel border-b border-white/5 p-6 overflow-hidden rounded-t-2xl">
+                    <div className="absolute top-0 right-0 w-1/3 h-1/2 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent opacity-50" />
+                    <div className="absolute -top-12 -right-12 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
 
-                    <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start">
+                    <div className="relative z-10 flex flex-col md:flex-row gap-6 items-start">
                         {data.Event_logo && (
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="w-32 h-32 bg-white rounded-2xl p-4 shrink-0 flex items-center justify-center overflow-hidden shadow-2xl shadow-black/50 border border-white/10"
+                                className="w-24 h-24 bg-white rounded-xl p-3 shrink-0 flex items-center justify-center overflow-hidden shadow-2xl shadow-black/50 border border-white/10"
                             >
                                 <img src={data.Event_logo} alt={data.Event || data.Name} className="max-w-full max-h-full object-contain" />
                             </motion.div>
                         )}
-                        <div className="flex-1 space-y-4">
+                        <div className="flex-1 space-y-3">
                             <div>
                                 <motion.h2
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="text-4xl md:text-5xl font-bold text-white mb-3 tracking-tight"
+                                    className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight"
                                 >
                                     {data.Event || data.Event_Name || data.Name}
                                 </motion.h2>
@@ -263,7 +380,17 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                                     transition={{ delay: 0.2 }}
                                     className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-xl text-yellow-200/80 text-sm leading-relaxed backdrop-blur-sm"
                                 >
-                                    {data.Note1}
+                                    <p className={isNoteExpanded ? '' : 'line-clamp-2'}>
+                                        {data.Note1}
+                                    </p>
+                                    {data.Note1.length > 150 && (
+                                        <button
+                                            onClick={() => setIsNoteExpanded(!isNoteExpanded)}
+                                            className="mt-2 text-xs font-medium text-yellow-300 hover:text-yellow-200 transition-colors"
+                                        >
+                                            {isNoteExpanded ? 'Read less' : 'Read more'}
+                                        </button>
+                                    )}
                                 </motion.div>
                             )}
                         </div>
@@ -276,7 +403,10 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                 <div className="px-8 border-b border-white/5 bg-black/20 sticky top-0 z-30 backdrop-blur-xl">
                     <div className="flex gap-8">
                         <button
-                            onClick={() => setActiveTab('overview')}
+                            onClick={() => {
+                                console.log('Setting tab to overview');
+                                setActiveTab('overview');
+                            }}
                             className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview'
                                 ? 'text-orange-500 border-orange-500'
                                 : 'text-zinc-400 border-transparent hover:text-white'
@@ -285,7 +415,10 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                             Overview
                         </button>
                         <button
-                            onClick={() => setActiveTab('exhibitors')}
+                            onClick={() => {
+                                console.log('Setting tab to exhibitors');
+                                setActiveTab('exhibitors');
+                            }}
                             className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'exhibitors'
                                 ? 'text-orange-500 border-orange-500'
                                 : 'text-zinc-400 border-transparent hover:text-white'
@@ -303,71 +436,126 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
 
                 {/* Content Scroll Area */}
                 <div className="p-8 space-y-10 max-h-[60vh] overflow-y-auto custom-scrollbar bg-black/40 min-h-[400px]">
-
-                    {activeTab === 'overview' ? (
-                        <>
-                            {/* General Info */}
-                            <Section title="General Information" delay={0.1}>
-                                <DetailItem label="Event Type" value={data.Event_Type} icon={Layers} />
-                                <DetailItem label="Industry" value={data.Industry} icon={Layers} />
-                                <DetailItem label="Website" value={data.Website} icon={Globe} isLink />
-                                <DetailItem label="Organiser" value={data.Organiser} icon={Users} />
-                                <DetailItem label="Frequency" value={data.Frequency} icon={Clock} />
-                                <DetailItem label="Starting Date" value={formatDate(data.Starting_Date)} icon={Calendar} />
-                            </Section>
-
-                            {/* Location */}
-                            <Section title="Location" delay={0.2}>
-                                <DetailItem label="City" value={data.City} icon={MapPin} />
-                                <DetailItem label="Country" value={data.Country} icon={MapPin} />
-                                <DetailItem label="World Area" value={data.World_Area} icon={Globe} />
-                            </Section>
-
-                            {/* Metrics */}
-                            <Section title="Metrics" delay={0.3}>
-                                <DetailItem label="Exhibition Size" value={data.Exhibition_Size} icon={Layers} />
-                                <DetailItem label="Last Edition Exhibitors" value={data.Last_edition_n_Exhibitors} icon={Users} />
-                            </Section>
-
-                            {/* Resources */}
-                            <Section title="Resources" delay={0.4}>
-                                <DetailItem label="Exhibitor List (Link)" value={data.Exhibitor_List_Link} icon={LinkIcon} isLink />
-                                <DetailItem label="Exhibitor List (File)" value={data.Exhibitor_List_FILE} icon={FileText} />
-                                <DetailItem label="Floorplan (Link)" value={data.Floorplan_Link} icon={LinkIcon} isLink />
-                                <DetailItem label="Floorplan (File)" value={data.Floorplan} icon={FileText} onDownload={handleFileDownload} />
-                            </Section>
-
-                            {/* System Info */}
-                            <Section title="System Metadata" delay={0.5}>
-                                <DetailItem label="Added User" value={data.Added_User} icon={User} />
-                                <DetailItem label="Added Time" value={formatDate(data.Added_Time)} icon={Clock} />
-                                <DetailItem label="Modified User" value={data.Modified_User} icon={User} />
-                                <DetailItem label="Modified Time" value={formatDate(data.Modified_Time)} icon={Clock} />
-                                <DetailItem label="Added User IP" value={data.Added_User_IP_Address} icon={Globe} />
-                                <DetailItem label="Modified User IP" value={data.Modified_User_IP_Address} icon={Globe} />
-                            </Section>
-
-                            {/* Additional Data */}
-                            <Section title="Additional Data" delay={0.6}>
-                                {Object.entries(data).map(([key, value]) => {
-                                    if (['ID', 'Event', 'Event_Name', 'Name', 'Level', 'Event_logo', 'Note1', 'Event_Type', 'Industry', 'Website', 'Organiser', 'Frequency', 'Starting_Date', 'City', 'Country', 'World_Area', 'Exhibition_Size', 'Last_edition_n_Exhibitors', 'Exhibitor_List_Link', 'Exhibitor_List_FILE', 'Floorplan_Link', 'Floorplan', 'Added_User', 'Added_Time', 'Modified_User', 'Modified_Time', 'Added_User_IP_Address', 'Modified_User_IP_Address'].includes(key)) return null;
-                                    if (typeof value === 'object' && value !== null) return null;
-                                    return <DetailItem key={key} label={key.replace(/_/g, ' ')} value={String(value)} icon={Info} />;
-                                })}
-                            </Section>
-                        </>
-                    ) : (
-                        <div className="space-y-4">
+                    {activeTab === 'overview' && (
+                        <div className="space-y-3" key="overview-content">
+                            {data.Starting_Date && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Starting Date</span>
+                                    <span className="text-sm text-zinc-200">{formatDate(data.Starting_Date)}</span>
+                                </div>
+                            )}
+                            {data.Industry && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Industry</span>
+                                    <span className="text-sm text-zinc-200">{data.Industry}</span>
+                                </div>
+                            )}
+                            {data.Website && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Website</span>
+                                    <a href={data.Website} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
+                                        {typeof data.Website === 'object' && 'url' in data.Website ? data.Website.url : data.Website}
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                </div>
+                            )}
+                            {data.Organiser && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Organiser</span>
+                                    <span className="text-sm text-zinc-200">{data.Organiser}</span>
+                                </div>
+                            )}
+                            {data.Frequency && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Frequency</span>
+                                    <span className="text-sm text-zinc-200">{data.Frequency}</span>
+                                </div>
+                            )}
+                            {(data.City || data.Country || data.World_Area) && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Location</span>
+                                    <span className="text-sm text-zinc-200">
+                                        {[data.City, data.Country, data.World_Area].filter(Boolean).join(', ')}
+                                    </span>
+                                </div>
+                            )}
+                            {data.Exhibition_Size && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Size</span>
+                                    <span className="text-sm text-zinc-200">{data.Exhibition_Size}</span>
+                                </div>
+                            )}
+                            {data.Last_edition_n_Exhibitors && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Exhibitors</span>
+                                    <span className="text-sm text-zinc-200">{data.Last_edition_n_Exhibitors}</span>
+                                </div>
+                            )}
+                            {data.Exhibitor_List_Link && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Exhibitor List</span>
+                                    <a href={typeof data.Exhibitor_List_Link === 'object' && 'url' in data.Exhibitor_List_Link ? data.Exhibitor_List_Link.url : data.Exhibitor_List_Link} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
+                                        View Link
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                </div>
+                            )}
+                            {data.Floorplan_Link && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Floorplan</span>
+                                    <a href={typeof data.Floorplan_Link === 'object' && 'url' in data.Floorplan_Link ? data.Floorplan_Link.url : data.Floorplan_Link} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
+                                        View Link
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                </div>
+                            )}
+                            {data.Floorplan && (
+                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Floorplan File</span>
+                                    <button
+                                        onClick={() => handleFileDownload(typeof data.Floorplan === 'object' && 'url' in data.Floorplan ? data.Floorplan.url : data.Floorplan)}
+                                        className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1.5"
+                                    >
+                                        <Download className="w-3 h-3" />
+                                        Download
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {activeTab === 'exhibitors' && (
+                        <div className="space-y-4" key="exhibitors-content">
                             {loadingExhibitors ? (
-                                Array.from({ length: 5 }).map((_, i) => (
-                                    <div key={i} className="flex items-center gap-4 p-4 border border-white/5 rounded-xl bg-white/5">
-                                        <Skeleton className="w-10 h-10 rounded-lg" />
-                                        <div className="space-y-2 flex-1">
-                                            <Skeleton className="h-4 w-48" />
-                                            <Skeleton className="h-3 w-32" />
-                                        </div>
+                                <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-4">
+                                    <motion.div
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                        className="w-16 h-16 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center"
+                                    >
+                                        <Clock className="w-8 h-8 text-orange-500" />
+                                    </motion.div>
+                                    <div className="text-center space-y-2">
+                                        <p className="text-lg font-medium text-white">Fetching exhibitors from database...</p>
+                                        <p className="text-sm opacity-60">Please wait while we load the data</p>
                                     </div>
-                                ))
+                                    <div className="flex gap-2 mt-4">
+                                        {Array.from({ length: 3 }).map((_, i) => (
+                                            <motion.div
+                                                key={i}
+                                                className="w-2 h-2 rounded-full bg-orange-500/50"
+                                                animate={{
+                                                    scale: [1, 1.2, 1],
+                                                    opacity: [0.5, 1, 0.5],
+                                                }}
+                                                transition={{
+                                                    duration: 1.5,
+                                                    repeat: Infinity,
+                                                    delay: i * 0.2,
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
                             ) : exhibitors.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
                                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
@@ -444,6 +632,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                         }}
                         className="flex-1 h-12 text-base font-medium bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 hover:border-red-500/30"
                         leftIcon={<Trash2 className="w-4 h-4" />}
+                        disabled
                     >
                         Delete
                     </Button>

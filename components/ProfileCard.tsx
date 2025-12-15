@@ -27,6 +27,7 @@ interface ProfileCardProps {
     actionIcon?: React.ElementType;
     onClick?: () => void;
     isSaved?: boolean;
+    actionType?: 'save' | 'delete'; // Add action type to distinguish between save and delete
 }
 
 const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name: string, className?: string }) => {
@@ -58,7 +59,7 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
     );
 };
 
-export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, actionIcon: ActionIcon, onClick, isSaved }) => {
+export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, actionIcon: ActionIcon, onClick, isSaved, actionType = 'save' }) => {
     // Normalize data
     const name = lead.name || 'Unknown';
     const title = lead.title || 'No Title';
@@ -98,14 +99,30 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                 </div>
                 {onAction && ActionIcon && (
                     <button
-                        onClick={(e) => { e.stopPropagation(); if (!saved) onAction(lead); }}
-                        disabled={saved}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${saved
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
-                            }`}
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            // Allow delete action even when saved, but only allow save when not saved
+                            if (actionType === 'delete' || !saved) {
+                                onAction(lead); 
+                            }
+                        }}
+                        disabled={actionType === 'save' && saved}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${
+                            actionType === 'delete' 
+                                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                                : saved
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
+                        }`}
+                        title={actionType === 'delete' ? 'Delete person' : saved ? 'Already saved' : 'Save person'}
                     >
-                        {saved ? <Check className="w-4 h-4" /> : <ActionIcon className="w-4 h-4" />}
+                        {actionType === 'delete' ? (
+                            <ActionIcon className="w-4 h-4" />
+                        ) : saved ? (
+                            <Check className="w-4 h-4" />
+                        ) : (
+                            <ActionIcon className="w-4 h-4" />
+                        )}
                     </button>
                 )}
             </div>

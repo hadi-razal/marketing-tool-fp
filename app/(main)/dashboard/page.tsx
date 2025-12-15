@@ -10,6 +10,7 @@ export default function DashboardPage() {
         totalPeople: 0,
         totalGoodLeads: 0,
         contacted: 0,
+        needToContact: 0,
         followupNeeded: 0,
         pendingTasks: 0,
     });
@@ -80,7 +81,8 @@ export default function DashboardPage() {
                     totalPeople: peopleCount || 0,
                     totalGoodLeads: goodLeadsCount || 0,
                     contacted: contactedCount || 0,
-                    followupNeeded: (needToContactCount || 0) + (inProgressCount || 0),
+                    needToContact: needToContactCount || 0,
+                    followupNeeded: inProgressCount || 0,
                     pendingTasks: pendingTasksCount || 0
                 }));
             } catch (err) {

@@ -53,11 +53,20 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
 
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(errorData.error || `Zoho API Error: ${res.statusText}`);
+        // Check if it's a "not found" response (404 or code 3001)
+        if (res.status === 404 || errorData.code === 3001) {
+            // Return structured response for "not found" instead of throwing
+            return { code: 3001, data: null };
+        }
+        const errorMessage = errorData.error || errorData.message || errorData.code ? `Error ${errorData.code}: ${errorData.message || errorData.error}` : `Zoho API Error: ${res.statusText}`;
+        throw new Error(errorMessage);
     }
 
     const json = await res.json();
-    console.log(`[Zoho API] ${options.method || 'GET'} ${url} Response:`, json);
+    // Only log successful responses, not "not found" responses to reduce noise
+    if (json.code !== 3001) {
+        console.log(`[Zoho API] ${options.method || 'GET'} ${url} Response:`, json);
+    }
     return json;
 };
 
@@ -88,14 +97,46 @@ export const zohoApi = {
         const config = getZohoConfig();
         if (!config) throw new Error('Zoho configuration missing');
         const url = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/report/${reportName}/${id}`;
-        return fetchWithAuth(url);
+        try {
+            return await fetchWithAuth(url);
+        } catch (err: any) {
+            // If record doesn't exist (404 or 3001), return a structured response instead of throwing
+            // This allows callers to handle "not found" gracefully
+            if (err?.message?.includes('404') || err?.message?.includes('not found') || err?.message?.includes('3001')) {
+                return { code: 3001, data: null };
+            }
+            throw err;
+        }
     },
 
-    updateRecord: async (reportName: string, id: string, data: any) => {
+    updateRecord: async (reportOrFormName: string, id: string, data: any) => {
         const config = getZohoConfig();
         if (!config) throw new Error('Zoho configuration missing');
-        const url = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/report/${reportName}/${id}`;
-        return fetchWithAuth(url, { method: 'PATCH', body: JSON.stringify({ data }) });
+        
+        // Zoho Creator API: Updates must use report endpoint, not form endpoint
+        // Try report endpoint first (this is the correct way for updates)
+        const reportUrl = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/report/${reportOrFormName}/${id}`;
+        
+        try {
+            const result = await fetchWithAuth(reportUrl, { 
+                method: 'PATCH', 
+                body: JSON.stringify({ data }) 
+            });
+            return result;
+        } catch (reportError: any) {
+            // If report endpoint fails, try form endpoint as fallback (though this usually doesn't work for updates)
+            console.log('Report endpoint failed, trying form endpoint as fallback...', reportError);
+            try {
+                const formUrl = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/form/${reportOrFormName}/${id}`;
+                return await fetchWithAuth(formUrl, { 
+                    method: 'PATCH', 
+                    body: JSON.stringify({ data }) 
+                });
+            } catch (formError: any) {
+                // If both fail, throw the original report error with more context
+                throw new Error(`Failed to update record: ${reportError.message || reportError}. Tried report: ${reportOrFormName}`);
+            }
+        }
     },
 
     deleteRecord: async (reportName: string, id: string) => {

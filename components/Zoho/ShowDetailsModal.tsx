@@ -111,7 +111,6 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     // Reset tab when data changes
     useEffect(() => {
         if (isOpen) {
-            console.log('Resetting tab to overview, clearing exhibitors');
             setActiveTab('overview');
             setExhibitors([]);
             setIsNoteExpanded(false);
@@ -119,23 +118,13 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
         }
     }, [isOpen, data?.ID]);
 
-    // Debug: Log activeTab changes
-    useEffect(() => {
-        console.log('Active Tab changed to:', activeTab);
-    }, [activeTab]);
-
     // Fetch exhibitors when tab changes
     useEffect(() => {
         if (activeTab === 'exhibitors' && exhibitors.length === 0 && data) {
             const fetchExhibitors = async () => {
                 setLoadingExhibitors(true);
                 try {
-                    console.log('=== FETCHING EXHIBITORS ===');
-                    console.log('Show Data:', data);
-                    console.log('Show ID:', data.ID);
-                    
                     if (!data.ID) {
-                        console.warn('No show ID available');
                         setExhibitors([]);
                         return;
                     }
@@ -155,33 +144,25 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                     // Try each criteria format
                     for (const testCriteria of criteriaOptions) {
                         try {
-                            console.log('Trying criteria:', testCriteria);
                             const testRes = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', testCriteria, 0, 10);
-                            
-                            console.log('Test Response:', testRes);
-                            console.log('Response Code:', testRes.code);
                             
                             if (testRes.code === 3000) {
                                 criteria = testCriteria;
                                 foundWorkingCriteria = true;
-                                console.log('✅ Working criteria found:', criteria);
                                 break;
                             } else if (testRes.code === 3001) {
                                 // No records but criteria is valid
                                 criteria = testCriteria;
                                 foundWorkingCriteria = true;
-                                console.log('✅ Criteria is valid (no records found):', criteria);
                                 break;
                             }
                         } catch (err) {
-                            console.log('Criteria failed:', testCriteria, err);
                             continue;
                         }
                     }
                     
                     // If no criteria worked, fetch all and filter client-side
                     if (!foundWorkingCriteria) {
-                        console.log('⚠️ No working criteria found, fetching all and filtering client-side');
                         criteria = undefined;
                     }
                     
@@ -192,13 +173,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                     
                     // Fetch in batches until we have all matching records
                     while (hasMore) {
-                        console.log(`Fetching batch from ${from} with criteria: ${criteria || 'none'}...`);
                         const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, limit);
-                        
-                        console.log(`Batch Response (from ${from}):`, res);
-                        console.log('Response Code:', res.code);
-                        console.log('Response Data:', res.data);
-                        console.log('Response Data Length:', res.data?.length);
                         
                         if (res.code === 3000 && res.data && Array.isArray(res.data)) {
                             let batchData = res.data;
@@ -213,33 +188,16 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                                 const itemShowIdStr = String(itemShowId);
                                 const currentShowIdStr = String(currentShowId);
                                 
-                                const matches = itemShowIdStr === currentShowIdStr;
-                                
-                                if (matches) {
-                                    console.log('✅ Match found - Show.ID:', itemShowId, '=== Current Show.ID:', currentShowId);
-                                }
-                                
-                                return matches;
+                                return itemShowIdStr === currentShowIdStr;
                             });
-                            
-                            console.log(`Filtered batch: ${batchData.length} of ${res.data.length} match Show.ID: ${data.ID}`);
                             
                             allExhibitors = [...allExhibitors, ...batchData];
                             hasMore = res.data.length === limit;
                             from += limit;
                         } else {
                             hasMore = false;
-                            if (res.code !== 3000 && res.code !== 3001) {
-                                console.warn('Query failed with code:', res.code);
-                                console.warn('Response:', res);
-                            }
                         }
                     }
-                    
-                    console.log('Total Exhibitors Fetched:', allExhibitors.length);
-                    console.log('All Exhibitors (filtered by Show.ID):', allExhibitors);
-                    console.log('Current Show.ID:', data.ID);
-                    console.log('=== END FETCHING EXHIBITORS ===');
                     
                     // Final filter to ensure all exhibitors match this Show.ID
                     const finalFiltered = allExhibitors.filter((item: any) => {
@@ -248,11 +206,8 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                         return itemShowId === currentShowId;
                     });
                     
-                    console.log('Final filtered count:', finalFiltered.length);
                     setExhibitors(finalFiltered);
                 } catch (err) {
-                    console.error('❌ Failed to fetch exhibitors:', err);
-                    console.error('Error Details:', JSON.stringify(err, null, 2));
                     setExhibitors([]);
                 } finally {
                     setLoadingExhibitors(false);
@@ -407,7 +362,6 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                     <div className="flex gap-8">
                         <button
                             onClick={() => {
-                                console.log('Setting tab to overview');
                                 setActiveTab('overview');
                             }}
                             className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview'
@@ -419,7 +373,6 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                         </button>
                         <button
                             onClick={() => {
-                                console.log('Setting tab to exhibitors');
                                 setActiveTab('exhibitors');
                             }}
                             className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'exhibitors'

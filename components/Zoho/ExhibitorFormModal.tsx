@@ -6,29 +6,7 @@ import { Button } from '../ui/Button';
 import { zohoApi } from '@/lib/zoho';
 import { toast } from 'sonner';
 
-// Comprehensive country list with UAE as "UAE" and others with full names
-const COUNTRIES = [
-    'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
-    'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan',
-    'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cambodia', 'Cameroon',
-    'Canada', 'Cape Verde', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica',
-    'Croatia', 'Cuba', 'Cyprus', 'Czech Republic', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'East Timor', 'Ecuador',
-    'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France',
-    'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau',
-    'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland',
-    'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Korea, North', 'Korea, South',
-    'Kosovo', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein',
-    'Lithuania', 'Luxembourg', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Marshall Islands', 'Mauritania',
-    'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar',
-    'Namibia', 'Nauru', 'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Macedonia', 'Norway',
-    'Oman', 'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland',
-    'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino',
-    'Sao Tome and Principe', 'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands',
-    'Somalia', 'South Africa', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria',
-    'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan',
-    'Tuvalu', 'UAE', 'Uganda', 'Ukraine', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City',
-    'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
-].sort();
+import { COUNTRIES } from '@/lib/countries';
 
 interface ExhibitorFormModalProps {
     isOpen: boolean;
@@ -67,6 +45,25 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
     };
 
     useEffect(() => {
+        // Reset form when modal opens/closes or initialData changes
+        if (!isOpen) {
+            // Reset form when modal closes
+            setFormData({
+                Company: '',
+                Company_Type: '',
+                Website: '',
+                City: '',
+                Country: '',
+                Area: '',
+                Contact_Details: '',
+                Company_Linkedin: '',
+                FP_Level: '',
+                Events: ''
+            });
+            return;
+        }
+        
+        // When modal opens, initialize form with initialData immediately
         if (initialData) {
             setFormData({
                 Company: initialData.Company || '',
@@ -109,19 +106,61 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
         );
     }, [countrySearch]);
 
+    // Helper function to format URL fields for Zoho
+    const formatUrlField = (url: string): string | undefined => {
+        if (!url || url.trim() === '') return undefined; // Omit field if empty
+        const trimmedUrl = url.trim();
+        // If URL doesn't start with http:// or https://, add https://
+        if (!trimmedUrl.match(/^https?:\/\//i)) {
+            return `https://${trimmedUrl}`;
+        }
+        return trimmedUrl;
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
             // Map form data to API format - convert Area to World_Area
-            const { Area, ...restData } = formData;
-            const apiData = {
+            const { Area, Website, Company_Linkedin, ...restData } = formData;
+            const apiData: any = {
                 ...restData,
                 World_Area: Area || ''
             };
 
+            // Format URL fields - Zoho URL fields require valid URLs or should be omitted
+            // Don't send empty strings or null - only send if there's a valid value
+            const formattedWebsite = formatUrlField(Website);
+            if (formattedWebsite !== undefined) {
+                apiData.Website = formattedWebsite;
+            }
+            // If empty, omit the field entirely (don't send null or empty string)
+
+            const formattedLinkedin = formatUrlField(Company_Linkedin);
+            if (formattedLinkedin !== undefined) {
+                apiData.Company_Linkedin = formattedLinkedin;
+            }
+            // If empty, omit the field entirely (don't send null or empty string)
+
+            // Check if this is an update (has ID) or new record
             if (initialData?.ID) {
-                await zohoApi.updateRecord('Exhibitor_List', initialData.ID, apiData);
+                const recordId = initialData.ID;
+                console.log('Updating exhibitor record:', recordId, 'with data:', apiData);
+                // Use Exhibitor_List report name (matches what's used for fetching/deleting)
+                const updateResult = await zohoApi.updateRecord('Exhibitor_List', recordId, apiData);
+                console.log('Update result:', updateResult);
+                
+                // Verify the update was successful
+                if (updateResult.code === 3000 || updateResult.code === 3001) {
+                    toast.success('Exhibitor updated successfully');
+                    // Wait a moment for Zoho to process the update before refreshing
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    onSuccess();
+                    onClose();
+                } else {
+                    throw new Error('Update failed: ' + (updateResult.error || 'Unknown error'));
+                }
             } else {
+                console.log('Adding new exhibitor record with data:', apiData);
                 // Try 'Exhibitor' first (common form name pattern, similar to 'Show_Details')
                 // If that fails, try 'Exhibitor_List' as fallback
                 try {
@@ -130,10 +169,10 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                     console.log('Trying with form name "Exhibitor" failed, trying "Exhibitor_List"...', firstError);
                     await zohoApi.addRecord('Exhibitor_List', apiData);
                 }
+                toast.success('Exhibitor created successfully');
+                onSuccess();
+                onClose();
             }
-            onSuccess();
-            toast.success('Exhibitor saved successfully');
-            onClose();
         } catch (error: any) {
             // Extract detailed error message from Zoho API response
             let errorMessage = 'Failed to save record';
@@ -168,24 +207,24 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Type</label>
-                        <div className="relative">
+                    <div className="space-y-2 w-full">
+                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Type</label>
+                        <div className="relative group">
                             <select
                                 value={formData.Company_Type}
                                 onChange={(e) => setFormData({ ...formData, Company_Type: e.target.value })}
-                                className="w-full bg-zinc-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all hover:bg-white/5 appearance-none cursor-pointer"
+                                className="w-full bg-zinc-900/50 border border-zinc-800 text-white rounded-xl px-4 py-3.5 outline-none transition-all duration-200 appearance-none cursor-pointer focus:border-orange-500/50 focus:bg-zinc-900 focus:shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] hover:border-zinc-700"
                             >
-                                <option value="" className="bg-zinc-900 text-zinc-500">Select Type</option>
-                                <option value="LLP" className="bg-zinc-900">LLP (Limited Liability Partnership)</option>
-                                <option value="LTD / LLC" className="bg-zinc-900">LTD / LLC (Limited / Limited Liability Company)</option>
-                                <option value="Partnership" className="bg-zinc-900">Partnership</option>
-                                <option value="PLC / INC" className="bg-zinc-900">PLC / INC (Public Limited Company / Incorporated)</option>
-                                <option value="Sole Ownership" className="bg-zinc-900">Sole Ownership</option>
-                                <option value="Other" className="bg-zinc-900">Other</option>
+                                <option value="" className="bg-zinc-900 text-zinc-600">Select Type</option>
+                                <option value="LLP" className="bg-zinc-900 text-white">LLP (Limited Liability Partnership)</option>
+                                <option value="LTD / LLC" className="bg-zinc-900 text-white">LTD / LLC (Limited / Limited Liability Company)</option>
+                                <option value="Partnership" className="bg-zinc-900 text-white">Partnership</option>
+                                <option value="PLC / INC" className="bg-zinc-900 text-white">PLC / INC (Public Limited Company / Incorporated)</option>
+                                <option value="Sole Ownership" className="bg-zinc-900 text-white">Sole Ownership</option>
+                                <option value="Other" className="bg-zinc-900 text-white">Other</option>
                             </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                <svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 group-focus-within:text-orange-500 transition-colors">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
                             </div>
@@ -194,14 +233,14 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                     <SoftInput label="Website" value={formData.Website} onChange={(e) => setFormData({ ...formData, Website: e.target.value })} placeholder="e.g. acme.com" icon={<Globe className="w-4 h-4" />} />
 
                     <SoftInput label="City" value={formData.City} onChange={(e) => setFormData({ ...formData, City: e.target.value })} placeholder="e.g. London" icon={<MapPin className="w-4 h-4" />} />
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Country</label>
-                        <div className="relative">
+                    <div className="space-y-2 w-full">
+                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Country</label>
+                        <div className="relative group">
                             <div
                                 onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
-                                className="w-full bg-zinc-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all hover:bg-white/5 cursor-pointer min-h-[44px] flex items-center justify-between"
+                                className="w-full bg-zinc-900/50 border border-zinc-800 text-white rounded-xl px-4 py-3.5 outline-none transition-all duration-200 cursor-pointer focus-within:border-orange-500/50 focus-within:bg-zinc-900 focus-within:shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] hover:border-zinc-700 flex items-center justify-between min-h-[44px]"
                             >
-                                <span className={formData.Country ? 'text-white' : 'text-zinc-500'}>
+                                <span className={formData.Country ? 'text-white' : 'text-zinc-600'}>
                                     {formData.Country || 'Select country...'}
                                 </span>
                                 {formData.Country && (

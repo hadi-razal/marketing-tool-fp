@@ -28,38 +28,16 @@ export const ShowsTable = () => {
     // Filters
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [availableCountries, setAvailableCountries] = useState<string[]>([]);
+
+    // Import all countries
+    useEffect(() => {
+        import('@/lib/countries').then(({ COUNTRIES }) => {
+            setAvailableCountries(COUNTRIES);
+        });
+    }, []);
     const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
 
-    // Fetch unique values for filters
-    useEffect(() => {
-        const fetchFilters = async () => {
-            try {
-                const countries = new Set<string>();
-
-                // Fetch up to 5 pages (1000 records) to get a good sample of countries
-                const MAX_PAGES = 5;
-                const BATCH_SIZE = 100;
-
-                for (let i = 0; i < MAX_PAGES; i++) {
-                    const res = await zohoApi.getRecords('Show_List', undefined, i * BATCH_SIZE, BATCH_SIZE);
-                    if (res.data && Array.isArray(res.data)) {
-                        res.data.forEach((item: any) => {
-                            if (item.Country) countries.add(item.Country);
-                        });
-
-                        if (res.data.length < BATCH_SIZE) break;
-                    } else {
-                        break;
-                    }
-                }
-
-                setAvailableCountries(Array.from(countries).sort());
-            } catch (err) {
-                console.error('Failed to fetch filter values', err);
-            }
-        };
-        fetchFilters();
-    }, []);
+    // Countries are loaded from the shared COUNTRIES constant via useEffect above
 
     const fetchData = useCallback(async (reset = false, searchTerm = '') => {
         setLoading(true);
@@ -82,6 +60,9 @@ export const ShowsTable = () => {
             }
 
             const criteria = criteriaParts.length > 0 ? criteriaParts.join(' && ') : undefined;
+
+            console.log('Shows Fetch Criteria:', criteria);
+            console.log('Selected Countries:', selectedCountries);
 
             const res = await zohoApi.getRecords('Show_List', criteria, from, LIMIT);
             console.log('Shows Response:', res);
@@ -130,8 +111,8 @@ export const ShowsTable = () => {
     }, [search]);
 
     useEffect(() => {
+        setPage(0); // Reset page when filters or search change
         fetchData(true, debouncedSearch);
-        if (debouncedSearch) setPage(0);
     }, [debouncedSearch, selectedCountries]);
 
     const handleApplyFilters = (countries: string[], continents: string[]) => {
@@ -161,8 +142,102 @@ export const ShowsTable = () => {
     };
 
     const handleEdit = (item: any) => {
+        // Close details modal first
+        setIsDetailsOpen(false);
+        // Set the selected item and open modal
+        // The key prop on ShowFormModal will ensure it re-renders with new data
         setSelectedItem(item);
         setIsModalOpen(true);
+    };
+
+    const handleUpdateSuccess = async () => {
+        // Store the ID before refreshing - ensure we have it
+        const updatedId = selectedItem?.ID;
+        
+        if (!updatedId) {
+            // If no ID, just refresh the table
+            await fetchData(true, debouncedSearch);
+            return;
+        }
+        
+        // Wait a bit more to ensure Zoho has fully processed the update
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Refresh the table data after successful update
+        await fetchData(true, debouncedSearch);
+        
+        // Wait a bit more for the table data to be set
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Refresh the selected item data and reopen details modal
+        try {
+            // Try Show_List first, then Event_and_Exhibitor_Admin_Only_Report as fallback
+            let res;
+            let attempts = 0;
+            const maxAttempts = 3;
+            
+            while (attempts < maxAttempts) {
+                try {
+                    res = await zohoApi.getRecordById('Show_List', updatedId);
+                    if (res.code === 3000 && res.data) {
+                        break; // Success, exit loop
+                    }
+                } catch (err) {
+                    // Try fallback
+                    try {
+                        res = await zohoApi.getRecordById('Event_and_Exhibitor_Admin_Only_Report', updatedId);
+                        if (res.code === 3000 && res.data) {
+                            break; // Success, exit loop
+                        }
+                    } catch (err2) {
+                        // Both failed, wait and retry
+                        attempts++;
+                        if (attempts < maxAttempts) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            continue;
+                        }
+                    }
+                }
+                
+                if (res && res.code === 3000 && res.data) {
+                    break; // Success
+                }
+                
+                attempts++;
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+            
+            if (res && res.code === 3000 && res.data) {
+                const fetchedData = Array.isArray(res.data) ? res.data[0] : res.data;
+                setSelectedItem(fetchedData); // Replace entirely with fresh data
+                // Reopen details modal to show updated data
+                setIsDetailsOpen(true);
+            } else {
+                // If API fetch failed, try to find in refreshed table data
+                // Use state setter to access latest data
+                setData(prev => {
+                    const item = prev.find(item => item.ID === updatedId);
+                    if (item) {
+                        setSelectedItem(item);
+                        setIsDetailsOpen(true);
+                    }
+                    return prev;
+                });
+            }
+        } catch (err) {
+            // Fallback: find in table data using state setter
+            await new Promise(resolve => setTimeout(resolve, 300));
+            setData(prev => {
+                const item = prev.find(item => item.ID === updatedId);
+                if (item) {
+                    setSelectedItem(item);
+                    setIsDetailsOpen(true);
+                }
+                return prev;
+            });
+        }
     };
 
     const handleAdd = () => {
@@ -179,9 +254,18 @@ export const ShowsTable = () => {
     return (
         <div className="h-full flex flex-col gap-6">
             <ShowFormModal
+                key={selectedItem?.ID || 'new'} // Force re-render when item changes
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSuccess={() => fetchData(true, debouncedSearch)}
+                onClose={() => {
+                    setIsModalOpen(false);
+                    // Small delay before clearing to ensure modal closes properly
+                    setTimeout(() => {
+                        if (!isDetailsOpen) {
+                            setSelectedItem(null);
+                        }
+                    }, 100);
+                }}
+                onSuccess={handleUpdateSuccess}
                 initialData={selectedItem}
             />
 
@@ -273,7 +357,6 @@ export const ShowsTable = () => {
                                 <th className="px-6 py-3 hidden md:table-cell">Event Type</th>
                                 <th className="px-6 py-3 hidden lg:table-cell">City</th>
                                 <th className="px-6 py-3 hidden xl:table-cell">Country</th>
-                                <th className="px-6 py-3 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -284,12 +367,11 @@ export const ShowsTable = () => {
                                         <td className="px-6 py-4 hidden md:table-cell"><Skeleton className="h-5 w-24" /></td>
                                         <td className="px-6 py-4 hidden lg:table-cell"><Skeleton className="h-5 w-20" /></td>
                                         <td className="px-6 py-4 hidden xl:table-cell"><Skeleton className="h-5 w-20" /></td>
-                                        <td className="px-6 py-4 text-right"><Skeleton className="h-8 w-24 ml-auto" /></td>
                                     </tr>
                                 ))
                             ) : data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8">
+                                    <td colSpan={4} className="px-6 py-8">
                                         <div className="flex flex-col items-center justify-start text-zinc-500 gap-4">
                                             <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                                                 <Search className="w-8 h-8 opacity-40" />
@@ -310,9 +392,6 @@ export const ShowsTable = () => {
                                         <td className="px-6 py-3 hidden md:table-cell text-sm text-zinc-400">{item.Event_Type}</td>
                                         <td className="px-6 py-3 hidden lg:table-cell text-sm text-zinc-400">{item.City}</td>
                                         <td className="px-6 py-3 hidden xl:table-cell text-sm text-zinc-400">{item.Country}</td>
-                                        <td className="px-6 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                            <button onClick={() => handleEdit(item)} className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                                        </td>
                                     </tr>
                                 ))
                             )}

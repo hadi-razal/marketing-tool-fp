@@ -7,6 +7,7 @@ interface StatsGridProps {
         totalPeople: number;
         totalGoodLeads: number;
         contacted: number;
+        needToContact: number;
         followupNeeded: number;
         pendingTasks: number;
     };
@@ -53,8 +54,8 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats }) => {
                 accent="from-emerald-500 to-teal-500"
             />
             <StatCard
-                label="Contacted"
-                value={stats.contacted.toLocaleString()}
+                label="Need to Contact"
+                value={stats.needToContact.toLocaleString()}
                 icon={Phone}
                 accent="from-orange-500 to-amber-500"
             />

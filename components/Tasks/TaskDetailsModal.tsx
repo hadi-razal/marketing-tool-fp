@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Calendar, Flag, Globe, Lock, Layout, User, Clock, CheckCircle2, AlertCircle, ArrowUpCircle, ArrowDownCircle, MinusCircle } from 'lucide-react';
+import { X, Calendar, Flag, Globe, Lock, Layout, User, Clock, CheckCircle2, AlertCircle, ArrowUpCircle, ArrowDownCircle, MinusCircle, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Task } from '@/types/task';
 import { format } from 'date-fns';
@@ -175,17 +175,39 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                                         </div>
                                     )}
 
-                                    {/* Visibility */}
+                                    {/* Assigned People */}
                                     <div className="flex items-start gap-3">
-                                        {task.visibility === 'Public' ?
-                                            <Globe className="w-5 h-5 text-zinc-500 mt-0.5" /> :
-                                            <Lock className="w-5 h-5 text-zinc-500 mt-0.5" />
-                                        }
-                                        <div>
-                                            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Visibility</p>
-                                            <p className="text-white font-medium text-sm">
-                                                {task.visibility}
-                                            </p>
+                                        <Users className="w-5 h-5 text-zinc-500 mt-0.5" />
+                                        <div className="flex-1">
+                                            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Assigned People</p>
+                                            {task.assigned_to_profiles && task.assigned_to_profiles.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {task.assigned_to_profiles.map((profile, i) => (
+                                                        <div 
+                                                            key={profile.uid || i} 
+                                                            className="relative h-6 w-6 rounded-full ring-1 ring-[#09090b] bg-zinc-800 shadow-sm overflow-hidden hover:ring-orange-500/50 transition-all cursor-pointer group"
+                                                            title={profile.name || 'Unknown'}
+                                                        >
+                                                            {profile.photo_url ? (
+                                                                <img 
+                                                                    src={profile.photo_url} 
+                                                                    alt={profile.name} 
+                                                                    className="h-full w-full object-cover" 
+                                                                />
+                                                            ) : (
+                                                                <div className="flex items-center justify-center w-full h-full text-[9px] text-zinc-400 font-bold uppercase">
+                                                                    {profile.name?.charAt(0) || '?'}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-800/50 border border-white/5">
+                                                    <Globe className="w-4 h-4 text-zinc-500" />
+                                                    <span className="text-zinc-400 text-sm">All (Default)</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

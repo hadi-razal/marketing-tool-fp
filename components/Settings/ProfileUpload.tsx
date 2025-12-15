@@ -31,6 +31,15 @@ export const ProfileUpload = ({ currentImageUrl, onUpdate, uid }: ProfileUploadP
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             const file = e.target.files[0];
+            
+            // Check file size (2MB = 2 * 1024 * 1024 bytes)
+            const maxSize = 2 * 1024 * 1024; // 2MB
+            if (file.size > maxSize) {
+                toast.error('File size exceeds 2MB limit. Please choose a smaller file.');
+                e.target.value = '';
+                return;
+            }
+            
             const imageDataUrl = await readFile(file);
             setImageSrc(imageDataUrl as string);
             setIsModalOpen(true);
@@ -209,30 +218,25 @@ export const ProfileUpload = ({ currentImageUrl, onUpdate, uid }: ProfileUploadP
                     )}
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    <Button
+                        onClick={() => fileInputRef.current?.click()}
+                        variant="secondary"
+                        className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:text-white text-zinc-300 h-9 px-3 text-xs"
+                    >
+                        <Upload className="w-3.5 h-3.5 mr-1.5" />
+                        Upload
+                    </Button>
+                    {currentImageUrl && (
                         <Button
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={handleRemove}
                             variant="secondary"
-                            className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:text-white text-zinc-300 h-9 px-4 text-xs"
+                            className="bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-red-400 h-9 px-3 text-xs"
                         >
-                            <Upload className="w-3.5 h-3.5 mr-2" />
-                            Upload New
+                            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                            Remove
                         </Button>
-                        {currentImageUrl && (
-                            <Button
-                                onClick={handleRemove}
-                                variant="secondary"
-                                className="bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-red-400 h-9 px-4 text-xs"
-                            >
-                                <Trash2 className="w-3.5 h-3.5 mr-2" />
-                                Remove
-                            </Button>
-                        )}
-                    </div>
-                    <p className="text-xs text-zinc-500">
-                        Recommended: Square JPG, PNG. Max 5MB.
-                    </p>
+                    )}
                 </div>
 
                 <input

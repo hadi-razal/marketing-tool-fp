@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Globe, MapPin, Calendar, Hash, ExternalLink, Trash2, Edit2, Link as LinkIcon, FileText, Layers, Users, Clock, User, Info, X, Building2, Download } from 'lucide-react';
+import { Globe, MapPin, Calendar, Hash, ExternalLink, Trash2, Edit2, Link as LinkIcon, FileText, Layers, Users, Clock, User, Info, X, Building2, Download, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { zohoApi } from '@/lib/zoho';
+import { zohoApi, getZohoConfig } from '@/lib/zoho';
 import { Skeleton } from '../ui/Skeleton';
 
 interface ShowDetailsModalProps {
@@ -99,6 +99,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     const [exhibitors, setExhibitors] = useState<any[]>([]);
     const [loadingExhibitors, setLoadingExhibitors] = useState(false);
     const [isNoteExpanded, setIsNoteExpanded] = useState(false);
+    const [exhibitorSearch, setExhibitorSearch] = useState('');
 
     // Log show details when modal opens or data changes
     useEffect(() => {
@@ -114,6 +115,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
             setActiveTab('overview');
             setExhibitors([]);
             setIsNoteExpanded(false);
+            setExhibitorSearch('');
         }
     }, [isOpen, data?.ID]);
 
@@ -147,7 +149,7 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                     ];
                     
                     let allExhibitors: any[] = [];
-                    let criteria = '';
+                    let criteria: string | undefined = undefined;
                     let foundWorkingCriteria = false;
                     
                     // Try each criteria format
@@ -265,13 +267,9 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
     // Helper to download file from Zoho
     const handleFileDownload = async (fileUrl: string) => {
         try {
-            // Get Zoho config for authentication
-            const config = JSON.parse(localStorage.getItem('zoho_config') || '{}');
-            if (!config.accessToken) {
-                alert('Zoho authentication required');
-                return;
-            }
-
+            // Get Zoho config for owner/app name only (auth is server-side)
+            const config = getZohoConfig();
+            
             // Extract filepath from URL if it's a query parameter
             let downloadUrl = fileUrl;
             let filename = 'floorplan.pdf';
@@ -295,11 +293,16 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                 // If URL parsing fails, use default filename
             }
 
-            // Fetch the file with authentication
-            const response = await fetch(downloadUrl, {
-                headers: {
-                    'Authorization': `Zoho-oauthtoken ${config.accessToken}`
-                }
+            // Use server-side proxy for authentication
+            const response = await fetch('/api/zoho/proxy-v2', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: downloadUrl,
+                    method: 'GET',
+                    headers: {},
+                    body: undefined
+                })
             });
 
             if (!response.ok) {
@@ -525,6 +528,19 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                     )}
                     {activeTab === 'exhibitors' && (
                         <div className="space-y-4" key="exhibitors-content">
+                            {/* Search Input */}
+                            {exhibitors.length > 0 && !loadingExhibitors && (
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                    <input
+                                        type="text"
+                                        value={exhibitorSearch}
+                                        onChange={(e) => setExhibitorSearch(e.target.value)}
+                                        placeholder="Search exhibitors by company name, booth, or country..."
+                                        className="w-full bg-zinc-900/50 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all placeholder:text-zinc-600"
+                                    />
+                                </div>
+                            )}
                             {loadingExhibitors ? (
                                 <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-4">
                                     <motion.div
@@ -564,22 +580,55 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                                     <p className="text-lg font-medium">No exhibitors found</p>
                                     <p className="text-sm opacity-60">There are no exhibitors linked to this event.</p>
                                 </div>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-3">
-                                    {exhibitors.map((item: any) => {
-                                        // Helper to safely get display value from any field
-                                        const getValue = (val: any) => {
-                                            if (!val) return null;
-                                            if (typeof val === 'object') return val.display_value || val.value || JSON.stringify(val);
-                                            return val;
-                                        };
+                            ) : (() => {
+                                // Filter exhibitors based on search
+                                const getValue = (val: any) => {
+                                    if (!val) return '';
+                                    if (typeof val === 'object') return val.display_value || val.value || '';
+                                    return String(val);
+                                };
 
-                                        const companyName = getValue(item.Company);
-                                        const booth = getValue(item.Booth_No);
-                                        const year = getValue(item.Attended_year1);
-                                        const size = getValue(item.last_edition_booth_sqm);
-                                        const country = getValue(item.Country);
-                                        const websiteUrl = item.Website?.url || item.Website;
+                                const filteredExhibitors = exhibitors.filter((item: any) => {
+                                    if (!exhibitorSearch.trim()) return true;
+                                    
+                                    const searchLower = exhibitorSearch.toLowerCase().trim();
+                                    const companyName = getValue(item.Company).toLowerCase();
+                                    const booth = getValue(item.Booth_No).toLowerCase();
+                                    const country = getValue(item.Country).toLowerCase();
+                                    
+                                    return companyName.includes(searchLower) || 
+                                           booth.includes(searchLower) || 
+                                           country.includes(searchLower);
+                                });
+
+                                if (filteredExhibitors.length === 0) {
+                                    return (
+                                        <div className="flex flex-col items-center justify-center py-12 text-zinc-500 gap-3">
+                                            <Search className="w-8 h-8 opacity-40" />
+                                            <p className="text-sm font-medium">No exhibitors found</p>
+                                            <p className="text-xs opacity-60">
+                                                {exhibitorSearch.trim() ? 'Try adjusting your search terms' : 'There are no exhibitors linked to this event.'}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {filteredExhibitors.map((item: any) => {
+                                            // Helper to safely get display value from any field
+                                            const getDisplayValue = (val: any) => {
+                                                if (!val) return null;
+                                                if (typeof val === 'object') return val.display_value || val.value || JSON.stringify(val);
+                                                return val;
+                                            };
+
+                                            const companyName = getDisplayValue(item.Company);
+                                            const booth = getDisplayValue(item.Booth_No);
+                                            const year = getDisplayValue(item.Attended_year1);
+                                            const size = getDisplayValue(item.last_edition_booth_sqm);
+                                            const country = getDisplayValue(item.Country);
+                                            const websiteUrl = item.Website?.url || item.Website;
 
                                         return (
                                             <div key={item.ID} className="group p-4 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-orange-500/20 rounded-xl transition-all duration-300 flex items-center justify-between">
@@ -608,7 +657,8 @@ export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onCl
                                         );
                                     })}
                                 </div>
-                            )}
+                            );
+                        })()}
                         </div>
                     )}
                 </div>

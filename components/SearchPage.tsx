@@ -356,7 +356,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                 )}
 
                                 <SoftInput label="Location" placeholder="e.g. New York" value={filters.location} onChange={(e: any) => setFilters({ ...filters, location: e.target.value })} />
-                                <SoftInput label="Keywords" placeholder="e.g. SaaS, B2B, Marketing" value={filters.keywords} onChange={(e: any) => setFilters({ ...filters, keywords: e.target.value })} />
 
                                 {searchType === 'people' && (
                                     <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-md border border-white/5">

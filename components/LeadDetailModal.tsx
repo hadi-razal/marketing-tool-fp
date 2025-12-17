@@ -455,10 +455,21 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                             </h3>
                                             <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-6 space-y-6">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                                                    {(localLead.company_logo || (localLead as any).company_logo_url) ? (
+                                                        <img 
+                                                            src={localLead.company_logo || (localLead as any).company_logo_url} 
+                                                            alt={localLead.company || 'Company logo'}
+                                                            className="w-12 h-12 rounded-xl object-cover border border-white/10"
+                                                            onError={(e) => {
+                                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                                            }}
+                                                        />
+                                                    ) : null}
+                                                    <div className={`w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0 ${(localLead.company_logo || (localLead as any).company_logo_url) ? 'hidden' : ''}`}>
                                                         <Building2 className="w-6 h-6 text-orange-500" />
                                                     </div>
-                                                    <div className="min-w-0">
+                                                    <div className="min-w-0 flex-1">
                                                         <p className="text-lg font-bold text-white truncate">{localLead.company || localLead.organization_name}</p>
                                                         {(localLead.website || localLead.company_website || localLead.organization_domain) && (
                                                             <a
@@ -471,7 +482,29 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 <ExternalLink className="w-3 h-3" />
                                                             </a>
                                                         )}
+                                                        {localLead.company_id && (
+                                                            <p className="text-xs text-zinc-600 mt-1">ID: {localLead.company_id}</p>
+                                                        )}
                                                     </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {localLead.company_industry && (
+                                                        <div>
+                                                            <p className="text-xs text-zinc-500 mb-1">Industry</p>
+                                                            <p className="text-sm text-white font-medium">{localLead.company_industry}</p>
+                                                        </div>
+                                                    )}
+                                                    {localLead.company_size && (
+                                                        <div>
+                                                            <p className="text-xs text-zinc-500 mb-1">Company Size</p>
+                                                            <p className="text-sm text-white font-medium">
+                                                                {typeof localLead.company_size === 'number' 
+                                                                    ? localLead.company_size.toLocaleString() 
+                                                                    : localLead.company_size}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="flex flex-wrap gap-2">
@@ -485,18 +518,140 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                             {dept}
                                                         </span>
                                                     ))}
-                                                    {localLead.company_industry && (
-                                                        <span className="text-xs font-bold px-3 py-1.5 bg-zinc-800 text-zinc-400 rounded-lg border border-white/5 uppercase tracking-wide">
-                                                            {localLead.company_industry}
+                                                    {localLead.functions?.map((func: string, i: number) => (
+                                                        <span key={i} className="text-xs font-bold px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg border border-cyan-500/20 uppercase tracking-wide">
+                                                            {func}
                                                         </span>
-                                                    )}
+                                                    ))}
                                                 </div>
                                             </div>
                                         </section>
+
+                                        {/* Location Details */}
+                                        {(localLead.city || localLead.state || localLead.country) && (
+                                            <section>
+                                                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                                    <span className="w-8 h-[1px] bg-zinc-800"></span> Location
+                                                </h3>
+                                                <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-6">
+                                                    <div className="grid grid-cols-3 gap-4">
+                                                        {localLead.city && (
+                                                            <div>
+                                                                <p className="text-xs text-zinc-500 mb-1">City</p>
+                                                                <p className="text-sm text-white font-medium">{localLead.city}</p>
+                                                            </div>
+                                                        )}
+                                                        {localLead.state && (
+                                                            <div>
+                                                                <p className="text-xs text-zinc-500 mb-1">State</p>
+                                                                <p className="text-sm text-white font-medium">{localLead.state}</p>
+                                                            </div>
+                                                        )}
+                                                        {localLead.country && (
+                                                            <div>
+                                                                <p className="text-xs text-zinc-500 mb-1">Country</p>
+                                                                <p className="text-sm text-white font-medium">{localLead.country}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </section>
+                                        )}
+
+                                        {/* Social Media */}
+                                        {(localLead.linkedin || localLead.linkedin_url || localLead.twitter || localLead.twitter_url || localLead.facebook || localLead.facebook_url || localLead.github || localLead.github_url) && (
+                                            <section>
+                                                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                                    <span className="w-8 h-[1px] bg-zinc-800"></span> Social Media
+                                                </h3>
+                                                <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-6">
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {(localLead.linkedin || localLead.linkedin_url) && (
+                                                            <a
+                                                                href={getSocialLink(localLead.linkedin || localLead.linkedin_url || '') || '#'}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-400 hover:text-blue-300 transition-all"
+                                                            >
+                                                                <Linkedin className="w-4 h-4" />
+                                                                <span className="text-sm font-medium">LinkedIn</span>
+                                                                <ExternalLink className="w-3 h-3" />
+                                                            </a>
+                                                        )}
+                                                        {(localLead.twitter || localLead.twitter_url) && (
+                                                            <a
+                                                                href={getSocialLink(localLead.twitter || localLead.twitter_url || '') || '#'}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="flex items-center gap-2 px-4 py-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-400 hover:text-sky-300 transition-all"
+                                                            >
+                                                                <span className="text-sm font-medium">Twitter</span>
+                                                                <ExternalLink className="w-3 h-3" />
+                                                            </a>
+                                                        )}
+                                                        {(localLead.facebook || localLead.facebook_url) && (
+                                                            <a
+                                                                href={getSocialLink(localLead.facebook || localLead.facebook_url || '') || '#'}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg text-indigo-400 hover:text-indigo-300 transition-all"
+                                                            >
+                                                                <span className="text-sm font-medium">Facebook</span>
+                                                                <ExternalLink className="w-3 h-3" />
+                                                            </a>
+                                                        )}
+                                                        {(localLead.github || localLead.github_url) && (
+                                                            <a
+                                                                href={getSocialLink(localLead.github || localLead.github_url || '') || '#'}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="flex items-center gap-2 px-4 py-2 bg-zinc-700/50 hover:bg-zinc-700/70 border border-white/10 rounded-lg text-white hover:text-white transition-all"
+                                                            >
+                                                                <span className="text-sm font-medium">GitHub</span>
+                                                                <ExternalLink className="w-3 h-3" />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </section>
+                                        )}
                                     </div>
 
                                     {/* Sidebar Info Column */}
                                     <div className="space-y-6">
+                                        {/* Personal Info */}
+                                        {(localLead.first_name || localLead.last_name || localLead.score) && (
+                                            <div className="bg-zinc-900/50 rounded-2xl p-6 border border-white/5 space-y-4">
+                                                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Personal Info</h3>
+                                                {localLead.first_name && (
+                                                    <div>
+                                                        <p className="text-xs text-zinc-500 mb-1">First Name</p>
+                                                        <p className="text-sm text-white font-medium">{localLead.first_name}</p>
+                                                    </div>
+                                                )}
+                                                {localLead.last_name && (
+                                                    <div>
+                                                        <p className="text-xs text-zinc-500 mb-1">Last Name</p>
+                                                        <p className="text-sm text-white font-medium">{localLead.last_name}</p>
+                                                    </div>
+                                                )}
+                                                {localLead.score && (
+                                                    <div>
+                                                        <p className="text-xs text-zinc-500 mb-1">Lead Score</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex-1 bg-zinc-800 rounded-full h-2 overflow-hidden">
+                                                                <div 
+                                                                    className="h-full bg-gradient-to-r from-orange-500 to-orange-400 transition-all"
+                                                                    style={{ width: `${localLead.score}%` }}
+                                                                />
+                                                            </div>
+                                                            <span className="text-sm font-bold text-orange-400">{localLead.score}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <div className="bg-zinc-900/50 rounded-2xl p-6 border border-white/5 space-y-5">
                                             <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Contact Details</h3>
 

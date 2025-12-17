@@ -4,21 +4,44 @@ import { Building2, MapPin, Mail, Phone, Check, Linkedin } from 'lucide-react';
 interface Lead {
     id: string;
     name?: string;
+    first_name?: string;
+    last_name?: string;
     title?: string;
+    headline?: string;
     company?: string;
     organization_name?: string;
+    company_id?: string;
     website?: string;
+    company_website?: string;
+    organization_domain?: string;
+    company_logo?: string;
+    company_industry?: string;
+    company_size?: string | number;
     location?: string;
+    city?: string;
+    state?: string;
+    country?: string;
     email?: string;
     phone?: string;
     linkedin?: string;
+    linkedin_url?: string;
+    twitter?: string;
+    twitter_url?: string;
+    facebook?: string;
+    facebook_url?: string;
+    github?: string;
+    github_url?: string;
     image?: string;
     photo_url?: string;
     status?: string;
     email_status?: string;
     group_name?: string;
     score?: number;
+    seniority?: string;
+    departments?: string[];
+    functions?: string[];
     isSaved?: boolean;
+    description?: string;
 }
 
 interface ProfileCardProps {

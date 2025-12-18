@@ -6,6 +6,7 @@ interface Lead {
     name?: string;
     first_name?: string;
     last_name?: string;
+    last_name_obfuscated?: string;
     title?: string;
     headline?: string;
     company?: string;
@@ -83,18 +84,89 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
 };
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, actionIcon: ActionIcon, onClick, isSaved, actionType = 'save' }) => {
-    // Normalize data
-    const name = lead.name || 'Unknown';
+    // Normalize data - handle initial search response format
+    const firstName = lead.first_name || '';
+    const lastName = lead.last_name || '';
+    const name = lead.name || (firstName && lastName ? `${firstName} ${lastName}` : firstName || 'Unknown');
     const title = lead.title || 'No Title';
     const company = lead.company || lead.organization_name || 'Unknown Company';
     const location = lead.location || '';
     const email = lead.email || 'N/A';
     const phone = lead.phone || 'N/A';
     const image = lead.photo_url || lead.image;
-    const linkedin = lead.linkedin;
+    const linkedin = lead.linkedin || lead.linkedin_url;
     const isVerified = lead.status === 'Verified' || lead.email_status === 'verified';
     const saved = isSaved || lead.isSaved;
 
+    // Check if this is a limited data card (from initial search)
+    const hasLimitedData = !saved && (
+        email === 'Available (Unlock)' ||
+        phone === 'Available (Unlock)' ||
+        (email === 'N/A' && phone === 'N/A') ||
+        (lead.first_name && !lead.last_name && lead.last_name_obfuscated) ||
+        lead.last_name_obfuscated
+    );
+
+    // Simple card design for unsaved/limited data
+    if (!saved && hasLimitedData) {
+        return (
+            <div
+                onClick={onClick}
+                className="group relative bg-[#0c0c0d] border border-white/5 rounded-xl overflow-hidden cursor-pointer hover:border-white/10 transition-all duration-300 flex flex-col h-[280px]"
+            >
+                {/* Simple Header */}
+                <div className="p-4 flex items-start gap-3">
+                    <div className="relative shrink-0">
+                        <Avatar
+                            key={image || 'default'}
+                            src={image}
+                            name={name}
+                            className="w-10 h-10 rounded-lg object-cover border border-white/10"
+                            alt={name}
+                        />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-white font-semibold text-sm truncate group-hover:text-orange-400 transition-colors">
+                            {name}
+                        </h3>
+                        <p className="text-zinc-500 text-xs truncate mt-0.5">{title}</p>
+                    </div>
+                </div>
+
+                {/* Simple Tags */}
+                <div className="px-4 flex flex-wrap gap-1.5 mb-3">
+                    <span className="inline-flex items-center gap-1.5 bg-white/5 text-zinc-400 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                        <Building2 className="w-3 h-3 text-orange-500" />
+                        <span className="truncate max-w-[120px]">{company}</span>
+                    </span>
+                    {location && (
+                        <span className="inline-flex items-center gap-1.5 bg-white/5 text-zinc-400 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                            <MapPin className="w-3 h-3 text-blue-500" />
+                            <span className="truncate max-w-[100px]">{location}</span>
+                        </span>
+                    )}
+                </div>
+
+                {/* Limited Info Message */}
+                <div className="mt-auto px-4 pb-4">
+                    <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
+                        <p className="text-[10px] text-orange-400 font-medium text-center">
+                            Click to view details and save
+                        </p>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-4 py-2 border-t border-white/5 bg-black/30">
+                    <span className="text-[9px] text-zinc-600 font-mono truncate">
+                        ID: {lead.id?.substring(0, 20)}
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
+    // Rich card design for saved leads
     return (
         <div
             onClick={onClick}
@@ -122,21 +194,20 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                 </div>
                 {onAction && ActionIcon && (
                     <button
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
+                        onClick={(e) => {
+                            e.stopPropagation();
                             // Allow delete action even when saved, but only allow save when not saved
                             if (actionType === 'delete' || !saved) {
-                                onAction(lead); 
+                                onAction(lead);
                             }
                         }}
                         disabled={actionType === 'save' && saved}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${
-                            actionType === 'delete' 
-                                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
-                                : saved
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
-                        }`}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${actionType === 'delete'
+                            ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                            : saved
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
+                            }`}
                         title={actionType === 'delete' ? 'Delete person' : saved ? 'Already saved' : 'Save person'}
                     >
                         {actionType === 'delete' ? (

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter, Building2, Users, Download
+    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter, Building2, Users, Download, X, ChevronDown
 } from 'lucide-react';
 import { SoftInput } from './ui/Input';
 import { ProfileCard } from './ProfileCard';
@@ -42,10 +42,45 @@ interface SearchPageProps {
     onSave: (leads: any[]) => void;
 }
 
+// Common job titles for multi-select
+const JOB_TITLES = [
+    'CEO', 'CTO', 'CFO', 'CMO', 'COO', 'President', 'Founder', 'Co-Founder',
+    'VP of Sales', 'VP of Marketing', 'VP of Engineering', 'VP of Product',
+    'Director of Sales', 'Director of Marketing', 'Director of Engineering',
+    'Sales Manager', 'Marketing Manager', 'Product Manager', 'Engineering Manager',
+    'Head of Sales', 'Head of Marketing', 'Head of Product', 'Head of Engineering',
+    'Senior Sales', 'Senior Marketing', 'Senior Engineer', 'Senior Product Manager',
+    'Business Development Manager', 'Account Manager', 'Sales Representative',
+    'Marketing Director', 'Product Director', 'Engineering Director',
+    'Chief Revenue Officer', 'Chief Technology Officer', 'Chief Marketing Officer',
+    'Managing Director', 'General Manager', 'Operations Manager'
+];
+
 export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
+    // NOTE: mode state kept for future bulk import feature, but UI only shows 'search' mode
     const [mode, setMode] = useState<'search' | 'import'>('search');
     const [searchType, setSearchType] = useState<'people' | 'companies'>('people');
-    const [filters, setFilters] = useState({ company: '', website: '', title: '', location: '', keywords: '', quantity: 9 });
+    const [filters, setFilters] = useState({ company: '', website: '', titles: [] as string[], location: '', keywords: '', quantity: 9 });
+    const [isJobTitleDropdownOpen, setIsJobTitleDropdownOpen] = useState(false);
+    const jobTitleDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (jobTitleDropdownRef.current && !jobTitleDropdownRef.current.contains(event.target as Node)) {
+                setIsJobTitleDropdownOpen(false);
+            }
+        };
+
+        if (isJobTitleDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isJobTitleDropdownOpen]);
+
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [results, setResults] = useState<any[]>([]);
@@ -69,10 +104,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
         try {
             const endpoint = searchType === 'people' ? '/api/apollo/search' : '/api/apollo/companies';
+            // Convert titles array to comma-separated string for API
+            const apiFilters = {
+                ...filters,
+                title: filters.titles.join(','), // Convert array to comma-separated string
+                page: 1
+            };
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...filters, page: 1 }), // Send page 1
+                body: JSON.stringify(apiFilters),
             });
 
             const data = await response.json();
@@ -195,22 +236,83 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
     };
 
     const handleSavePerson = async (person: any) => {
-        try {
-            await databaseService.savePerson(person);
+        let loadingToastId: string | number | undefined;
 
-            // Update local state to reflect saved status
-            setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+        try {
+            // First, fetch full person data if we have limited data
+            let fullPersonData = person;
+
+            // Check if we need to fetch full data (has obfuscated name or unlock messages)
+            const needsFullData = person.last_name_obfuscated ||
+                person.email === 'Available (Unlock)' ||
+                person.phone === 'Available (Unlock)' ||
+                (!person.email || person.email === 'N/A') ||
+                (!person.phone || person.phone === 'N/A');
+
+            if (needsFullData) {
+                loadingToastId = toast.loading('Fetching full person data...');
+
+                try {
+                    // Fetch full data using enrich endpoint with timeout
+                    const enrichController = new AbortController();
+                    const timeoutId = setTimeout(() => enrichController.abort(), 30000); // 30 second timeout
+
+                    const enrichResponse = await fetch('/api/apollo/enrich', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: person.id,
+                            reveal_email: true,
+                            reveal_phone: true
+                        }),
+                        signal: enrichController.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (enrichResponse.ok) {
+                        const enrichData = await enrichResponse.json();
+                        fullPersonData = { ...person, ...enrichData.lead };
+                    } else {
+                        // If enrich fails, try to save with available data
+                        console.warn('Failed to enrich person, saving with available data');
+                    }
+                } catch (enrichError: any) {
+                    if (enrichError.name === 'AbortError') {
+                        console.warn('Enrich request timed out, saving with available data');
+                    } else {
+                        console.warn('Failed to enrich person, saving with available data:', enrichError);
+                    }
+                } finally {
+                    // Dismiss loading toast
+                    if (loadingToastId) {
+                        toast.dismiss(loadingToastId);
+                    }
+                }
+            }
+
+            // Save to database
+            await databaseService.savePerson(fullPersonData);
+
+            // Update local state to reflect saved status with full data
+            const updatedPerson = { ...fullPersonData, isSaved: true };
+            setResults(prev => prev.map(p => p.id === person.id ? updatedPerson : p));
             if (selectedLead && selectedLead.id === person.id) {
-                setSelectedLead({ ...selectedLead, isSaved: true });
+                setSelectedLead(updatedPerson);
             }
 
             toast.success('Person saved to database');
         } catch (error) {
             console.error('Failed to save person:', error);
+            // Dismiss loading toast if still showing
+            if (loadingToastId) {
+                toast.dismiss(loadingToastId);
+            }
             toast.error('Failed to save person');
         }
     };
 
+    // NOTE: Bulk Import functionality - kept for future use but not currently active in UI
     const processFile = async (file: File) => {
         setLoading(true);
         setProcessingStatus('Parsing file...');
@@ -237,23 +339,32 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
         if (results.length === 0) return;
 
         let savedCount = 0;
-        toast.loading(`Saving ${results.length} people...`);
+        const loadingToastId = toast.loading(`Saving ${results.length} people...`);
 
-        for (const person of results) {
-            if (person.isSaved) continue;
-            try {
-                await databaseService.savePerson(person);
-                savedCount++;
-                setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
-            } catch (error) {
-                console.error(`Failed to save ${person.name}:`, error);
+        try {
+            for (const person of results) {
+                if (person.isSaved) continue;
+                try {
+                    await databaseService.savePerson(person);
+                    savedCount++;
+                    setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+                } catch (error) {
+                    console.error(`Failed to save ${person.name}:`, error);
+                }
             }
-        }
 
-        if (savedCount > 0) {
-            toast.success(`Successfully saved ${savedCount} people`);
-        } else {
-            toast.info('All visible people are already saved');
+            // Dismiss loading toast
+            toast.dismiss(loadingToastId);
+
+            if (savedCount > 0) {
+                toast.success(`Successfully saved ${savedCount} people`);
+            } else {
+                toast.info('All visible people are already saved');
+            }
+        } catch (error) {
+            // Dismiss loading toast on error
+            toast.dismiss(loadingToastId);
+            toast.error('Failed to save some people');
         }
     };
 
@@ -306,101 +417,291 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             )}
 
             {/* Search Sidebar / Panel */}
-            <div className="w-full lg:w-80 flex-shrink-0 flex flex-col gap-6">
-                <div className="bg-[#09090b] border border-white/5 rounded-md p-6">
-                    <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-md border border-white/5 mb-6">
-                        <button
-                            onClick={() => setMode('search')}
-                            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${mode === 'search' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
-                        >
-                            Manual Search
-                        </button>
-                        <button
-                            onClick={() => setMode('import')}
-                            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${mode === 'import' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
-                        >
-                            Bulk Import
-                        </button>
-                    </div>
+            <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
+                <div className="bg-gradient-to-br from-[#09090b] via-[#0a0a0d] to-[#09090b] border border-white/10 rounded-2xl p-6 shadow-2xl shadow-black/50 backdrop-blur-sm">
+                    {/* NOTE: Bulk Import mode removed from UI - code kept below for future use */}
+                    {/* Mode toggle removed - only Manual Search is available now */}
 
+                    {/* Manual Search Mode - Always Active */}
                     {mode === 'search' ? (
-                        <div className="space-y-4">
-                            <div className="flex gap-2 mb-6">
+                        <div className="space-y-5">
+                            {/* Search Type Toggle - Redesigned */}
+                            <div className="grid grid-cols-2 gap-2.5 p-1 bg-zinc-950/60 rounded-xl border border-white/10">
                                 <button
                                     onClick={() => { setSearchType('people'); setResults([]); }}
-                                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${searchType === 'people' ? 'bg-zinc-800 border-orange-500 text-orange-500' : 'bg-transparent border-white/10 text-zinc-500 hover:border-white/20'}`}
+                                    className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'people'
+                                        ? 'bg-gradient-to-br from-orange-500/20 to-red-600/20 border-2 border-orange-500/50 text-orange-400 shadow-lg shadow-orange-500/20'
+                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                                        }`}
                                 >
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Users className="w-3 h-3" /> People
-                                    </div>
+                                    <Users className={`w-4 h-4 ${searchType === 'people' ? 'text-orange-400' : ''}`} />
+                                    <span>People</span>
                                 </button>
                                 <button
                                     onClick={() => { setSearchType('companies'); setResults([]); }}
-                                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${searchType === 'companies' ? 'bg-zinc-800 border-blue-500 text-blue-500' : 'bg-transparent border-white/10 text-zinc-500 hover:border-white/20'}`}
+                                    className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'companies'
+                                        ? 'bg-gradient-to-br from-blue-500/20 to-cyan-600/20 border-2 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/20'
+                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                                        }`}
                                 >
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Building2 className="w-3 h-3" /> Companies
-                                    </div>
+                                    <Building2 className={`w-4 h-4 ${searchType === 'companies' ? 'text-blue-400' : ''}`} />
+                                    <span>Companies</span>
                                 </button>
                             </div>
 
+                            {/* Search Button - Enhanced - Moved to Top */}
+                            <div>
+                                <button
+                                    onClick={handleSearch}
+                                    disabled={loading}
+                                    className="group relative w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-red-600 text-white font-bold text-sm shadow-2xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                                    {loading ? (
+                                        <>
+                                            <Loader2 className="animate-spin w-5 h-5 relative z-10" />
+                                            <span className="relative z-10">Searching...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Zap className="w-5 h-5 fill-white relative z-10 group-hover:rotate-12 transition-transform" />
+                                            <span className="relative z-10">{searchType === 'people' ? 'Find People' : 'Find Companies'}</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Form Fields - Enhanced */}
                             <div className="space-y-4">
-                                <SoftInput label="Company Name" placeholder="e.g. Acme Inc" value={filters.company} onChange={(e: any) => setFilters({ ...filters, company: e.target.value })} />
-                                <SoftInput label="Website Domain" placeholder="e.g. acme.com" value={filters.website} onChange={(e: any) => setFilters({ ...filters, website: e.target.value })} />
+                                <div className="relative">
+                                    <SoftInput
+                                        label="Company Name"
+                                        placeholder="e.g. Acme Inc"
+                                        value={filters.company}
+                                        onChange={(e: any) => setFilters({ ...filters, company: e.target.value })}
+                                        icon={<Building2 className="w-4 h-4" />}
+                                    />
+                                </div>
+
+                                <div className="relative">
+                                    <SoftInput
+                                        label="Website Domain"
+                                        placeholder="e.g. acme.com"
+                                        value={filters.website}
+                                        onChange={(e: any) => setFilters({ ...filters, website: e.target.value })}
+                                        icon={<LayoutGrid className="w-4 h-4" />}
+                                    />
+                                </div>
 
                                 {searchType === 'people' && (
                                     <>
-                                        <div className="w-full h-px bg-white/5 my-2"></div>
-                                        <SoftInput label="Job Title" placeholder="e.g. Founder" value={filters.title} onChange={(e: any) => setFilters({ ...filters, title: e.target.value })} />
+                                        <div className="relative my-4">
+                                            <div className="absolute inset-0 flex items-center">
+                                                <div className="w-full border-t border-white/10"></div>
+                                            </div>
+                                            <div className="relative flex justify-center">
+                                                <span className="bg-[#09090b] px-3 text-xs text-zinc-500 font-medium">Additional Filters</span>
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1 mb-2 block">
+                                                Job Title
+                                            </label>
+                                            <div className="relative" ref={jobTitleDropdownRef}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsJobTitleDropdownOpen(!isJobTitleDropdownOpen)}
+                                                    className="w-full bg-zinc-900/50 border border-zinc-800 text-white rounded-xl px-4 py-3.5 pl-11 pr-10 outline-none transition-all duration-200 placeholder:text-zinc-600 focus:border-orange-500/50 focus:bg-zinc-900 focus:shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] hover:border-zinc-700 flex items-center justify-between min-h-[55px]"
+                                                >
+                                                    <div className="flex items-center gap-2 flex-wrap flex-1">
+                                                        {filters.titles.length === 0 ? (
+                                                            <span className="text-zinc-600">Select job titles...</span>
+                                                        ) : (
+                                                            filters.titles.map((title) => (
+                                                                <span
+                                                                    key={title}
+                                                                    className="inline-flex items-center gap-1.5 bg-orange-500/20 text-orange-400 px-2.5 py-1 rounded-lg text-xs font-medium border border-orange-500/30"
+                                                                >
+                                                                    {title}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setFilters({
+                                                                                ...filters,
+                                                                                titles: filters.titles.filter(t => t !== title)
+                                                                            });
+                                                                        }}
+                                                                        className="hover:bg-orange-500/30 rounded-full p-0.5 transition-colors"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </span>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                    <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform duration-200 shrink-0 ${isJobTitleDropdownOpen ? 'rotate-180' : ''}`} />
+                                                </button>
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                                                    <User className="w-4 h-4" />
+                                                </div>
+
+                                                {isJobTitleDropdownOpen && (
+                                                    <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-h-64 overflow-y-auto custom-scrollbar">
+                                                        <div className="p-2">
+                                                            {JOB_TITLES.map((title) => {
+                                                                const isSelected = filters.titles.includes(title);
+                                                                return (
+                                                                    <button
+                                                                        key={title}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            if (isSelected) {
+                                                                                setFilters({
+                                                                                    ...filters,
+                                                                                    titles: filters.titles.filter(t => t !== title)
+                                                                                });
+                                                                            } else {
+                                                                                setFilters({
+                                                                                    ...filters,
+                                                                                    titles: [...filters.titles, title]
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                        className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all duration-200 ${isSelected
+                                                                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                                                                            : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                                                                            }`}
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span>{title}</span>
+                                                                            {isSelected && (
+                                                                                <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center">
+                                                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                                                                    </svg>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </>
                                 )}
 
-                                <SoftInput label="Location" placeholder="e.g. New York" value={filters.location} onChange={(e: any) => setFilters({ ...filters, location: e.target.value })} />
+                                <div className="relative">
+                                    <SoftInput
+                                        label="Location"
+                                        placeholder="e.g. New York, San Francisco"
+                                        value={filters.location}
+                                        onChange={(e: any) => setFilters({ ...filters, location: e.target.value })}
+                                        icon={<Filter className="w-4 h-4" />}
+                                    />
+                                </div>
 
                                 {searchType === 'people' && (
-                                    <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-md border border-white/5">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs font-semibold text-zinc-400 flex items-center gap-2"><User className="w-3 h-3" /> Max People</span>
-                                            <span className="bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{filters.quantity}</span>
+                                    <div className="relative bg-gradient-to-br from-zinc-950/80 to-zinc-900/40 p-5 rounded-xl border border-white/10 shadow-inner">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-xs font-bold text-zinc-300 flex items-center gap-2 uppercase tracking-wider">
+                                                <User className="w-3.5 h-3.5 text-orange-500" />
+                                                Max Results
+                                            </span>
+                                            <span className="bg-gradient-to-r from-orange-500/20 to-red-600/20 text-orange-400 px-3 py-1 rounded-full text-xs font-bold border border-orange-500/30">
+                                                {filters.quantity}
+                                            </span>
                                         </div>
-                                        <input type="range" min="1" max="20" value={filters.quantity} onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })} className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500" />
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="12"
+                                            value={filters.quantity}
+                                            onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
+                                            className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:cursor-pointer"
+                                        />
+                                        <p className="text-[10px] text-zinc-500 mt-2">Adjust the maximum number of results to fetch</p>
                                     </div>
                                 )}
                             </div>
-                            <div className="pt-4">
-                                <button onClick={handleSearch} disabled={loading} className="w-full py-3.5 rounded-md bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold text-sm shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Zap className="w-5 h-5 fill-white" />}
-                                    {loading ? 'Searching...' : 'Find Prospects'}
-                                </button>
-                            </div>
                         </div>
-                    ) : (
+                    ) : null}
+
+                    {/* BULK IMPORT MODE - NOT CURRENTLY IN USE */}
+                    {/* Code kept below for future implementation */}
+                    {false && mode === 'import' && (
                         <div className="flex flex-col gap-6">
-                            <div className="space-y-3 pt-2 bg-zinc-950/30 p-4 rounded-md border border-white/5">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs font-semibold text-zinc-400 flex items-center gap-2"><Sliders className="w-3 h-3" /> People Per Company</span>
-                                    <span className="bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{filters.quantity}</span>
+                            {/* Quantity Slider - Enhanced */}
+                            <div className="relative bg-gradient-to-br from-zinc-950/80 to-zinc-900/40 p-5 rounded-xl border border-white/10 shadow-inner">
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-xs font-bold text-zinc-300 flex items-center gap-2 uppercase tracking-wider">
+                                        <Sliders className="w-3.5 h-3.5 text-orange-500" />
+                                        People Per Company
+                                    </span>
+                                    <span className="bg-gradient-to-r from-orange-500/20 to-red-600/20 text-orange-400 px-3 py-1 rounded-full text-xs font-bold border border-orange-500/30">
+                                        {filters.quantity}
+                                    </span>
                                 </div>
-                                <p className="text-[10px] text-zinc-500">If you upload 10 companies, we will fetch {filters.quantity * 10} leads total.</p>
-                                <input type="range" min="1" max="20" value={filters.quantity} onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })} className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500" />
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="12"
+                                    value={filters.quantity}
+                                    onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
+                                    className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:cursor-pointer"
+                                />
+                                <p className="text-[10px] text-zinc-500 mt-2">
+                                    If you upload <span className="text-orange-400 font-semibold">10 companies</span>, we will fetch <span className="text-orange-400 font-semibold">{filters.quantity * 10} leads</span> total.
+                                </p>
                             </div>
+
+                            {/* Upload Area - Enhanced */}
                             {loading ? (
-                                <div className="flex flex-col items-center justify-center text-center space-y-4 py-8">
-                                    <div className="w-12 h-12 rounded-full border-4 border-zinc-800 border-t-orange-500 animate-spin"></div>
+                                <div className="flex flex-col items-center justify-center text-center space-y-5 py-12">
+                                    <div className="relative">
+                                        <div className="absolute inset-0 bg-orange-500/20 blur-2xl rounded-full animate-pulse" />
+                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-orange-500/30 flex items-center justify-center relative z-10 shadow-2xl">
+                                            <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+                                        </div>
+                                    </div>
                                     <div>
-                                        <p className="text-white font-bold text-sm">{processingStatus}</p>
-                                        <p className="text-zinc-500 text-xs mt-1">Simulating API lookup...</p>
+                                        <p className="text-white font-bold text-base mb-1">{processingStatus}</p>
+                                        <p className="text-zinc-500 text-xs">Processing your file...</p>
                                     </div>
                                 </div>
                             ) : (
-                                <div className={`border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center p-8 transition-all cursor-pointer ${dragActive ? 'border-orange-500 bg-orange-500/10' : 'border-zinc-700 bg-zinc-900/30 hover:border-zinc-600 hover:bg-zinc-800/50'}`} onDragOver={(e) => { e.preventDefault(); setDragActive(true) }} onDragLeave={() => setDragActive(false)} onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); }}>
-                                    <UploadCloud className={`w-10 h-10 mb-3 ${dragActive ? 'text-orange-500' : 'text-zinc-500'}`} />
-                                    <p className="text-white font-bold text-sm mb-1">Drop Company List</p>
-                                    <p className="text-zinc-500 text-[10px] mb-4">CSV with 'Company', 'Domain'</p>
-                                    <label className="bg-white text-black px-4 py-2 rounded-lg font-bold text-xs cursor-pointer hover:bg-zinc-200 transition-colors">
-                                        Browse Files
-                                        <input type="file" className="hidden" accept=".csv,.xlsx" onChange={(e: any) => e.target.files[0] && processFile(e.target.files[0])} />
-                                    </label>
+                                <div
+                                    className={`group relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center p-10 transition-all duration-300 cursor-pointer overflow-hidden ${dragActive
+                                        ? 'border-orange-500 bg-gradient-to-br from-orange-500/20 to-red-600/20 shadow-2xl shadow-orange-500/20 scale-[1.02]'
+                                        : 'border-zinc-700/50 bg-gradient-to-br from-zinc-900/40 to-zinc-950/40 hover:border-orange-500/50 hover:bg-zinc-900/60 hover:shadow-xl hover:shadow-orange-500/10'
+                                        }`}
+                                    onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
+                                    onDragLeave={() => setDragActive(false)}
+                                    onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); }}
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                    <div className="relative z-10">
+                                        <div className={`mb-4 transition-all duration-300 ${dragActive ? 'scale-110 text-orange-500' : 'text-zinc-500 group-hover:text-orange-500/70'}`}>
+                                            <UploadCloud className="w-12 h-12 mx-auto" />
+                                        </div>
+                                        <p className="text-white font-bold text-base mb-2">Drop Company List</p>
+                                        <p className="text-zinc-500 text-xs mb-6 max-w-xs">
+                                            Upload a CSV or Excel file with <span className="text-orange-400 font-semibold">'Company'</span> and <span className="text-orange-400 font-semibold">'Domain'</span> columns
+                                        </p>
+                                        <label className="inline-flex items-center gap-2 bg-gradient-to-r from-white to-zinc-100 text-black px-6 py-3 rounded-xl font-bold text-sm cursor-pointer hover:from-zinc-100 hover:to-zinc-200 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95">
+                                            <UploadCloud className="w-4 h-4" />
+                                            <span>Browse Files</span>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept=".csv,.xlsx"
+                                                onChange={(e: any) => e.target.files[0] && processFile(e.target.files[0])}
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             )}
                         </div>

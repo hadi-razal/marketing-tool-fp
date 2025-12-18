@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, User, Sparkles, XCircle, Clock } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, Sparkles, XCircle, Clock, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
@@ -7,14 +7,29 @@ import { createClient } from '@/lib/supabase';
 import { getBrandColor } from '@/lib/utils';
 import { toast } from 'sonner';
 
+// Extended interface to include all possible properties
+interface ExtendedSavedPerson extends SavedPerson {
+    image?: string;
+    isSaved?: boolean;
+    saved_by?: string;
+    saved_by_profile_url?: string;
+    twitter?: string;
+    facebook?: string;
+    github?: string;
+    company_logo?: string;
+    company_logo_url?: string;
+    comments?: Comment[];
+    last_name_obfuscated?: string;
+}
+
 interface LeadDetailModalProps {
-    lead: SavedPerson & { image?: string; isSaved?: boolean; saved_by?: string; saved_by_profile_url?: string };
+    lead: ExtendedSavedPerson;
     onClose: () => void;
-    onUnlock?: (lead: SavedPerson, type: 'email' | 'phone') => Promise<any>;
+    onUnlock?: (lead: SavedPerson, type: 'email' | 'phone') => Promise<SavedPerson | null>;
 }
 
 // Helper for date formatting
-const formatCommentDate = (dateString: string) => {
+const formatCommentDate = (dateString: string): string => {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return '';
 
@@ -33,16 +48,29 @@ const formatCommentDate = (dateString: string) => {
     return formatDistanceToNow(date, { addSuffix: true });
 };
 
-const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name: string, className?: string }) => {
+interface AvatarProps {
+    src?: string;
+    alt: string;
+    name: string;
+    className?: string;
+}
+
+const Avatar: React.FC<AvatarProps> = ({ src, alt, name, className }) => {
     const [imageError, setImageError] = useState(false);
 
     // Check if we have a valid image URL
-    const hasValidSrc = src && src.trim() !== '' && !imageError;
+    const hasValidSrc = Boolean(src && src.trim() !== '' && !imageError);
 
     // Generate initials for fallback
-    const initials = name
-        ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-        : 'U';
+    const initials = useMemo(() => {
+        if (!name) return 'U';
+        return name
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .substring(0, 2)
+            .toUpperCase();
+    }, [name]);
 
     if (hasValidSrc) {
         return (
@@ -63,19 +91,27 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
 };
 
 export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose, onUnlock }) => {
-    const [localLead, setLocalLead] = useState(lead);
+    const [localLead, setLocalLead] = useState<ExtendedSavedPerson>(lead);
     const [activeTab, setActiveTab] = useState<'overview' | 'comments' | 'actions'>('overview');
+
+    // Redirect to overview if lead is not saved and user is on actions tab
+    useEffect(() => {
+        if (activeTab === 'actions' && !localLead.isSaved) {
+            setActiveTab('overview');
+        }
+    }, [activeTab, localLead.isSaved]);
     const [isUnlockingEmail, setIsUnlockingEmail] = useState(false);
     const [isUnlockingPhone, setIsUnlockingPhone] = useState(false);
-    const [contactStatus, setContactStatus] = useState(lead?.contact_status || 'New');
+    const [contactStatus, setContactStatus] = useState<string>(lead?.contact_status || 'New');
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Comment state
     const [localComments, setLocalComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [isPostingComment, setIsPostingComment] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [replyingTo, setReplyingTo] = useState<{ id: string, userName: string, text: string, userProfileUrl?: string } | null>(null);
+    const [replyingTo, setReplyingTo] = useState<{ id: string; userName: string; text: string; userProfileUrl?: string } | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
     const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -92,24 +128,31 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         replyId: null
     });
 
-    const brandColor = getBrandColor(localLead?.name || 'Lead');
+    const brandColor = useMemo(() => getBrandColor(localLead?.name || 'Lead'), [localLead?.name]);
 
+    // Update local lead when prop changes
     useEffect(() => {
         setLocalLead(lead);
         setContactStatus(lead?.contact_status || 'New');
     }, [lead]);
 
+    // Fetch current user
     useEffect(() => {
         const fetchUser = async () => {
-            const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                setCurrentUserId(user.id);
+            try {
+                const supabase = createClient();
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    setCurrentUserId(user.id);
+                }
+            } catch (error) {
+                console.error('Failed to fetch user:', error);
             }
         };
         fetchUser();
     }, []);
 
+    // Fetch comments when lead changes
     useEffect(() => {
         // Reset comments when lead changes
         setLocalComments([]);
@@ -132,6 +175,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         fetchComments();
     }, [localLead?.id, localLead?.isSaved]);
 
+    // Scroll to bottom when comments tab is active
     useEffect(() => {
         if (activeTab === 'comments') {
             setTimeout(() => {
@@ -140,12 +184,14 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         }
     }, [activeTab, localComments.length]);
 
-    const handleStatusUpdate = async (newStatus: string) => {
+    const handleStatusUpdate = useCallback(async (newStatus: string) => {
+        if (!localLead?.id) return;
+
         setIsUpdatingStatus(true);
         try {
             await databaseService.updatePersonStatus(localLead.id, newStatus);
             setContactStatus(newStatus);
-            setLocalLead(prev => ({ ...prev, contact_status: newStatus }));
+            setLocalLead(prev => prev ? { ...prev, contact_status: newStatus } : prev);
             toast.success(`Status updated to ${newStatus}`);
         } catch (error) {
             console.error('Failed to update status:', error);
@@ -153,16 +199,21 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         } finally {
             setIsUpdatingStatus(false);
         }
-    };
-
-    const STATUS_OPTIONS = ['New', 'Contacted', 'In Progress', 'Qualified', 'Unqualified', 'Need a Follow Up'];
+    }, [localLead?.id]);
 
     if (!localLead) return null;
 
-    const isEmailLocked = !localLead.email || localLead.email === 'email_not_unlocked@domain.com' || localLead.email.includes('email_not_unlocked');
-    const isPhoneLocked = !localLead.phone || localLead.phone === 'N/A';
+    const isEmailLocked = useMemo(() => {
+        return !localLead.email ||
+            localLead.email === 'email_not_unlocked@domain.com' ||
+            localLead.email.includes('email_not_unlocked');
+    }, [localLead.email]);
 
-    const handleUnlockClick = async (type: 'email' | 'phone') => {
+    const isPhoneLocked = useMemo(() => {
+        return !localLead.phone || localLead.phone === 'N/A';
+    }, [localLead.phone]);
+
+    const handleUnlockClick = useCallback(async (type: 'email' | 'phone') => {
         if (!onUnlock) return;
 
         if (type === 'email') setIsUnlockingEmail(true);
@@ -171,40 +222,95 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         try {
             const unlockedLead = await onUnlock(localLead, type);
             if (unlockedLead) {
-                setLocalLead(unlockedLead);
+                setLocalLead(unlockedLead as ExtendedSavedPerson);
             }
         } catch (error) {
             console.error("Failed to unlock:", error);
+            toast.error(`Failed to unlock ${type}. Please try again.`);
         } finally {
             setIsUnlockingEmail(false);
             setIsUnlockingPhone(false);
         }
-    };
+    }, [onUnlock, localLead]);
 
-    const getEmailStatusColor = (status: string) => {
-        switch (status) {
-            case 'verified': return 'text-green-400 bg-green-500/10 border-green-500/20';
-            case 'likely_valid': return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
-            default: return 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20';
+    const handleSave = useCallback(async () => {
+        if (localLead.isSaved) {
+            toast.info('This person is already saved');
+            return;
         }
-    };
 
-    const getSocialLink = (url: string) => {
+        setIsSaving(true);
+        let loadingToastId: string | number | undefined;
+
+        try {
+            // Check if we need to fetch full data
+            const needsFullData = (localLead as any).last_name_obfuscated ||
+                localLead.email === 'Available (Unlock)' ||
+                localLead.phone === 'Available (Unlock)' ||
+                (!localLead.email || localLead.email === 'N/A') ||
+                (!localLead.phone || localLead.phone === 'N/A');
+
+            let fullPersonData = localLead;
+
+            if (needsFullData && onUnlock) {
+                loadingToastId = toast.loading('Fetching full person data...');
+                // Try to unlock email to get full data
+                try {
+                    const unlockedLead = await onUnlock(localLead, 'email');
+                    if (unlockedLead) {
+                        fullPersonData = unlockedLead as ExtendedSavedPerson;
+                    }
+                } catch (error) {
+                    console.warn('Failed to unlock email, saving with available data:', error);
+                } finally {
+                    // Dismiss loading toast
+                    if (loadingToastId) {
+                        toast.dismiss(loadingToastId);
+                    }
+                }
+            }
+
+            // Save to database
+            await databaseService.savePerson(fullPersonData);
+
+            // Update local state
+            setLocalLead({ ...fullPersonData, isSaved: true });
+
+            toast.success('Person saved to database');
+        } catch (error) {
+            console.error('Failed to save person:', error);
+            // Dismiss loading toast if still showing
+            if (loadingToastId) {
+                toast.dismiss(loadingToastId);
+            }
+            toast.error('Failed to save person');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [localLead, onUnlock]);
+
+    const getSocialLink = useCallback((url: string | null | undefined): string | null => {
         if (!url) return null;
         return url.startsWith('http') ? url : `https://${url}`;
-    };
+    }, []);
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-    };
+    const copyToClipboard = useCallback(async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.success('Copied to clipboard');
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            toast.error('Failed to copy to clipboard');
+        }
+    }, []);
 
     // Comment Handlers
-    const handlePostComment = async () => {
-        if (!newComment.trim()) return;
+    const handlePostComment = useCallback(async () => {
+        if (!newComment.trim() || !localLead?.id) return;
 
         setIsPostingComment(true);
         try {
-            let updatedComments;
+            let updatedComments: Comment[];
             if (replyingTo) {
                 updatedComments = await databaseService.addPersonReply(localLead.id, replyingTo.id, newComment.trim());
                 setExpandedComments(prev => new Set(prev).add(replyingTo.id));
@@ -224,43 +330,45 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         } finally {
             setIsPostingComment(false);
         }
-    };
+    }, [newComment, replyingTo, localLead?.id]);
 
-    const handleDeleteCommentClick = (commentId: string) => {
+    const handleDeleteCommentClick = useCallback((commentId: string) => {
         setConfirmModal({
             isOpen: true,
             type: 'comment',
             id: commentId
         });
-    };
+    }, []);
 
-    const handleDeleteReplyClick = (commentId: string, replyId: string) => {
+    const handleDeleteReplyClick = useCallback((commentId: string, replyId: string) => {
         setConfirmModal({
             isOpen: true,
             type: 'reply',
             id: commentId,
             replyId: replyId
         });
-    };
+    }, []);
 
-    const confirmDelete = async () => {
-        if (!confirmModal.id || !confirmModal.type) return;
+    const confirmDelete = useCallback(async () => {
+        if (!confirmModal.id || !confirmModal.type || !localLead?.id) return;
 
         try {
             if (confirmModal.type === 'comment') {
                 const updatedComments = await databaseService.deletePersonComment(localLead.id, confirmModal.id);
                 setLocalComments(updatedComments);
+                toast.success('Comment deleted');
             } else if (confirmModal.type === 'reply' && confirmModal.replyId) {
                 const updatedComments = await databaseService.deletePersonReply(localLead.id, confirmModal.id, confirmModal.replyId);
                 setLocalComments(updatedComments);
+                toast.success('Reply deleted');
             }
         } catch (error) {
             console.error('Failed to delete item:', error);
-            // Optional: Show error toast
+            toast.error('Failed to delete. Please try again.');
         }
-    };
+    }, [confirmModal, localLead?.id]);
 
-    const toggleReplies = (commentId: string) => {
+    const toggleReplies = useCallback((commentId: string) => {
         setExpandedComments(prev => {
             const next = new Set(prev);
             if (next.has(commentId)) {
@@ -270,9 +378,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             }
             return next;
         });
-    };
+    }, []);
 
-    const getPositionColor = (status: string) => {
+    const getPositionColor = useCallback((status: string): string => {
         switch (status) {
             case 'Need a Follow Up': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
             case 'Qualified': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
@@ -280,7 +388,21 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             case 'Contacted': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
             default: return 'bg-zinc-800 text-zinc-400 border-white/5';
         }
-    };
+    }, []);
+
+    // Get social media links with proper type handling
+    const socialLinks = useMemo(() => {
+        return {
+            linkedin: localLead.linkedin || localLead.linkedin_url,
+            twitter: (localLead as ExtendedSavedPerson).twitter || localLead.twitter_url,
+            facebook: (localLead as ExtendedSavedPerson).facebook || localLead.facebook_url,
+            github: (localLead as ExtendedSavedPerson).github || localLead.github_url,
+        };
+    }, [localLead]);
+
+    const hasSocialLinks = useMemo(() => {
+        return Boolean(socialLinks.linkedin || socialLinks.twitter || socialLinks.facebook || socialLinks.github);
+    }, [socialLinks]);
 
     return (
         <AnimatePresence>
@@ -289,13 +411,14 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={onClose}
-                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[150]"
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-150"
             />
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="fixed inset-0 m-auto w-full max-w-4xl h-[90vh] bg-[#09090b] border border-white/10 rounded-3xl shadow-2xl z-[150] overflow-hidden flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+                className="fixed inset-0 m-auto w-full max-w-4xl h-[90vh] bg-[#09090b] border border-white/10 rounded-3xl shadow-2xl z-150 overflow-hidden flex flex-col"
             >
                 {/* Hero Header */}
                 <div
@@ -308,6 +431,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                     <button
                         onClick={onClose}
                         className="absolute top-6 right-6 p-2 bg-black/50 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-colors border border-white/5 backdrop-blur-md z-20"
+                        aria-label="Close modal"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -319,7 +443,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 src={localLead.photo_url || localLead.image}
                                 name={localLead.name || ''}
                                 className="w-full h-full object-cover rounded-xl text-4xl"
-                                alt={localLead.name || ''}
+                                alt={localLead.name || 'Profile'}
                             />
                             {localLead.email_status === 'verified' && (
                                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center border-2 border-[#09090b]">
@@ -329,14 +453,16 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         </div>
                         <div className="mb-2 flex-1">
                             <div className="flex items-center gap-4 mb-2">
-                                <h2 className="text-4xl font-bold text-white tracking-tight">{localLead.name}</h2>
+                                <h2 className="text-4xl font-bold text-white tracking-tight">{localLead.name || 'Unknown'}</h2>
                                 {localLead.isSaved && (
                                     <span className="bg-green-500/10 border border-green-500/20 text-green-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5">
                                         <CheckCircle2 className="w-3.5 h-3.5" /> Saved
                                     </span>
                                 )}
                             </div>
-                            <p className="text-orange-500 text-lg font-bold truncate mb-2">{localLead.title}</p>
+                            {localLead.title && (
+                                <p className="text-orange-500 text-lg font-bold truncate mb-2">{localLead.title}</p>
+                            )}
                             <div className="flex flex-wrap items-center gap-4 text-sm">
                                 <span className="flex items-center gap-1.5 text-zinc-400">
                                     <Building2 className="w-4 h-4 text-zinc-500" />
@@ -349,9 +475,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 )}
                                 {localLead.saved_by && (
                                     <span className="flex items-center gap-1.5 text-zinc-500">
-                                        {(localLead as any).saved_by_profile_url ? (
+                                        {localLead.saved_by_profile_url ? (
                                             <div className="w-4 h-4 rounded-full overflow-hidden border border-zinc-700">
-                                                <img src={(localLead as any).saved_by_profile_url} alt={localLead.saved_by} className="w-full h-full object-cover" />
+                                                <img src={localLead.saved_by_profile_url} alt={localLead.saved_by} className="w-full h-full object-cover" />
                                             </div>
                                         ) : (
                                             <span className="w-1 h-1 rounded-full bg-zinc-600" />
@@ -364,12 +490,32 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
                         {/* Quick Actions */}
                         <div className="flex gap-2 mb-2">
-                            {localLead.linkedin && (
+                            {!localLead.isSaved && (
+                                <button
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold text-sm rounded-xl hover:shadow-lg shadow-orange-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSaving ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span>Saving...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-4 h-4" />
+                                            <span>Save Person</span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                            {socialLinks.linkedin && (
                                 <a
-                                    href={getSocialLink(localLead.linkedin) || '#'}
+                                    href={getSocialLink(socialLinks.linkedin) || '#'}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="p-3 bg-white/5 border border-white/5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+                                    aria-label="LinkedIn profile"
                                 >
                                     <Linkedin className="w-5 h-5" />
                                 </a>
@@ -378,6 +524,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 <a
                                     href={`mailto:${localLead.email}`}
                                     className="p-3 bg-white/5 border border-white/5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-all"
+                                    aria-label="Send email"
                                 >
                                     <Mail className="w-5 h-5" />
                                 </a>
@@ -392,6 +539,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'overview' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            aria-label="Overview tab"
                         >
                             Overview
                             {activeTab === 'overview' && (
@@ -401,6 +549,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         <button
                             onClick={() => setActiveTab('comments')}
                             className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'comments' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            aria-label="Comments tab"
                         >
                             Comments
                             {localComments.length > 0 && (
@@ -412,15 +561,18 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
                             )}
                         </button>
-                        <button
-                            onClick={() => setActiveTab('actions')}
-                            className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'actions' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                        >
-                            Actions
-                            {activeTab === 'actions' && (
-                                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
-                            )}
-                        </button>
+                        {localLead.isSaved && (
+                            <button
+                                onClick={() => setActiveTab('actions')}
+                                className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'actions' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                aria-label="Actions tab"
+                            >
+                                Actions
+                                {activeTab === 'actions' && (
+                                    <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -441,97 +593,18 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                     <div className="lg:col-span-2 space-y-10">
                                         <section>
                                             <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                <span className="w-8 h-[1px] bg-zinc-800"></span> About
+                                                <span className="w-8 h-px bg-zinc-800"></span> About
                                             </h3>
                                             <p className="text-zinc-300 leading-relaxed text-base">
                                                 {localLead.headline || localLead.description || 'No description available for this person.'}
                                             </p>
                                         </section>
 
-                                        {/* Work Info */}
-                                        <section>
-                                            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                <span className="w-8 h-[1px] bg-zinc-800"></span> Work
-                                            </h3>
-                                            <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-6 space-y-6">
-                                                <div className="flex items-center gap-4">
-                                                    {(localLead.company_logo || (localLead as any).company_logo_url) ? (
-                                                        <img 
-                                                            src={localLead.company_logo || (localLead as any).company_logo_url} 
-                                                            alt={localLead.company || 'Company logo'}
-                                                            className="w-12 h-12 rounded-xl object-cover border border-white/10"
-                                                            onError={(e) => {
-                                                                (e.target as HTMLImageElement).style.display = 'none';
-                                                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                                                            }}
-                                                        />
-                                                    ) : null}
-                                                    <div className={`w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0 ${(localLead.company_logo || (localLead as any).company_logo_url) ? 'hidden' : ''}`}>
-                                                        <Building2 className="w-6 h-6 text-orange-500" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-lg font-bold text-white truncate">{localLead.company || localLead.organization_name}</p>
-                                                        {(localLead.website || localLead.company_website || localLead.organization_domain) && (
-                                                            <a
-                                                                href={getSocialLink(localLead.website || localLead.company_website || localLead.organization_domain || '') || '#'}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                className="text-sm text-zinc-500 hover:text-orange-400 flex items-center gap-1 mt-0.5 transition-colors"
-                                                            >
-                                                                {localLead.website || localLead.company_website || localLead.organization_domain}
-                                                                <ExternalLink className="w-3 h-3" />
-                                                            </a>
-                                                        )}
-                                                        {localLead.company_id && (
-                                                            <p className="text-xs text-zinc-600 mt-1">ID: {localLead.company_id}</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    {localLead.company_industry && (
-                                                        <div>
-                                                            <p className="text-xs text-zinc-500 mb-1">Industry</p>
-                                                            <p className="text-sm text-white font-medium">{localLead.company_industry}</p>
-                                                        </div>
-                                                    )}
-                                                    {localLead.company_size && (
-                                                        <div>
-                                                            <p className="text-xs text-zinc-500 mb-1">Company Size</p>
-                                                            <p className="text-sm text-white font-medium">
-                                                                {typeof localLead.company_size === 'number' 
-                                                                    ? localLead.company_size.toLocaleString() 
-                                                                    : localLead.company_size}
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex flex-wrap gap-2">
-                                                    {localLead.seniority && (
-                                                        <span className="text-xs font-bold px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 uppercase tracking-wide">
-                                                            {localLead.seniority}
-                                                        </span>
-                                                    )}
-                                                    {localLead.departments?.map((dept: string, i: number) => (
-                                                        <span key={i} className="text-xs font-bold px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20 uppercase tracking-wide">
-                                                            {dept}
-                                                        </span>
-                                                    ))}
-                                                    {localLead.functions?.map((func: string, i: number) => (
-                                                        <span key={i} className="text-xs font-bold px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg border border-cyan-500/20 uppercase tracking-wide">
-                                                            {func}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </section>
-
                                         {/* Location Details */}
                                         {(localLead.city || localLead.state || localLead.country) && (
                                             <section>
                                                 <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                    <span className="w-8 h-[1px] bg-zinc-800"></span> Location
+                                                    <span className="w-8 h-px bg-zinc-800"></span> Location
                                                 </h3>
                                                 <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-6">
                                                     <div className="grid grid-cols-3 gap-4">
@@ -559,16 +632,16 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                         )}
 
                                         {/* Social Media */}
-                                        {(localLead.linkedin || localLead.linkedin_url || localLead.twitter || localLead.twitter_url || localLead.facebook || localLead.facebook_url || localLead.github || localLead.github_url) && (
+                                        {hasSocialLinks && (
                                             <section>
                                                 <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                    <span className="w-8 h-[1px] bg-zinc-800"></span> Social Media
+                                                    <span className="w-8 h-px bg-zinc-800"></span> Social Media
                                                 </h3>
                                                 <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-6">
                                                     <div className="flex flex-wrap gap-3">
-                                                        {(localLead.linkedin || localLead.linkedin_url) && (
+                                                        {socialLinks.linkedin && (
                                                             <a
-                                                                href={getSocialLink(localLead.linkedin || localLead.linkedin_url || '') || '#'}
+                                                                href={getSocialLink(socialLinks.linkedin) || '#'}
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-400 hover:text-blue-300 transition-all"
@@ -578,9 +651,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 <ExternalLink className="w-3 h-3" />
                                                             </a>
                                                         )}
-                                                        {(localLead.twitter || localLead.twitter_url) && (
+                                                        {socialLinks.twitter && (
                                                             <a
-                                                                href={getSocialLink(localLead.twitter || localLead.twitter_url || '') || '#'}
+                                                                href={getSocialLink(socialLinks.twitter) || '#'}
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="flex items-center gap-2 px-4 py-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-400 hover:text-sky-300 transition-all"
@@ -589,9 +662,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 <ExternalLink className="w-3 h-3" />
                                                             </a>
                                                         )}
-                                                        {(localLead.facebook || localLead.facebook_url) && (
+                                                        {socialLinks.facebook && (
                                                             <a
-                                                                href={getSocialLink(localLead.facebook || localLead.facebook_url || '') || '#'}
+                                                                href={getSocialLink(socialLinks.facebook) || '#'}
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg text-indigo-400 hover:text-indigo-300 transition-all"
@@ -600,9 +673,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 <ExternalLink className="w-3 h-3" />
                                                             </a>
                                                         )}
-                                                        {(localLead.github || localLead.github_url) && (
+                                                        {socialLinks.github && (
                                                             <a
-                                                                href={getSocialLink(localLead.github || localLead.github_url || '') || '#'}
+                                                                href={getSocialLink(socialLinks.github) || '#'}
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="flex items-center gap-2 px-4 py-2 bg-zinc-700/50 hover:bg-zinc-700/70 border border-white/10 rounded-lg text-white hover:text-white transition-all"
@@ -619,43 +692,11 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
                                     {/* Sidebar Info Column */}
                                     <div className="space-y-6">
-                                        {/* Personal Info */}
-                                        {(localLead.first_name || localLead.last_name || localLead.score) && (
-                                            <div className="bg-zinc-900/50 rounded-2xl p-6 border border-white/5 space-y-4">
-                                                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Personal Info</h3>
-                                                {localLead.first_name && (
-                                                    <div>
-                                                        <p className="text-xs text-zinc-500 mb-1">First Name</p>
-                                                        <p className="text-sm text-white font-medium">{localLead.first_name}</p>
-                                                    </div>
-                                                )}
-                                                {localLead.last_name && (
-                                                    <div>
-                                                        <p className="text-xs text-zinc-500 mb-1">Last Name</p>
-                                                        <p className="text-sm text-white font-medium">{localLead.last_name}</p>
-                                                    </div>
-                                                )}
-                                                {localLead.score && (
-                                                    <div>
-                                                        <p className="text-xs text-zinc-500 mb-1">Lead Score</p>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex-1 bg-zinc-800 rounded-full h-2 overflow-hidden">
-                                                                <div 
-                                                                    className="h-full bg-gradient-to-r from-orange-500 to-orange-400 transition-all"
-                                                                    style={{ width: `${localLead.score}%` }}
-                                                                />
-                                                            </div>
-                                                            <span className="text-sm font-bold text-orange-400">{localLead.score}</span>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
                                         <div className="bg-zinc-900/50 rounded-2xl p-6 border border-white/5 space-y-5">
                                             <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Contact Details</h3>
 
-                                            {isEmailLocked && onUnlock && (
+                                            {/* Email Section */}
+                                            {isEmailLocked && onUnlock ? (
                                                 <div className="bg-zinc-900 border border-white/5 rounded-xl p-4 flex flex-col gap-3">
                                                     <div className="flex items-center gap-2 opacity-50">
                                                         <Mail className="w-4 h-4 text-zinc-500" />
@@ -679,35 +720,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                         )}
                                                     </button>
                                                 </div>
-                                            )}
-
-                                            {isPhoneLocked && onUnlock && (
-                                                <div className="bg-zinc-900 border border-white/5 rounded-xl p-4 flex flex-col gap-3">
-                                                    <div className="flex items-center gap-2 opacity-50">
-                                                        <Phone className="w-4 h-4 text-zinc-500" />
-                                                        <span className="text-xs text-zinc-400 italic">Phone Locked</span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleUnlockClick('phone')}
-                                                        disabled={isUnlockingPhone}
-                                                        className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
-                                                    >
-                                                        {isUnlockingPhone ? (
-                                                            <>
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                                Unlocking Phone...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Shield className="w-3.5 h-3.5" />
-                                                                Access Phone
-                                                            </>
-                                                        )}
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {!isEmailLocked && localLead.email && (
+                                            ) : !isEmailLocked && localLead.email ? (
                                                 <div className="group flex items-center justify-between p-2 -mx-2 hover:bg-white/5 rounded-lg transition-colors">
                                                     <div className="flex items-center gap-3 min-w-0">
                                                         <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
@@ -725,13 +738,22 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                     <button
                                                         onClick={() => copyToClipboard(localLead.email || '')}
                                                         className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all p-2"
+                                                        aria-label="Copy email"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
                                                     </button>
                                                 </div>
+                                            ) : (
+                                                <div className="flex items-center gap-3 p-2 -mx-2">
+                                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
+                                                        <Mail className="w-4 h-4 text-zinc-500" />
+                                                    </div>
+                                                    <span className="text-sm text-zinc-500">Not available</span>
+                                                </div>
                                             )}
 
-                                            {!isPhoneLocked && localLead.phone && (
+                                            {/* Phone Section */}
+                                            {!isPhoneLocked && localLead.phone ? (
                                                 <div className="group flex items-center justify-between p-2 -mx-2 hover:bg-white/5 rounded-lg transition-colors">
                                                     <div className="flex items-center gap-3 min-w-0">
                                                         <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
@@ -742,9 +764,17 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                     <button
                                                         onClick={() => copyToClipboard(localLead.phone || '')}
                                                         className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all p-2"
+                                                        aria-label="Copy phone"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
                                                     </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-3 p-2 -mx-2">
+                                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
+                                                        <Phone className="w-4 h-4 text-zinc-500" />
+                                                    </div>
+                                                    <span className="text-sm text-zinc-500">Not available</span>
                                                 </div>
                                             )}
                                         </div>
@@ -763,7 +793,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 <div className="max-w-xl space-y-10">
                                     <section>
                                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                            <span className="w-8 h-[1px] bg-zinc-800"></span> Status
+                                            <span className="w-8 h-px bg-zinc-800"></span> Status
                                         </h3>
                                         <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-6">
                                             <div className="flex flex-col gap-4">
@@ -879,6 +909,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                     <button
                                                                         onClick={() => setReplyingTo({ id: comment.id, userName: comment.userName, text: comment.text, userProfileUrl: comment.userProfileUrl })}
                                                                         className="text-xs text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+                                                                        aria-label="Reply to comment"
                                                                     >
                                                                         Reply
                                                                     </button>
@@ -890,6 +921,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                             }}
                                                                             className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
                                                                             title="Delete comment"
+                                                                            aria-label="Delete comment"
                                                                         >
                                                                             <Trash2 className="w-3.5 h-3.5" />
                                                                         </button>
@@ -908,8 +940,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 <button
                                                                     onClick={() => toggleReplies(comment.id)}
                                                                     className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-white transition-colors mb-2"
+                                                                    aria-label={expandedComments.has(comment.id) ? 'Hide replies' : 'Show replies'}
                                                                 >
-                                                                    <div className="w-6 h-[1px] bg-zinc-800"></div>
+                                                                    <div className="w-6 h-px bg-zinc-800"></div>
                                                                     {expandedComments.has(comment.id) ? (
                                                                         <>
                                                                             <ChevronUp className="w-3 h-3" />
@@ -959,6 +992,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                                                 }}
                                                                                                 className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
                                                                                                 title="Delete reply"
+                                                                                                aria-label="Delete reply"
                                                                                             >
                                                                                                 <Trash2 className="w-3 h-3" />
                                                                                             </button>
@@ -1011,15 +1045,14 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                     <button
                                                         onClick={() => setReplyingTo(null)}
                                                         className="p-1 rounded-lg hover:bg-white/10 text-zinc-500 hover:text-white transition-colors"
+                                                        aria-label="Cancel reply"
                                                     >
                                                         <X className="w-3 h-3" />
                                                     </button>
                                                 </div>
                                             )}
 
-                                            <div
-                                                className="flex items-end gap-2 bg-zinc-900/50 border border-white/10 rounded-xl p-2 transition-all"
-                                            >
+                                            <div className="flex items-end gap-2 bg-zinc-900/50 border border-white/10 rounded-xl p-2 transition-all">
                                                 <textarea
                                                     placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : "Add a note..."}
                                                     value={newComment}
@@ -1063,11 +1096,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
             {/* Confirmation Modal */}
             {confirmModal.isOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
+                        onClick={(e) => e.stopPropagation()}
                         className="bg-[#09090b] border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-2xl"
                     >
                         <h3 className="text-lg font-bold text-white mb-2">Delete {confirmModal.type}?</h3>

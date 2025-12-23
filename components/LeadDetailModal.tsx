@@ -130,10 +130,29 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
     const brandColor = useMemo(() => getBrandColor(localLead?.name || 'Lead'), [localLead?.name]);
 
-    // Update local lead when prop changes
+    // Update local lead when prop changes, and fetch from Supabase if saved
     useEffect(() => {
-        setLocalLead(lead);
-        setContactStatus(lead?.contact_status || 'New');
+        const fetchLeadData = async () => {
+            // If lead is saved, fetch fresh data from Supabase
+            if (lead?.isSaved && lead?.id) {
+                try {
+                    const savedPerson = await databaseService.getPersonById(lead.id);
+                    if (savedPerson) {
+                        setLocalLead(savedPerson);
+                        setContactStatus(savedPerson?.contact_status || 'New');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error fetching saved person from Supabase:', error);
+                    // Fallback to prop data if Supabase fetch fails
+                }
+            }
+            // Use prop data for unsaved leads or if Supabase fetch fails
+            setLocalLead(lead);
+            setContactStatus(lead?.contact_status || 'New');
+        };
+
+        fetchLeadData();
     }, [lead]);
 
     // Fetch current user
@@ -253,7 +272,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             let fullPersonData = localLead;
 
             if (needsFullData && onUnlock) {
-                loadingToastId = toast.loading('Fetching full person data...');
+                loadingToastId = toast.loading('Fetching full person details...');
                 // Try to unlock email to get full data
                 try {
                     const unlockedLead = await onUnlock(localLead, 'email');
@@ -504,7 +523,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                     ) : (
                                         <>
                                             <Save className="w-4 h-4" />
-                                            <span>Save Person</span>
+                                            <span>Get Details & Save</span>
                                         </>
                                     )}
                                 </button>

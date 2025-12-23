@@ -194,20 +194,20 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                 </div>
                 {onAction && ActionIcon && (
                     <button
-                        onClick={(e) => {
-                            e.stopPropagation();
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
                             // Allow delete action even when saved, but only allow save when not saved
                             if (actionType === 'delete' || !saved) {
-                                onAction(lead);
+                                onAction(lead); 
                             }
                         }}
                         disabled={actionType === 'save' && saved}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${actionType === 'delete'
-                            ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
-                            : saved
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
-                            }`}
+                                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                                : saved
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
+                        }`}
                         title={actionType === 'delete' ? 'Delete person' : saved ? 'Already saved' : 'Save person'}
                     >
                         {actionType === 'delete' ? (

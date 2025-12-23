@@ -14,12 +14,16 @@ export async function POST(request: Request) {
             );
         }
 
+        // Apollo API typically supports per_page up to 25-50, not 1000
+        // For "No Limit" mode, use 25 per page and paginate
+        const perPage = quantity && quantity > 50 ? 25 : (quantity || 10);
+
         const payload: any = {
             q_organization_name: company || undefined,
             q_organization_domains: website ? [website] : undefined,
             organization_locations: location ? [location] : undefined,
             q_keywords: keywords || undefined,
-            per_page: quantity || 10,
+            per_page: perPage,
             page: page || 1,
         };
 

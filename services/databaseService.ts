@@ -325,6 +325,44 @@ export const databaseService = {
         return !!data;
     },
 
+    // Get a single saved person by ID
+    getPersonById: async (id: string) => {
+        const supabase = createClient();
+        const { data: person, error } = await supabase
+            .from('people')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            console.error('Error fetching person by ID:', error);
+            throw error;
+        }
+
+        if (!person) {
+            return null;
+        }
+
+        // Fetch user details for saved_by
+        let savedByName: string | undefined;
+        let savedByProfileUrl: string | undefined;
+
+        if (person.saved_uid) {
+            const { data: user } = await supabase
+                .from('users')
+                .select('name, profile_url')
+                .eq('uid', person.saved_uid)
+                .single();
+
+            if (user) {
+                savedByName = user.name;
+                savedByProfileUrl = user.profile_url;
+            }
+        }
+
+        return mapDbPersonToAppPerson(person, savedByName, savedByProfileUrl);
+    },
+
     // Get all saved people
     getSavedPeople: async () => {
         const supabase = createClient();

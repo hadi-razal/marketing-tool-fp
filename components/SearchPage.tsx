@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter, Building2, Users, Download, X, ChevronDown
+    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter, Building2, Users, Download
 } from 'lucide-react';
 import { SoftInput } from './ui/Input';
 import { ProfileCard } from './ProfileCard';
@@ -42,44 +42,11 @@ interface SearchPageProps {
     onSave: (leads: any[]) => void;
 }
 
-// Common job titles for multi-select
-const JOB_TITLES = [
-    'CEO', 'CTO', 'CFO', 'CMO', 'COO', 'President', 'Founder', 'Co-Founder',
-    'VP of Sales', 'VP of Marketing', 'VP of Engineering', 'VP of Product',
-    'Director of Sales', 'Director of Marketing', 'Director of Engineering',
-    'Sales Manager', 'Marketing Manager', 'Product Manager', 'Engineering Manager',
-    'Head of Sales', 'Head of Marketing', 'Head of Product', 'Head of Engineering',
-    'Senior Sales', 'Senior Marketing', 'Senior Engineer', 'Senior Product Manager',
-    'Business Development Manager', 'Account Manager', 'Sales Representative',
-    'Marketing Director', 'Product Director', 'Engineering Director',
-    'Chief Revenue Officer', 'Chief Technology Officer', 'Chief Marketing Officer',
-    'Managing Director', 'General Manager', 'Operations Manager'
-];
-
 export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
     // NOTE: mode state kept for future bulk import feature, but UI only shows 'search' mode
     const [mode, setMode] = useState<'search' | 'import'>('search');
     const [searchType, setSearchType] = useState<'people' | 'companies'>('people');
     const [filters, setFilters] = useState({ company: '', website: '', titles: [] as string[], location: '', keywords: '', quantity: 9 });
-    const [isJobTitleDropdownOpen, setIsJobTitleDropdownOpen] = useState(false);
-    const jobTitleDropdownRef = useRef<HTMLDivElement>(null);
-
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (jobTitleDropdownRef.current && !jobTitleDropdownRef.current.contains(event.target as Node)) {
-                setIsJobTitleDropdownOpen(false);
-            }
-        };
-
-        if (isJobTitleDropdownOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isJobTitleDropdownOpen]);
 
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -104,10 +71,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
         try {
             const endpoint = searchType === 'people' ? '/api/apollo/search' : '/api/apollo/companies';
+            const isNoLimit = filters.quantity === 13;
+
             // Convert titles array to comma-separated string for API
+            // For "No Limit", use a reasonable per_page (25) and paginate
             const apiFilters = {
                 ...filters,
                 title: filters.titles.join(','), // Convert array to comma-separated string
+                quantity: isNoLimit ? 25 : filters.quantity, // Use 25 for "No Limit" mode
                 page: 1
             };
             const response = await fetch(endpoint, {
@@ -123,15 +94,46 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             }
 
             if (searchType === 'people') {
-                // Check if people are already saved
+                // Check if people are already saved and fetch from Supabase if saved
                 const leads = data.leads || [];
                 const leadsWithStatus = await Promise.all(leads.map(async (lead: any) => {
                     const isSaved = await databaseService.checkPersonSaved(lead.id);
+                    // If saved, fetch fresh data from Supabase
+                    if (isSaved) {
+                        try {
+                            const savedPerson = await databaseService.getPersonById(lead.id);
+                            if (savedPerson) {
+                                return { ...savedPerson, isSaved: true };
+                            }
+                        } catch (error) {
+                            console.error('Error fetching saved person from Supabase:', error);
+                            // Fallback to API data if Supabase fetch fails
+                        }
+                    }
                     return { ...lead, isSaved };
                 }));
                 setResults(leadsWithStatus);
+
+                // For "No Limit" mode, check pagination to see if there are more pages
+                if (isNoLimit && data.pagination) {
+                    setHasMore(data.pagination.page < data.pagination.total_pages);
+                } else if (isNoLimit) {
+                    // If no pagination data, assume there might be more if we got a full page
+                    setHasMore(leads.length >= 25);
+                } else if (isNoLimit) {
+                    // For "No Limit" mode, check if we got a full page (might be more)
+                    setHasMore(leads.length >= 25);
+                } else {
+                    setHasMore(false); // Limited mode doesn't support load more
+                }
+
                 if (leads.length === 0) toast.error('No people found matching criteria');
-                else toast.success(`Found ${leads.length} people`);
+                else {
+                    const totalText = isNoLimit && data.pagination
+                        ? `${leads.length} of ${data.pagination.total_entries || 'many'} people`
+                        : `Found ${leads.length} people`;
+                    toast.success(totalText);
+                }
             } else {
                 // Check if companies are already saved
                 const companies = data.companies || [];
@@ -142,19 +144,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
                 setResults(companiesWithStatus);
 
-                // Use pagination data if available, otherwise fallback to length check
+                // Use pagination data if available
                 if (data.pagination) {
                     setHasMore(data.pagination.page < data.pagination.total_pages);
                 } else {
                     // Fallback logic: if we got fewer results than requested, there are no more
-                    setHasMore(companies.length >= filters.quantity);
+                    setHasMore(companies.length >= (isNoLimit ? 25 : filters.quantity));
                 }
 
                 if (companies.length === 0) {
                     toast.error('No companies found matching criteria');
                     setHasMore(false);
+                } else {
+                    const totalText = isNoLimit && data.pagination
+                        ? `${companies.length} of ${data.pagination.total_entries || 'many'} companies`
+                        : `Found ${companies.length} companies`;
+                    toast.success(totalText);
                 }
-                else toast.success(`Found ${companies.length} companies`);
             }
         } catch (error: any) {
             console.error('Search failed:', error);
@@ -172,13 +178,21 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
         setLoadingMore(true);
         const nextPage = page + 1;
+        const isNoLimit = filters.quantity === 13;
 
         try {
-            const endpoint = '/api/apollo/companies'; // Only companies support pagination for now based on this context
+            const endpoint = searchType === 'people' ? '/api/apollo/search' : '/api/apollo/companies';
+            const apiFilters = {
+                ...filters,
+                title: filters.titles.join(','),
+                quantity: isNoLimit ? 25 : filters.quantity, // Use 25 for "No Limit" mode
+                page: nextPage
+            };
+
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...filters, page: nextPage }),
+                body: JSON.stringify(apiFilters),
             });
 
             const data = await response.json();
@@ -187,25 +201,61 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 throw new Error(data.error || 'Load more failed');
             }
 
-            const companies = data.companies || [];
+            if (searchType === 'people') {
+                const leads = data.leads || [];
 
-            if (companies.length === 0) {
-                setHasMore(false);
-                toast.info('No more companies to load');
-            } else {
-                const companiesWithStatus = await Promise.all(companies.map(async (comp: any) => {
-                    const isSaved = await databaseService.checkCompanySaved(comp.id);
-                    return { ...comp, isSaved };
-                }));
-
-                setResults(prev => [...prev, ...companiesWithStatus]);
-                setPage(nextPage);
-
-                // Update hasMore based on pagination data
-                if (data.pagination) {
-                    setHasMore(data.pagination.page < data.pagination.total_pages);
+                if (leads.length === 0) {
+                    setHasMore(false);
+                    toast.info('No more people to load');
                 } else {
-                    setHasMore(companies.length >= filters.quantity);
+                    const leadsWithStatus = await Promise.all(leads.map(async (lead: any) => {
+                        const isSaved = await databaseService.checkPersonSaved(lead.id);
+                        // If saved, fetch fresh data from Supabase
+                        if (isSaved) {
+                            try {
+                                const savedPerson = await databaseService.getPersonById(lead.id);
+                                if (savedPerson) {
+                                    return { ...savedPerson, isSaved: true };
+                                }
+                            } catch (error) {
+                                console.error('Error fetching saved person from Supabase:', error);
+                                // Fallback to API data if Supabase fetch fails
+                            }
+                        }
+                        return { ...lead, isSaved };
+                    }));
+
+                    setResults(prev => [...prev, ...leadsWithStatus]);
+                    setPage(nextPage);
+
+                    // Update hasMore based on pagination data
+                    if (data.pagination) {
+                        setHasMore(data.pagination.page < data.pagination.total_pages);
+                    } else {
+                        setHasMore(leads.length >= 25);
+                    }
+                }
+            } else {
+                const companies = data.companies || [];
+
+                if (companies.length === 0) {
+                    setHasMore(false);
+                    toast.info('No more companies to load');
+                } else {
+                    const companiesWithStatus = await Promise.all(companies.map(async (comp: any) => {
+                        const isSaved = await databaseService.checkCompanySaved(comp.id);
+                        return { ...comp, isSaved };
+                    }));
+
+                    setResults(prev => [...prev, ...companiesWithStatus]);
+                    setPage(nextPage);
+
+                    // Update hasMore based on pagination data
+                    if (data.pagination) {
+                        setHasMore(data.pagination.page < data.pagination.total_pages);
+                    } else {
+                        setHasMore(companies.length >= (isNoLimit ? 25 : filters.quantity));
+                    }
                 }
             }
 
@@ -294,8 +344,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             // Save to database
             await databaseService.savePerson(fullPersonData);
 
-            // Update local state to reflect saved status with full data
-            const updatedPerson = { ...fullPersonData, isSaved: true };
+            // Fetch fresh data from Supabase after saving
+            let updatedPerson;
+            try {
+                const savedPerson = await databaseService.getPersonById(person.id);
+                if (savedPerson) {
+                    updatedPerson = { ...savedPerson, isSaved: true };
+                } else {
+                    // Fallback: use enriched data if Supabase fetch fails
+                    updatedPerson = { ...fullPersonData, isSaved: true };
+                }
+            } catch (error) {
+                console.error('Error fetching saved person from Supabase:', error);
+                // Fallback: use enriched data if Supabase fetch fails
+                updatedPerson = { ...fullPersonData, isSaved: true };
+            }
+
+            // Update local state with fresh Supabase data
             setResults(prev => prev.map(p => p.id === person.id ? updatedPerson : p));
             if (selectedLead && selectedLead.id === person.id) {
                 setSelectedLead(updatedPerson);
@@ -347,7 +412,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 try {
                     await databaseService.savePerson(person);
                     savedCount++;
-                    setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+                    // Fetch fresh data from Supabase after saving
+                    try {
+                        const savedPerson = await databaseService.getPersonById(person.id);
+                        if (savedPerson) {
+                            setResults(prev => prev.map(p => p.id === person.id ? { ...savedPerson, isSaved: true } : p));
+                        } else {
+                            setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching saved person ${person.id} from Supabase:`, error);
+                        setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
+                    }
                 } catch (error) {
                     console.error(`Failed to save ${person.name}:`, error);
                 }
@@ -504,92 +580,22 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                             </div>
                                         </div>
                                         <div className="relative">
-                                            <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1 mb-2 block">
-                                                Job Title
-                                            </label>
-                                            <div className="relative" ref={jobTitleDropdownRef}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setIsJobTitleDropdownOpen(!isJobTitleDropdownOpen)}
-                                                    className="w-full bg-zinc-900/50 border border-zinc-800 text-white rounded-xl px-4 py-3.5 pl-11 pr-10 outline-none transition-all duration-200 placeholder:text-zinc-600 focus:border-orange-500/50 focus:bg-zinc-900 focus:shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] hover:border-zinc-700 flex items-center justify-between min-h-[55px]"
-                                                >
-                                                    <div className="flex items-center gap-2 flex-wrap flex-1">
-                                                        {filters.titles.length === 0 ? (
-                                                            <span className="text-zinc-600">Select job titles...</span>
-                                                        ) : (
-                                                            filters.titles.map((title) => (
-                                                                <span
-                                                                    key={title}
-                                                                    className="inline-flex items-center gap-1.5 bg-orange-500/20 text-orange-400 px-2.5 py-1 rounded-lg text-xs font-medium border border-orange-500/30"
-                                                                >
-                                                                    {title}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setFilters({
-                                                                                ...filters,
-                                                                                titles: filters.titles.filter(t => t !== title)
-                                                                            });
-                                                                        }}
-                                                                        className="hover:bg-orange-500/30 rounded-full p-0.5 transition-colors"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </span>
-                                                            ))
-                                                        )}
-                                                    </div>
-                                                    <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform duration-200 shrink-0 ${isJobTitleDropdownOpen ? 'rotate-180' : ''}`} />
-                                                </button>
-                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
-                                                    <User className="w-4 h-4" />
-                                                </div>
-
-                                                {isJobTitleDropdownOpen && (
-                                                    <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-h-64 overflow-y-auto custom-scrollbar">
-                                                        <div className="p-2">
-                                                            {JOB_TITLES.map((title) => {
-                                                                const isSelected = filters.titles.includes(title);
-                                                                return (
-                                                                    <button
-                                                                        key={title}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            if (isSelected) {
-                                                                                setFilters({
-                                                                                    ...filters,
-                                                                                    titles: filters.titles.filter(t => t !== title)
-                                                                                });
-                                                                            } else {
-                                                                                setFilters({
-                                                                                    ...filters,
-                                                                                    titles: [...filters.titles, title]
-                                                                                });
-                                                                            }
-                                                                        }}
-                                                                        className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all duration-200 ${isSelected
-                                                                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                                                                            : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                                                                            }`}
-                                                                    >
-                                                                        <div className="flex items-center justify-between">
-                                                                            <span>{title}</span>
-                                                                            {isSelected && (
-                                                                                <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center">
-                                                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                                                                    </svg>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            <SoftInput
+                                                label="Job Title"
+                                                placeholder="e.g. Founder, CEO, CTO, Sales Director"
+                                                value={filters.titles.join(', ')}
+                                                onChange={(e: any) => {
+                                                    const value = e.target.value;
+                                                    // Split by comma and clean up, or use as single value
+                                                    if (value.trim()) {
+                                                        const titles = value.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+                                                        setFilters({ ...filters, titles });
+                                                    } else {
+                                                        setFilters({ ...filters, titles: [] });
+                                                    }
+                                                }}
+                                                icon={<User className="w-4 h-4" />}
+                                            />
                                         </div>
                                     </>
                                 )}
@@ -612,17 +618,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                                 Max Results
                                             </span>
                                             <span className="bg-gradient-to-r from-orange-500/20 to-red-600/20 text-orange-400 px-3 py-1 rounded-full text-xs font-bold border border-orange-500/30">
-                                                {filters.quantity}
+                                                {filters.quantity === 13 ? 'No Limit' : filters.quantity}
                                             </span>
                                         </div>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="12"
-                                            value={filters.quantity}
-                                            onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
-                                            className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:cursor-pointer"
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="13"
+                                                value={filters.quantity}
+                                                onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
+                                                className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:cursor-pointer"
+                                            />
+                                            <div className="relative mt-2 h-4">
+                                                <span className="text-[10px] text-zinc-500 absolute left-0">1</span>
+                                                <span className="text-[10px] text-zinc-500 absolute" style={{ left: 'calc((12 - 1) / (13 - 1) * 100%)' }}>12</span>
+                                                <span className="text-[10px] text-orange-400 font-semibold absolute right-0">No Limit</span>
+                                            </div>
+                                        </div>
                                         <p className="text-[10px] text-zinc-500 mt-2">Adjust the maximum number of results to fetch</p>
                                     </div>
                                 )}
@@ -711,16 +724,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
             {/* Results Area */}
             <div className="flex-1 bg-[#09090b] border border-white/5 rounded-md p-6 lg:p-8 overflow-hidden flex flex-col relative">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                    <div>
-                        <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">Live Results</h1>
-                        <p className="text-zinc-400 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
-                    </div>
-                    {results.length > 0 && searchType === 'people' && (
-                        <button onClick={handleSaveAll} className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-md font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-white/10 active:scale-95">
-                            <Save className="w-4 h-4" /> Save All Results
-                        </button>
-                    )}
+                <div className="mb-8">
+                    <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">Live Results</h1>
+                    <p className="text-zinc-400 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
@@ -793,20 +799,29 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                             </div>
 
                             {/* Load More Button */}
-                            {searchType === 'companies' && results.length > 0 && (
+                            {results.length > 0 && hasMore && (
                                 <div className="flex justify-center">
-                                    {hasMore ? (
-                                        <button
-                                            onClick={handleLoadMore}
-                                            disabled={loadingMore}
-                                            className="px-6 py-3 rounded-md bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {loadingMore ? <Loader2 className="animate-spin w-4 h-4" /> : null}
-                                            {loadingMore ? 'Loading more...' : 'Load More Companies'}
-                                        </button>
-                                    ) : (
-                                        <p className="text-zinc-500 text-sm font-medium">No more companies found.</p>
-                                    )}
+                                    <button
+                                        onClick={handleLoadMore}
+                                        disabled={loadingMore}
+                                        className="px-6 py-3 rounded-md bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-orange-500/20"
+                                    >
+                                        {loadingMore ? (
+                                            <>
+                                                <Loader2 className="animate-spin w-4 h-4" />
+                                                <span>Loading more...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>Load More {searchType === 'people' ? 'People' : 'Companies'}</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
+                            {results.length > 0 && !hasMore && filters.quantity !== 13 && (
+                                <div className="flex justify-center">
+                                    <p className="text-zinc-500 text-sm font-medium">All results loaded.</p>
                                 </div>
                             )}
                         </div>

@@ -17,8 +17,12 @@ export async function POST(request: Request) {
 
         console.log('Apollo Search Request:', { company, website, title, location, keywords, quantity, page });
 
+        // Apollo API typically supports per_page up to 25-50, not 1000
+        // For "No Limit" mode, use 25 per page and paginate
+        const perPage = quantity && quantity > 50 ? 25 : (quantity || 10);
+
         const payload: any = {
-            per_page: quantity || 10,
+            per_page: perPage,
             page: page || 1,
             include_similar_titles: true,
         };

@@ -133,10 +133,19 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
     // Update local lead when prop changes, and fetch from Supabase if saved
     useEffect(() => {
         const fetchLeadData = async () => {
-            // If lead is saved, fetch fresh data from Supabase
+            // If lead is saved, fetch fresh data from Supabase with timeout
             if (lead?.isSaved && lead?.id) {
                 try {
-                    const savedPerson = await databaseService.getPersonById(lead.id);
+                    // Add timeout to prevent hanging
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Timeout')), 5000)
+                    );
+
+                    const savedPerson = await Promise.race([
+                        databaseService.getPersonById(lead.id),
+                        timeoutPromise
+                    ]) as any;
+
                     if (savedPerson) {
                         setLocalLead(savedPerson);
                         setContactStatus(savedPerson?.contact_status || 'New');
@@ -144,7 +153,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                     }
                 } catch (error) {
                     console.error('Error fetching saved person from Supabase:', error);
-                    // Fallback to prop data if Supabase fetch fails
+                    // Fallback to prop data if Supabase fetch fails or times out
                 }
             }
             // Use prop data for unsaved leads or if Supabase fetch fails

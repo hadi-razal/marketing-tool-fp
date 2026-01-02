@@ -94,24 +94,37 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             }
 
             if (searchType === 'people') {
-                // Check if people are already saved and fetch from Supabase if saved
+                // Batch check which people are saved and fetch from Supabase
                 const leads = data.leads || [];
-                const leadsWithStatus = await Promise.all(leads.map(async (lead: any) => {
-                    const isSaved = await databaseService.checkPersonSaved(lead.id);
-                    // If saved, fetch fresh data from Supabase
-                    if (isSaved) {
-                        try {
-                            const savedPerson = await databaseService.getPersonById(lead.id);
-                            if (savedPerson) {
-                                return { ...savedPerson, isSaved: true };
-                            }
-                        } catch (error) {
-                            console.error('Error fetching saved person from Supabase:', error);
-                            // Fallback to API data if Supabase fetch fails
-                        }
+                const leadIds = leads.map((lead: any) => lead.id);
+
+                // Batch check saved status (single query instead of N queries)
+                const savedIds = await databaseService.checkPeopleSaved(leadIds);
+
+                // Batch fetch saved people (single query instead of N queries)
+                let savedPeopleMap: Record<string, any> = {};
+                const savedIdsArray = Array.from(savedIds);
+                if (savedIdsArray.length > 0) {
+                    try {
+                        const savedPeople = await databaseService.getPeopleByIds(savedIdsArray);
+                        savedPeople.forEach(person => {
+                            savedPeopleMap[person.id] = person;
+                        });
+                    } catch (error) {
+                        console.error('Error batch fetching saved people from Supabase:', error);
+                        // Continue with API data if batch fetch fails
+                    }
+                }
+
+                // Map leads with saved status and Supabase data
+                const leadsWithStatus = leads.map((lead: any) => {
+                    const isSaved = savedIds.has(lead.id);
+                    if (isSaved && savedPeopleMap[lead.id]) {
+                        return { ...savedPeopleMap[lead.id], isSaved: true };
                     }
                     return { ...lead, isSaved };
-                }));
+                });
+
                 setResults(leadsWithStatus);
 
                 // For "No Limit" mode, check pagination to see if there are more pages
@@ -208,22 +221,33 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     setHasMore(false);
                     toast.info('No more people to load');
                 } else {
-                    const leadsWithStatus = await Promise.all(leads.map(async (lead: any) => {
-                        const isSaved = await databaseService.checkPersonSaved(lead.id);
-                        // If saved, fetch fresh data from Supabase
-                        if (isSaved) {
-                            try {
-                                const savedPerson = await databaseService.getPersonById(lead.id);
-                                if (savedPerson) {
-                                    return { ...savedPerson, isSaved: true };
-                                }
-                            } catch (error) {
-                                console.error('Error fetching saved person from Supabase:', error);
-                                // Fallback to API data if Supabase fetch fails
-                            }
+                    // Batch check which people are saved
+                    const leadIds = leads.map((lead: any) => lead.id);
+                    const savedIds = await databaseService.checkPeopleSaved(leadIds);
+
+                    // Batch fetch saved people
+                    let savedPeopleMap: Record<string, any> = {};
+                    const savedIdsArray = Array.from(savedIds);
+                    if (savedIdsArray.length > 0) {
+                        try {
+                            const savedPeople = await databaseService.getPeopleByIds(savedIdsArray);
+                            savedPeople.forEach(person => {
+                                savedPeopleMap[person.id] = person;
+                            });
+                        } catch (error) {
+                            console.error('Error batch fetching saved people from Supabase:', error);
+                            // Continue with API data if batch fetch fails
+                        }
+                    }
+
+                    // Map leads with saved status and Supabase data
+                    const leadsWithStatus = leads.map((lead: any) => {
+                        const isSaved = savedIds.has(lead.id);
+                        if (isSaved && savedPeopleMap[lead.id]) {
+                            return { ...savedPeopleMap[lead.id], isSaved: true };
                         }
                         return { ...lead, isSaved };
-                    }));
+                    });
 
                     setResults(prev => [...prev, ...leadsWithStatus]);
                     setPage(nextPage);
@@ -344,10 +368,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             // Save to database
             await databaseService.savePerson(fullPersonData);
 
-            // Fetch fresh data from Supabase after saving
+            // Fetch fresh data from Supabase after saving (with timeout)
             let updatedPerson;
             try {
-                const savedPerson = await databaseService.getPersonById(person.id);
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout')), 5000)
+                );
+
+                const savedPerson = await Promise.race([
+                    databaseService.getPersonById(person.id),
+                    timeoutPromise
+                ]) as any;
+
                 if (savedPerson) {
                     updatedPerson = { ...savedPerson, isSaved: true };
                 } else {
@@ -356,7 +388,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 }
             } catch (error) {
                 console.error('Error fetching saved person from Supabase:', error);
-                // Fallback: use enriched data if Supabase fetch fails
+                // Fallback: use enriched data if Supabase fetch fails or times out
                 updatedPerson = { ...fullPersonData, isSaved: true };
             }
 
@@ -412,9 +444,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 try {
                     await databaseService.savePerson(person);
                     savedCount++;
-                    // Fetch fresh data from Supabase after saving
+                    // Fetch fresh data from Supabase after saving (with timeout)
                     try {
-                        const savedPerson = await databaseService.getPersonById(person.id);
+                        const timeoutPromise = new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('Timeout')), 5000)
+                        );
+
+                        const savedPerson = await Promise.race([
+                            databaseService.getPersonById(person.id),
+                            timeoutPromise
+                        ]) as any;
+
                         if (savedPerson) {
                             setResults(prev => prev.map(p => p.id === person.id ? { ...savedPerson, isSaved: true } : p));
                         } else {
@@ -422,6 +462,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                         }
                     } catch (error) {
                         console.error(`Error fetching saved person ${person.id} from Supabase:`, error);
+                        // Fallback: just mark as saved if fetch fails or times out
                         setResults(prev => prev.map(p => p.id === person.id ? { ...p, isSaved: true } : p));
                     }
                 } catch (error) {

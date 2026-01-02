@@ -325,6 +325,68 @@ export const databaseService = {
         return !!data;
     },
 
+    // Batch check which people are saved (optimized for multiple IDs)
+    checkPeopleSaved: async (ids: string[]): Promise<Set<string>> => {
+        if (ids.length === 0) return new Set();
+
+        const supabase = createClient();
+        const { data, error } = await supabase
+            .from('people')
+            .select('id')
+            .in('id', ids);
+
+        if (error) {
+            console.error('Error checking people status:', error);
+            return new Set();
+        }
+
+        return new Set((data || []).map(p => p.id));
+    },
+
+    // Batch fetch multiple people by IDs (optimized)
+    getPeopleByIds: async (ids: string[]) => {
+        if (ids.length === 0) return [];
+
+        const supabase = createClient();
+        const { data: people, error } = await supabase
+            .from('people')
+            .select('*')
+            .in('id', ids);
+
+        if (error) {
+            console.error('Error fetching people by IDs:', error);
+            throw error;
+        }
+
+        if (!people || people.length === 0) {
+            return [];
+        }
+
+        // Fetch user details for saved_by in batch
+        const userIds = Array.from(new Set(people.map(p => p.saved_uid).filter(Boolean)));
+        let userMap: Record<string, { name: string, profile_url: string }> = {};
+
+        if (userIds.length > 0) {
+            const { data: users } = await supabase
+                .from('users')
+                .select('uid, name, profile_url')
+                .in('uid', userIds);
+
+            if (users) {
+                userMap = users.reduce((acc, user) => ({
+                    ...acc,
+                    [user.uid]: { name: user.name, profile_url: user.profile_url }
+                }), {});
+            }
+        }
+
+        return people.map(person => mapDbPersonToAppPerson(
+            person,
+            userMap[person.saved_uid]?.name,
+            userMap[person.saved_uid]?.profile_url
+        ));
+    },
+
     // Get a single saved person by ID
     getPersonById: async (id: string) => {
         const supabase = createClient();

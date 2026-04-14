@@ -1,22 +1,13 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { User, Lock, Mail, ArrowRight, Eye, EyeOff, CheckCircle2, Check, X } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Lock, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { Modal } from '@/components/ui/Modal';
 import { toast } from 'sonner';
 import { cn } from '@/components/ui/Button';
-
-interface FormErrors {
-    fullName?: string;
-    email?: string;
-    password?: string;
-    confirmPassword?: string;
-}
 
 const passwordRules = [
     { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
@@ -33,7 +24,7 @@ function PasswordStrengthBar({ password }: { password: string }) {
 
     return (
         <div className="mt-2 space-y-2">
-            <div className="flex gap-1">
+            <div className="flex gap-1 items-center">
                 {[0, 1, 2].map(i => (
                     <div
                         key={i}
@@ -65,33 +56,18 @@ function PasswordStrengthBar({ password }: { password: string }) {
     );
 }
 
-export default function RegisterPage() {
-    const [isLoading, setIsLoading] = useState(false);
-    const [email, setEmail] = useState('');
+export default function ResetPasswordPage() {
+    const router = useRouter();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [fullName, setFullName] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [errors, setErrors] = useState<FormErrors>({});
-    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string }>({});
     const supabase = createClient();
 
-    const validate = (): boolean => {
-        const newErrors: FormErrors = {};
-
-        if (!fullName.trim()) {
-            newErrors.fullName = 'Full name is required';
-        } else if (fullName.trim().length < 2) {
-            newErrors.fullName = 'Name must be at least 2 characters';
-        }
-
-        if (!email.trim()) {
-            newErrors.email = 'Email is required';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            newErrors.email = 'Enter a valid email address';
-        }
+    const validate = () => {
+        const newErrors: { password?: string; confirmPassword?: string } = {};
 
         if (!password) {
             newErrors.password = 'Password is required';
@@ -113,78 +89,36 @@ export default function RegisterPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleRegister = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!validate()) return;
 
-        setIsLoading(true);
+        setLoading(true);
         try {
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: { full_name: fullName },
-                    emailRedirectTo: `${location.origin}/auth/callback`,
-                },
-            });
-
-            if (error) {
-                const msg = error.message.toLowerCase();
-                if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already registered')) {
-                    throw new Error('This email is already registered. Please sign in instead.');
-                }
-                // Email sending failures (SMTP/rate-limit) — user was still created, treat as success
-                if (msg.includes('sending') || msg.includes('email') || msg.includes('smtp') || msg.includes('rate limit')) {
-                    // fall through to show success modal
-                } else {
-                    throw error;
-                }
-            }
-
-            if (data.user) {
-                const { error: dbError } = await supabase
-                    .from('users')
-                    .insert([{
-                        email,
-                        name: fullName,
-                        created_at: new Date().toISOString(),
-                        uid: data.user.id,
-                    }]);
-
-                if (dbError) {
-                    // Non-fatal — auth user created; DB record may already exist or fail silently
-                    console.warn('User DB record insert failed:', dbError.message);
-                }
-            }
-
-            setShowSuccessModal(true);
+            const { error } = await supabase.auth.updateUser({ password });
+            if (error) throw error;
+            toast.success('Password updated successfully!');
+            router.push('/login');
         } catch (err: any) {
-            toast.error(err.message || 'Registration failed. Please try again.');
+            const msg = err.message || 'Failed to update password';
+            if (msg.toLowerCase().includes('session') || msg.toLowerCase().includes('not authenticated')) {
+                toast.error('Reset link has expired. Please request a new one.');
+                router.push('/forgot-password');
+            } else {
+                toast.error(msg);
+            }
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     };
 
-    const handleCloseModal = () => {
-        setShowSuccessModal(false);
-        router.push('/login');
-    };
-
-    const inputBase = (hasError: boolean) => cn(
-        "w-full bg-black/30 border rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-zinc-600 outline-none transition-all duration-200",
-        "focus:bg-black/50 focus:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_0_20px_-8px_rgba(249,115,22,0.4)]",
-        "hover:border-zinc-700",
-        hasError
-            ? "border-red-500/60 focus:border-red-500/60"
-            : "border-white/[0.08] focus:border-orange-500/50"
-    );
-
     return (
-        <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden">
             {/* Ambient background */}
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute top-[-15%] left-[-10%] w-[45%] h-[45%] bg-orange-500/15 rounded-full blur-[130px]" />
                 <div className="absolute bottom-[-15%] right-[-10%] w-[45%] h-[45%] bg-blue-600/10 rounded-full blur-[130px]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-orange-900/5 rounded-full blur-[150px]" />
             </div>
 
             {/* Grid overlay */}
@@ -200,11 +134,11 @@ export default function RegisterPage() {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
-                className="w-full max-w-[420px] relative z-10"
+                className="w-full max-w-[420px] px-4 relative z-10"
             >
                 <div className="bg-zinc-900/60 backdrop-blur-2xl border border-white/8 rounded-[28px] p-8 shadow-2xl shadow-black/60">
                     {/* Logo + header */}
-                    <div className="text-center mb-7">
+                    <div className="text-center mb-8">
                         <div className="flex justify-center mb-5">
                             <Image
                                 src="/FP_white.png"
@@ -216,59 +150,15 @@ export default function RegisterPage() {
                                 priority
                             />
                         </div>
-                        <h1 className="text-2xl font-bold text-white mb-1.5">Create account</h1>
-                        <p className="text-zinc-500 text-sm">Join the Fairplatz marketing platform</p>
+                        <h1 className="text-2xl font-bold text-white mb-1.5">Set new password</h1>
+                        <p className="text-zinc-500 text-sm">Choose a strong password for your account</p>
                     </div>
 
-                    <form onSubmit={handleRegister} className="space-y-4" noValidate>
-                        {/* Full name */}
+                    <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+                        {/* New password */}
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider ml-0.5">
-                                Full Name
-                            </label>
-                            <div className="relative group">
-                                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
-                                <input
-                                    type="text"
-                                    autoComplete="name"
-                                    placeholder="John Doe"
-                                    value={fullName}
-                                    onChange={(e) => {
-                                        setFullName(e.target.value);
-                                        if (errors.fullName) setErrors(p => ({ ...p, fullName: undefined }));
-                                    }}
-                                    className={inputBase(!!errors.fullName)}
-                                />
-                            </div>
-                            {errors.fullName && <p className="text-xs text-red-400 ml-0.5">{errors.fullName}</p>}
-                        </div>
-
-                        {/* Email */}
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider ml-0.5">
-                                Email
-                            </label>
-                            <div className="relative group">
-                                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
-                                <input
-                                    type="email"
-                                    autoComplete="email"
-                                    placeholder="you@example.com"
-                                    value={email}
-                                    onChange={(e) => {
-                                        setEmail(e.target.value);
-                                        if (errors.email) setErrors(p => ({ ...p, email: undefined }));
-                                    }}
-                                    className={inputBase(!!errors.email)}
-                                />
-                            </div>
-                            {errors.email && <p className="text-xs text-red-400 ml-0.5">{errors.email}</p>}
-                        </div>
-
-                        {/* Password */}
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider ml-0.5">
-                                Password
+                                New Password
                             </label>
                             <div className="relative group">
                                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
@@ -281,7 +171,14 @@ export default function RegisterPage() {
                                         setPassword(e.target.value);
                                         if (errors.password) setErrors(p => ({ ...p, password: undefined }));
                                     }}
-                                    className={cn(inputBase(!!errors.password), 'pr-11')}
+                                    className={cn(
+                                        "w-full bg-black/30 border rounded-xl pl-10 pr-11 py-3 text-sm text-white placeholder:text-zinc-600 outline-none transition-all duration-200",
+                                        "focus:bg-black/50 focus:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_0_20px_-8px_rgba(249,115,22,0.4)]",
+                                        "hover:border-zinc-700",
+                                        errors.password
+                                            ? "border-red-500/60 focus:border-red-500/60"
+                                            : "border-white/8 focus:border-orange-500/50"
+                                    )}
                                 />
                                 <button
                                     type="button"
@@ -292,7 +189,9 @@ export default function RegisterPage() {
                                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </button>
                             </div>
-                            {errors.password && <p className="text-xs text-red-400 ml-0.5">{errors.password}</p>}
+                            {errors.password && (
+                                <p className="text-xs text-red-400 ml-0.5 mt-1">{errors.password}</p>
+                            )}
                             <AnimatePresence>
                                 {password && (
                                     <motion.div
@@ -323,7 +222,14 @@ export default function RegisterPage() {
                                         setConfirmPassword(e.target.value);
                                         if (errors.confirmPassword) setErrors(p => ({ ...p, confirmPassword: undefined }));
                                     }}
-                                    className={cn(inputBase(!!errors.confirmPassword), 'pr-11')}
+                                    className={cn(
+                                        "w-full bg-black/30 border rounded-xl pl-10 pr-11 py-3 text-sm text-white placeholder:text-zinc-600 outline-none transition-all duration-200",
+                                        "focus:bg-black/50 focus:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_0_20px_-8px_rgba(249,115,22,0.4)]",
+                                        "hover:border-zinc-700",
+                                        errors.confirmPassword
+                                            ? "border-red-500/60 focus:border-red-500/60"
+                                            : "border-white/8 focus:border-orange-500/50"
+                                    )}
                                 />
                                 <button
                                     type="button"
@@ -334,83 +240,33 @@ export default function RegisterPage() {
                                     {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </button>
                             </div>
-                            {errors.confirmPassword && <p className="text-xs text-red-400 ml-0.5">{errors.confirmPassword}</p>}
+                            {errors.confirmPassword && (
+                                <p className="text-xs text-red-400 ml-0.5 mt-1">{errors.confirmPassword}</p>
+                            )}
                         </div>
 
-                        {/* Submit */}
                         <motion.button
                             type="submit"
-                            disabled={isLoading}
-                            whileHover={{ scale: isLoading ? 1 : 1.01 }}
-                            whileTap={{ scale: isLoading ? 1 : 0.98 }}
+                            disabled={loading}
+                            whileHover={{ scale: loading ? 1 : 1.01 }}
+                            whileTap={{ scale: loading ? 1 : 0.98 }}
                             className="w-full h-11 mt-1 bg-linear-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-sm font-semibold rounded-xl shadow-lg shadow-orange-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            {isLoading ? (
+                            {loading ? (
                                 <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                                 </svg>
                             ) : (
                                 <>
-                                    Create Account
+                                    Update password
                                     <ArrowRight className="w-4 h-4" />
                                 </>
                             )}
                         </motion.button>
                     </form>
-
-                    {/* Divider */}
-                    <div className="my-6 flex items-center gap-3">
-                        <div className="flex-1 h-px bg-white/6" />
-                        <span className="text-xs text-zinc-600">or</span>
-                        <div className="flex-1 h-px bg-white/6" />
-                    </div>
-
-                    {/* Login link */}
-                    <p className="text-center text-sm text-zinc-500">
-                        Already have an account?{' '}
-                        <Link href="/login" className="text-orange-400 hover:text-orange-300 font-medium transition-colors">
-                            Sign in
-                        </Link>
-                    </p>
                 </div>
             </motion.div>
-
-            {/* Success modal */}
-            <Modal
-                isOpen={showSuccessModal}
-                onClose={handleCloseModal}
-                title="Account Created"
-                maxWidth="max-w-md"
-            >
-                <div className="p-6 text-center space-y-5">
-                    <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto border border-green-500/20">
-                        <CheckCircle2 className="w-8 h-8 text-green-400" />
-                    </div>
-
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-bold text-white">Check your inbox</h3>
-                        <p className="text-zinc-400 text-sm leading-relaxed">
-                            We sent a confirmation link to{' '}
-                            <span className="text-white font-medium">{email}</span>.
-                            Click it to activate your account.
-                        </p>
-                    </div>
-
-                    <motion.button
-                        onClick={handleCloseModal}
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="w-full bg-linear-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white text-sm font-semibold py-3.5 rounded-xl shadow-lg shadow-green-500/20 transition-all duration-200 flex items-center justify-center gap-2"
-                    >
-                        Go to Login <ArrowRight className="w-4 h-4" />
-                    </motion.button>
-
-                    <p className="text-xs text-zinc-600">
-                        Didn&apos;t receive it? Check your spam folder or contact support.
-                    </p>
-                </div>
-            </Modal>
         </div>
     );
 }

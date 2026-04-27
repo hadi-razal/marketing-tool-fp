@@ -233,174 +233,160 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed inset-0 m-auto w-full max-w-4xl h-[90vh] bg-[#09090b] border border-white/10 rounded-3xl shadow-2xl z-50 overflow-hidden flex flex-col"
+                        className="fixed inset-0 m-auto w-full max-w-5xl h-[85vh] bg-[#0c0c0e] border border-white/5 shadow-[0_0_100px_rgba(0,0,0,0.8)] rounded-[20px] z-50 overflow-hidden flex flex-col"
                     >
-                        {/* Hero Header */}
+                        {/* Background subtle glow */}
                         <div
-                            className="relative h-64 border-b border-white/5 shrink-0 transition-colors duration-700"
-                            style={{ background: `linear-gradient(135deg, #09090b 0%, #000000 40%, ${brandColor}40 100%)` }}
-                        >
-                            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+                            className="absolute top-[-100px] right-[-100px] w-[600px] h-[600px] rounded-full blur-[160px] opacity-[0.12] pointer-events-none"
+                            style={{ background: brandColor || '#3b82f6' }}
+                        />
 
+                        {/* Top Header Section */}
+                        <div className="relative pt-12 px-12 pb-8 flex items-start gap-8 shrink-0 z-10 w-full">
                             {/* Close Button */}
                             <button
                                 onClick={onClose}
-                                className="absolute top-6 right-6 p-2 bg-black/50 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-colors border border-white/5 backdrop-blur-md z-20"
+                                className="absolute top-6 right-6 p-2 bg-white/5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
 
-                            {/* Content Container */}
-                            <div className="absolute bottom-0 left-0 w-full p-8 flex items-end gap-8 bg-gradient-to-t from-[#09090b] to-transparent">
-                                <div className="w-32 h-32 rounded-2xl bg-white p-3 border-4 border-[#09090b] shadow-2xl flex items-center justify-center overflow-hidden shrink-0 relative z-10">
-                                    {company.logo ? (
-                                        <img src={company.logo} alt={company.name} className="w-full h-full object-contain" />
-                                    ) : (
-                                        <Building2 className="w-16 h-16 text-zinc-400" />
+                            <div className="w-[140px] h-[140px] shrink-0 bg-white flex items-center justify-center p-4">
+                                {company.logo ? (
+                                    <img src={company.logo} alt={company.name} className="max-w-[70%] max-h-[70%] object-contain" />
+                                ) : (
+                                    <Building2 className="w-16 h-16 text-zinc-300" />
+                                )}
+                            </div>
+
+                            <div className="flex-1 mt-1 pr-16">
+                                <h2 className="text-[42px] font-bold tracking-[-0.02em] text-white leading-tight mb-3">{company.name}</h2>
+
+                                <div className="flex items-center gap-3 mb-6">
+                                    {company.industry && (
+                                        <span className="px-4 py-1.5 rounded-full bg-[#081e3a] border border-[#163a6a] text-blue-300 text-xs font-semibold">
+                                            {company.industry}
+                                        </span>
                                     )}
                                 </div>
-                                <div className="mb-2 flex-1">
-                                    <div className="flex items-center gap-4 mb-2">
-                                        <h2 className="text-4xl font-bold text-white tracking-tight">{company.name}</h2>
-                                        {/* {company.isSaved && (
-                                            <span className="bg-green-500/10 border border-green-500/20 text-green-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
-                                            </span>
-                                        )} */}
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-4 text-sm">
-                                        {company.industry && (
-                                            <span className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 font-medium">
-                                                {company.industry}
-                                            </span>
-                                        )}
-                                        {company.location && (
-                                            <span className="flex items-center gap-1.5 text-zinc-400">
-                                                <MapPin className="w-4 h-4 text-zinc-500" /> {company.location}
-                                            </span>
-                                        )}
-                                        {company.founded_year && (
-                                            <span className="flex items-center gap-1.5 text-zinc-400">
-                                                <Calendar className="w-4 h-4 text-zinc-500" /> Est. {company.founded_year}
-                                            </span>
-                                        )}
-                                        {company.saved_by && (
-                                            <span className="flex items-center gap-1.5 text-zinc-500">
-                                                {company.saved_by_profile_url ? (
-                                                    <div className="w-4 h-4 rounded-full overflow-hidden border border-zinc-700">
-                                                        <img src={company.saved_by_profile_url} alt={company.saved_by} className="w-full h-full object-cover" />
-                                                    </div>
-                                                ) : (
-                                                    <span className="w-1 h-1 rounded-full bg-zinc-600" />
-                                                )}
-                                                Saved by {company.saved_by}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
 
-                                {/* Save Button */}
+                                <div className="flex items-center gap-6 text-[13px] text-zinc-400 font-medium">
+                                    {company.location && (
+                                        <span className="flex items-center gap-2">
+                                            <MapPin className="w-4 h-4 text-transparent stroke-zinc-500" fill="none" />
+                                            {company.location}
+                                        </span>
+                                    )}
+                                    {company.founded_year && (
+                                        <span className="flex items-center gap-2">
+                                            <Calendar className="w-4 h-4 text-zinc-500" strokeWidth={1.5} />
+                                            Est. {company.founded_year}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Action Button - Moved to right side with flex positioning */}
+                            <div className="shrink-0 pt-2 absolute right-12 top-[80px]">
                                 {onSave && (
                                     <button
                                         onClick={handleSave}
                                         disabled={company.isSaved || isSaving}
-                                        className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-lg mb-2 ${company.isSaved
-                                            ? 'bg-zinc-800 text-zinc-500 cursor-default border border-white/5'
-                                            : 'bg-white hover:bg-zinc-200 text-black shadow-white/10 active:scale-95'
+                                        className={`px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${company.isSaved
+                                                ? 'bg-zinc-800/80 text-zinc-400 border border-white/5 cursor-default'
+                                                : 'bg-white hover:bg-zinc-200 text-black shadow-lg shadow-white/10'
                                             }`}
                                     >
                                         {isSaving ? (
                                             <Loader2 className="w-4 h-4 animate-spin" />
                                         ) : company.isSaved ? (
-                                            <CheckCircle2 className="w-4 h-4" />
+                                            <CheckCircle2 className="w-4 h-4 text-zinc-500" strokeWidth={2.5} />
                                         ) : (
-                                            <Save className="w-4 h-4" />
+                                            <CheckCircle2 className="w-4 h-4 opacity-50" strokeWidth={2.5} />
                                         )}
-                                        {isSaving ? 'Saving...' : company.isSaved ? 'Saved to Database' : 'Save Company'}
+                                        {isSaving ? 'Saving...' : company.isSaved ? 'Saved to Database' : 'Save to Database'}
                                     </button>
                                 )}
                             </div>
                         </div>
 
-                        {/* Tab Navigation */}
-                        <div className="px-8 pt-6 bg-[#09090b]">
-                            <div className="flex items-center gap-6 border-b border-white/5">
+                        {/* Tabs */}
+                        <div className="px-12 border-b border-white/[0.08] relative z-10 shrink-0 mt-3 flex items-center h-12">
+                            <div className="flex gap-10 h-full">
                                 <button
                                     onClick={() => setActiveTab('overview')}
-                                    className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'overview' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    className={`h-full text-[14px] font-bold transition-all relative ${activeTab === 'overview' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
                                 >
                                     Overview
                                     {activeTab === 'overview' && (
-                                        <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
+                                        <motion.div layoutId="tab-indicator" className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white" />
                                     )}
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('comments')}
-                                    className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'comments' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    className={`h-full text-[14px] font-bold transition-all flex items-center gap-2 relative ${activeTab === 'comments' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
                                 >
                                     Comments
-                                    {localComments.length > 0 && (
-                                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-white/10 text-[10px] text-zinc-400">
-                                            {localComments.length}
-                                        </span>
-                                    )}
+                                    <span className={`w-[22px] h-[22px] rounded-full flex items-center justify-center text-[10px] font-bold ${activeTab === 'comments' ? 'bg-white/20 text-white' : 'bg-white/10 text-zinc-400'}`}>
+                                        {localComments.length}
+                                    </span>
                                     {activeTab === 'comments' && (
-                                        <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
+                                        <motion.div layoutId="tab-indicator" className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white" />
                                     )}
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('people')}
-                                    className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'people' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    className={`h-full text-[14px] font-bold transition-all relative ${activeTab === 'people' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
                                 >
                                     People
                                     {activeTab === 'people' && (
-                                        <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-white rounded-full" />
+                                        <motion.div layoutId="tab-indicator" className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white" />
                                     )}
                                 </button>
                             </div>
                         </div>
 
                         {/* Content Area */}
-                        <div className="flex-1 min-h-0 bg-[#09090b] flex flex-col relative">
+                        <div className="flex-1 min-h-0 relative z-10 flex flex-col pt-10 px-12 pb-12">
                             <AnimatePresence mode="wait">
                                 {activeTab === 'overview' ? (
                                     <motion.div
                                         key="overview"
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 20 }}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
                                         transition={{ duration: 0.2 }}
-                                        className="flex-1 overflow-y-auto p-8 custom-scrollbar"
+                                        className="h-full overflow-y-auto custom-scrollbar pr-4 -mr-4"
                                     >
-                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                                            {/* Main Info Column */}
-                                            <div className="lg:col-span-2 space-y-10">
+                                        <div className="flex flex-col lg:flex-row gap-8 lg:gap-[120px]">
+                                            {/* LEFT COLUMN: About & Keywords */}
+                                            <div className="flex-1 min-w-0 space-y-[44px]">
                                                 <section>
-                                                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                        <span className="w-8 h-[1px] bg-zinc-800"></span> About
+                                                    <h3 className="text-[12px] font-semibold text-zinc-500 tracking-[0.08em] mb-7 flex items-center gap-3">
+                                                        <span className="w-10 h-[1px] bg-zinc-700"></span> ABOUT
                                                     </h3>
-                                                    <p className="text-zinc-300 leading-relaxed text-base">
+                                                    <p className="text-white text-[15px] leading-relaxed max-w-[640px] font-medium">
                                                         {company.description || 'No description available for this company.'}
                                                     </p>
                                                 </section>
 
                                                 {company.keywords && company.keywords.length > 0 && (
                                                     <section>
-                                                        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                            <span className="w-8 h-[1px] bg-zinc-800"></span> Keywords
+                                                        <h3 className="text-[12px] font-semibold text-zinc-500 tracking-[0.08em] mb-6 flex items-center gap-3">
+                                                            <span className="w-10 h-[1px] bg-zinc-700"></span> KEYWORDS
                                                         </h3>
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {company.keywords.slice(0, showAllKeywords ? undefined : 8).map((keyword, idx) => (
-                                                                <span key={idx} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 text-zinc-400 text-sm hover:bg-white/10 transition-colors cursor-default">
+                                                        <div className="flex flex-wrap gap-[9px] max-w-[640px]">
+                                                            {company.keywords.slice(0, showAllKeywords ? undefined : 12).map((keyword, idx) => (
+                                                                <span key={idx} className="px-4 py-[8px] rounded-lg bg-white/[0.04] border border-white-[0.06] flex items-center text-zinc-300 text-[13px] font-medium tracking-wide">
                                                                     {keyword}
                                                                 </span>
                                                             ))}
-                                                            {company.keywords.length > 8 && (
+                                                            {company.keywords.length > 12 && (
                                                                 <button
                                                                     onClick={() => setShowAllKeywords(!showAllKeywords)}
-                                                                    className="px-3 py-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 text-sm hover:bg-zinc-800 hover:text-white transition-colors"
+                                                                    className="px-4 py-[8px] rounded-lg bg-white/10 text-white text-[13px] font-medium hover:bg-white/20 transition-colors"
                                                                 >
-                                                                    {showAllKeywords ? 'Show Less' : `+${company.keywords.length - 8} more`}
+                                                                    {showAllKeywords ? 'Show Less' : `+${company.keywords.length - 12} more`}
                                                                 </button>
                                                             )}
                                                         </div>
@@ -408,74 +394,81 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({ compan
                                                 )}
                                             </div>
 
-                                            {/* Sidebar Info Column */}
-                                            <div className="space-y-6">
-                                                <div className="bg-zinc-900/50 rounded-2xl p-6 border border-white/5 space-y-5">
-                                                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Company Details</h3>
-
-                                                    {company.website && (
-                                                        <a href={company.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-zinc-300 hover:text-blue-400 transition-colors group p-2 hover:bg-white/5 rounded-lg -mx-2">
-                                                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5 group-hover:border-blue-500/30 transition-colors">
-                                                                <Globe className="w-4 h-4 text-zinc-500 group-hover:text-blue-400" />
+                                            {/* RIGHT COLUMN: Details & Socials */}
+                                            <div className="w-[340px] shrink-0 space-y-7">
+                                                {/* Details Box */}
+                                                <div className="p-7 pt-6 rounded-xl border border-white/10 bg-[#111113]">
+                                                    <h3 className="text-[11px] font-bold text-zinc-500 tracking-[0.08em] mb-8 uppercase">Company Details</h3>
+                                                    <div className="space-y-[30px]">
+                                                        {company.website && (
+                                                            <div className="flex items-center gap-5">
+                                                                <div className="w-11 h-11 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center shrink-0">
+                                                                    <Globe className="w-5 h-5 text-zinc-400" strokeWidth={1.5} />
+                                                                </div>
+                                                                <a href={company.website} target="_blank" rel="noopener noreferrer" className="text-[14px] font-semibold text-white hover:underline truncate">
+                                                                    {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '') || 'Website'}
+                                                                </a>
                                                             </div>
-                                                            <span className="truncate flex-1">Website</span>
-                                                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                        </a>
-                                                    )}
-
-                                                    {company.employees && (
-                                                        <div className="flex items-center gap-3 text-sm text-zinc-300 p-2 -mx-2">
-                                                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
-                                                                <Users className="w-4 h-4 text-zinc-500" />
+                                                        )}
+                                                        {company.employees && (
+                                                            <div className="flex items-center gap-5">
+                                                                <div className="w-11 h-11 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center shrink-0">
+                                                                    <Users className="w-5 h-5 text-zinc-400" strokeWidth={1.5} />
+                                                                </div>
+                                                                <span className="text-[14px] font-semibold text-white">
+                                                                    {company.employees.toLocaleString()} Employees
+                                                                </span>
                                                             </div>
-                                                            <span>{company.employees.toLocaleString()} Employees</span>
-                                                        </div>
-                                                    )}
-
-                                                    {company.revenue && (
-                                                        <div className="flex items-center gap-3 text-sm text-zinc-300 p-2 -mx-2">
-                                                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
-                                                                <DollarSign className="w-4 h-4 text-zinc-500" />
+                                                        )}
+                                                        {company.revenue && (
+                                                            <div className="flex items-center gap-5">
+                                                                <div className="w-11 h-11 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center shrink-0">
+                                                                    <DollarSign className="w-5 h-5 text-zinc-400" strokeWidth={1.5} />
+                                                                </div>
+                                                                <span className="text-[14px] font-semibold text-white">
+                                                                    {company.revenue} Revenue
+                                                                </span>
                                                             </div>
-                                                            <span>{company.revenue} Revenue</span>
-                                                        </div>
-                                                    )}
-
-                                                    {company.phone && (
-                                                        <div className="flex items-center gap-3 text-sm text-zinc-300 p-2 -mx-2">
-                                                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
-                                                                <Phone className="w-4 h-4 text-zinc-500" />
+                                                        )}
+                                                        {company.phone && (
+                                                            <div className="flex items-center gap-5">
+                                                                <div className="w-11 h-11 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center shrink-0">
+                                                                    <Phone className="w-5 h-5 text-zinc-400" strokeWidth={1.5} />
+                                                                </div>
+                                                                <span className="text-[14px] font-semibold text-white">
+                                                                    {company.phone}
+                                                                </span>
                                                             </div>
-                                                            <span>{company.phone}</span>
-                                                        </div>
-                                                    )}
+                                                        )}
+                                                    </div>
                                                 </div>
 
-                                                <div className="bg-zinc-900/50 rounded-2xl p-6 border border-white/5">
-                                                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Social Profiles</h3>
-                                                    <div className="flex gap-3">
+                                                {/* Social Profiles */}
+                                                <div className="p-7 pt-6 rounded-xl border border-white/10 bg-[#111113]">
+                                                    <h3 className="text-[11px] font-bold text-zinc-500 tracking-[0.08em] mb-6 uppercase">Social Profiles</h3>
+                                                    <div className="flex gap-[14px]">
                                                         {company.linkedin && (
-                                                            <a href={company.linkedin} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-xl bg-[#0077b5]/10 border border-[#0077b5]/20 flex items-center justify-center text-[#0077b5] hover:bg-[#0077b5] hover:text-white transition-all duration-300">
-                                                                <Linkedin className="w-5 h-5" />
+                                                            <a href={company.linkedin} target="_blank" rel="noopener noreferrer" className="w-[42px] h-[42px] rounded-xl border border-[#0077b5]/30 bg-[#0077b5]/10 flex items-center justify-center text-[#0077b5] transition-all">
+                                                                <Linkedin className="w-5 h-5" fill="currentColor" strokeWidth={0} />
                                                             </a>
                                                         )}
                                                         {company.twitter && (
-                                                            <a href={company.twitter} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-xl bg-[#1da1f2]/10 border border-[#1da1f2]/20 flex items-center justify-center text-[#1da1f2] hover:bg-[#1da1f2] hover:text-white transition-all duration-300">
+                                                            <a href={company.twitter} target="_blank" rel="noopener noreferrer" className="w-[42px] h-[42px] rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-white transition-all">
                                                                 <Twitter className="w-5 h-5" />
                                                             </a>
                                                         )}
                                                         {company.facebook && (
-                                                            <a href={company.facebook} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-xl bg-[#1877f2]/10 border border-[#1877f2]/20 flex items-center justify-center text-[#1877f2] hover:bg-[#1877f2] hover:text-white transition-all duration-300">
+                                                            <a href={company.facebook} target="_blank" rel="noopener noreferrer" className="w-[42px] h-[42px] rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-white transition-all">
                                                                 <Facebook className="w-5 h-5" />
                                                             </a>
                                                         )}
                                                         {!company.linkedin && !company.twitter && !company.facebook && (
-                                                            <span className="text-zinc-500 text-sm italic">No social profiles found.</span>
+                                                            <span className="text-[14px] text-zinc-500">No profiles found</span>
                                                         )}
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div> 
+                                        </div>
                                     </motion.div>
                                 ) : activeTab === 'comments' ? (
                                     <motion.div

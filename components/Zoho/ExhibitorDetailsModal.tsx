@@ -5,6 +5,8 @@ import { Globe, Hash, ExternalLink, Edit2, Plus, Building2, Calendar, MapPin, La
 import { zohoApi } from '@/lib/zoho';
 import { Skeleton } from '../ui/Skeleton';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 interface ExhibitorDetailsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -28,11 +30,11 @@ const Field = ({ label, value, isLink = false, href }: { label: string, value: a
         <div className="flex flex-col gap-1">
             <span className="text-[10px] uppercase tracking-wider font-bold text-zinc-500">{label}</span>
             {isLink ? (
-                <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 w-fit">
+                <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-orange-600 hover:text-orange-500 hover:underline flex items-center gap-1 w-fit">
                     {displayValue} <ExternalLink className="w-3 h-3 opacity-50" />
                 </a>
             ) : (
-                <span className="text-sm font-medium text-zinc-200">{displayValue}</span>
+                <span className="text-sm font-medium text-zinc-900">{displayValue}</span>
             )}
         </div>
     );
@@ -40,7 +42,7 @@ const Field = ({ label, value, isLink = false, href }: { label: string, value: a
 
 const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
     <div className="space-y-3">
-        <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">{title}</h3>
+        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-200 pb-2">{title}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-4">
             {children}
         </div>
@@ -51,9 +53,9 @@ const SubformTable = ({ data }: { data: any[] }) => {
     if (!data || !Array.isArray(data) || data.length === 0) return null;
     return (
         <div className="space-y-3">
-            <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">People</h3>
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-200 pb-2">People</h3>
             <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-zinc-400">
+                <table className="w-full text-left text-sm text-zinc-600">
                     <thead className="text-zinc-500 font-bold text-[10px] uppercase tracking-wider">
                         <tr>
                             <th className="pb-2 pr-4">Name</th>
@@ -63,10 +65,10 @@ const SubformTable = ({ data }: { data: any[] }) => {
                             <th className="pb-2">Website</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-zinc-100">
                         {data.map((item, i) => (
                             <tr key={i} className="group">
-                                <td className="py-2 pr-4 text-zinc-300 font-medium group-hover:text-white transition-colors">{item.Name}</td>
+                                <td className="py-2 pr-4 text-zinc-950 font-medium transition-colors">{item.Name}</td>
                                 <td className="py-2 pr-4">{item.Role}</td>
                                 <td className="py-2 pr-4">{item.Mail}</td>
                                 <td className="py-2 pr-4">{item.Mobile}</td>
@@ -148,14 +150,14 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 <div className="px-8 pt-8 pb-4">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">{data.Company}</h2>
+                            <h2 className="text-2xl md:text-3xl font-bold text-zinc-950 tracking-tight">{data.Company}</h2>
                             <div className="flex items-center gap-3 mt-2 text-sm text-zinc-500">
                                 <span className="flex items-center gap-1"><Hash className="w-3 h-3" /> {data.ID}</span>
                                 {data.FP_Level && (
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${data.FP_Level === '1' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                                         data.FP_Level === '2' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
                                             data.FP_Level === '3' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                                'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                                                'bg-zinc-100 text-zinc-500 border-zinc-200'
                                         }`}>
                                         Level {data.FP_Level}
                                     </span>
@@ -163,7 +165,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                             </div>
                         </div>
                         {eventsUrl && (
-                            <a href={eventsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition-colors border border-white/10 px-3 py-1.5 rounded-lg hover:bg-white/5">
+                            <a href={eventsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition-colors border border-zinc-200 px-3 py-1.5 rounded-lg hover:bg-orange-50">
                                 View Events <ExternalLink className="w-3 h-3" />
                             </a>
                         )}
@@ -171,13 +173,13 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 </div>
 
                 {/* Tab Navigation */}
-                <div className="px-8 border-b border-white/5 bg-black/20 sticky top-0 z-30 backdrop-blur-xl mb-4">
+                <div className="px-8 border-b border-zinc-200 bg-white/90 sticky top-0 z-30 backdrop-blur-xl mb-4">
                     <div className="flex gap-8">
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview'
                                 ? 'text-orange-500 border-orange-500'
-                                : 'text-zinc-400 border-transparent hover:text-white'
+                                : 'text-zinc-500 border-transparent hover:text-zinc-950'
                                 }`}
                         >
                             Overview
@@ -186,7 +188,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                             onClick={() => setActiveTab('shows')}
                             className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'shows'
                                 ? 'text-orange-500 border-orange-500'
-                                : 'text-zinc-400 border-transparent hover:text-white'
+                                : 'text-zinc-500 border-transparent hover:text-zinc-950'
                                 }`}
                         >
                             Shows
@@ -205,21 +207,21 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                     {activeTab === 'overview' ? (
                         <div className="space-y-3">
                             {(data.Company_Type || data.Type) && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Type</span>
-                                    <span className="text-sm text-zinc-200">{data.Company_Type || data.Type}</span>
+                                    <span className="text-sm text-zinc-900">{data.Company_Type || data.Type}</span>
                                 </div>
                             )}
                             {data.Events && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Events</span>
-                                    <span className="text-sm text-zinc-200">
+                                    <span className="text-sm text-zinc-900">
                                         {Array.isArray(data.Events) ? data.Events.join(', ') : data.Events}
                                     </span>
                                 </div>
                             )}
                             {website && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Website</span>
                                     <a href={website} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
                                         {website}
@@ -228,7 +230,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                 </div>
                             )}
                             {linkedin && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">LinkedIn</span>
                                     <a href={linkedin} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
                                         {linkedin}
@@ -237,25 +239,25 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                 </div>
                             )}
                             {data.Contact_Details && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Contact</span>
-                                    <span className="text-sm text-zinc-200">{data.Contact_Details}</span>
+                                    <span className="text-sm text-zinc-900">{data.Contact_Details}</span>
                                 </div>
                             )}
                             {(data.City || data.Country || data.Area || data.World_Area) && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Location</span>
-                                    <span className="text-sm text-zinc-200">
+                                    <span className="text-sm text-zinc-900">
                                         {[data.City, data.Country, data.Area || data.World_Area].filter(Boolean).join(', ')}
                                     </span>
                                 </div>
                             )}
                             {data.People && data.People.length > 0 && (
-                                <div className="pt-2 border-t border-white/10">
+                                <div className="pt-2 border-t border-zinc-200">
                                     <div className="space-y-3">
                                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">People</h3>
                                         <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-sm text-zinc-400">
+                                            <table className="w-full text-left text-sm text-zinc-600">
                                                 <thead className="text-zinc-500 font-bold text-[10px] uppercase tracking-wider">
                                                     <tr>
                                                         <th className="pb-2 pr-4">Name</th>
@@ -265,10 +267,10 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                                         <th className="pb-2">Website</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-white/5">
+                                                <tbody className="divide-y divide-zinc-100">
                                                     {data.People.map((item: any, i: number) => (
                                                         <tr key={i} className="group">
-                                                            <td className="py-2 pr-4 text-zinc-300 font-medium group-hover:text-white transition-colors">{item.Name}</td>
+                                                            <td className="py-2 pr-4 text-zinc-950 font-medium transition-colors">{item.Name}</td>
                                                             <td className="py-2 pr-4">{item.Role}</td>
                                                             <td className="py-2 pr-4">{item.Mail}</td>
                                                             <td className="py-2 pr-4">{item.Mobile}</td>
@@ -282,17 +284,17 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                 </div>
                             )}
                             {data.Notes && (
-                                <div className="pt-2 border-t border-white/10">
+                                <div className="pt-2 border-t border-zinc-200">
                                     <div className="flex items-start gap-3 py-2.5">
                                         <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Notes</span>
-                                        <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap flex-1">{data.Notes}</p>
+                                        <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap flex-1">{data.Notes}</p>
                                     </div>
                                 </div>
                             )}
                             {data.Added_Time && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
+                                <div className="flex items-center gap-3 py-2.5 border-b border-zinc-100">
                                     <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Added Time</span>
-                                    <span className="text-sm text-zinc-200">{formatDate(data.Added_Time)}</span>
+                                    <span className="text-sm text-zinc-900">{formatDate(data.Added_Time)}</span>
                                 </div>
                             )}
                         </div>
@@ -300,7 +302,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                         <div className="space-y-4">
                             {loadingShows ? (
                                 Array.from({ length: 3 }).map((_, i) => (
-                                    <div key={i} className="flex items-center gap-4 p-4 border border-white/5 rounded-xl bg-white/5">
+                                    <div key={i} className="flex items-center gap-4 p-4 border border-zinc-200 rounded-xl bg-zinc-50">
                                         <Skeleton className="w-10 h-10 rounded-lg" />
                                         <div className="space-y-2 flex-1">
                                             <Skeleton className="h-4 w-48" />
@@ -310,7 +312,7 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                 ))
                             ) : shows.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
-                                    <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
+                                    <div className="w-16 h-16 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
                                         <Layers className="w-8 h-8 opacity-40" />
                                     </div>
                                     <p className="text-lg font-medium">No shows found</p>
@@ -333,17 +335,17 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                                         const size = getValue(item.last_edition_booth_sqm);
 
                                         return (
-                                            <div key={item.ID} className="group p-4 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-orange-500/20 rounded-xl transition-all duration-300 flex items-center justify-between">
+                                            <div key={item.ID} className="group p-4 bg-white hover:bg-orange-50 border border-zinc-200 hover:border-orange-200 rounded-xl transition-all duration-300 flex items-center justify-between">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800 text-zinc-400 border border-white/10">
+                                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-100 text-zinc-600 border border-zinc-200">
                                                         <Calendar className="w-4 h-4" />
                                                     </div>
                                                     <div>
-                                                        <h4 className="text-white font-medium group-hover:text-orange-400 transition-colors">
+                                                        <h4 className="text-zinc-950 font-medium group-hover:text-orange-600 transition-colors">
                                                             {showName || 'Unknown Show'}
                                                         </h4>
                                                         <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 mt-1">
-                                                            {companyName && <span className="flex items-center gap-1 font-medium text-zinc-400">{companyName}</span>}
+                                                            {companyName && <span className="flex items-center gap-1 font-medium text-zinc-600">{companyName}</span>}
                                                             {booth && <span className="flex items-center gap-1">Booth: {booth}</span>}
                                                             <span className="flex items-center gap-1">Year: {year || 'Not available'}</span>
                                                             {size && <span className="flex items-center gap-1">Size: {size} sqm</span>}
@@ -360,9 +362,9 @@ export const ExhibitorDetailsModal: React.FC<ExhibitorDetailsModalProps> = ({ is
                 </div>
 
                 {/* Minimal Footer */}
-                <div className="p-6 border-t border-white/5 bg-zinc-900/50 backdrop-blur-sm flex justify-end gap-3">
-                    <Button variant="ghost" onClick={onClose} className="text-zinc-400 hover:text-white">Close</Button>
-                    <Button onClick={() => onEdit(data)} variant="secondary" className="glass-button" leftIcon={<Edit2 className="w-4 h-4" />}>Edit</Button>
+                <div className="p-6 border-t border-zinc-200 bg-zinc-50 backdrop-blur-sm flex justify-end gap-3">
+                    <Button variant="ghost" onClick={onClose}>Close</Button>
+                    <Button onClick={() => onEdit(data)} variant="secondary" leftIcon={<Edit2 className="w-4 h-4" />}>Edit</Button>
                 </div>
             </div>
         </Modal>

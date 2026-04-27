@@ -12,6 +12,11 @@ interface ActivityItem {
     user_name?: string;
 }
 
+interface ActivityUser {
+    uid: string;
+    name?: string | null;
+}
+
 export const RecentActivity = () => {
     const [activities, setActivities] = useState<ActivityItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -29,7 +34,7 @@ export const RecentActivity = () => {
                 if (error) throw error;
 
                 if (activityData) {
-                    const userIds = [...new Set(activityData.map((a: any) => a.uid).filter(Boolean))];
+                    const userIds = [...new Set((activityData as ActivityItem[]).map((a) => a.uid).filter(Boolean))];
                     let userMap: Record<string, string> = {};
 
                     if (userIds.length > 0) {
@@ -39,14 +44,14 @@ export const RecentActivity = () => {
                             .in('uid', userIds);
 
                         if (users) {
-                            userMap = users.reduce((acc: any, user: any) => {
+                            userMap = (users as ActivityUser[]).reduce<Record<string, string>>((acc, user) => {
                                 acc[user.uid] = user.name;
                                 return acc;
                             }, {});
                         }
                     }
 
-                    const mappedActivities = activityData.map((a: any) => ({
+                    const mappedActivities = (activityData as ActivityItem[]).map((a) => ({
                         ...a,
                         user_name: userMap[a.uid] || 'Unknown User'
                     }));
@@ -75,47 +80,47 @@ export const RecentActivity = () => {
 
     const getColors = (label: string) => {
         const l = label.toLowerCase();
-        if (l.includes('completed')) return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' };
-        if (l.includes('add') || l.includes('new') || l.includes('save')) return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' };
-        if (l.includes('edit') || l.includes('update')) return { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' };
-        if (l.includes('delete')) return { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' };
-        return { bg: 'bg-zinc-500/10', text: 'text-zinc-400', border: 'border-zinc-500/20' };
+        if (l.includes('completed')) return { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' };
+        if (l.includes('add') || l.includes('new') || l.includes('save')) return { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' };
+        if (l.includes('edit') || l.includes('update')) return { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' };
+        if (l.includes('delete')) return { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' };
+        return { bg: 'bg-zinc-100', text: 'text-zinc-600', border: 'border-zinc-200' };
     };
 
     return (
-        <div className="bg-zinc-900/40 backdrop-blur-sm rounded-2xl p-6 border border-white/5 shadow-lg relative overflow-hidden h-full">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="bg-white rounded-3xl p-6 border border-zinc-200 shadow-sm relative overflow-hidden h-full">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/8 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
-            <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
-                <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+            <h3 className="text-base font-bold text-zinc-950 mb-6 flex items-center gap-2">
+                <div className="w-1 h-4 bg-orange-500 rounded-full" />
                 Recent Activity
             </h3>
 
             <div className="space-y-4 relative">
                 {/* Vertical Line */}
-                <div className="absolute left-[19px] top-2 bottom-4 w-[1px] bg-zinc-800/50 -z-10" />
+                <div className="absolute left-[19px] top-2 bottom-4 w-px bg-zinc-200 -z-10" />
 
                 {loading ? (
                     <div className="flex flex-col gap-4">
                         {[1, 2, 3].map((i) => (
                             <div key={i} className="flex gap-4 animate-pulse">
-                                <div className="w-10 h-10 rounded-full bg-zinc-800" />
+                                <div className="w-10 h-10 rounded-full bg-zinc-200" />
                                 <div className="flex-1 space-y-2">
-                                    <div className="h-4 w-3/4 bg-zinc-800 rounded" />
-                                    <div className="h-3 w-1/4 bg-zinc-800 rounded" />
+                                    <div className="h-4 w-3/4 bg-zinc-200 rounded" />
+                                    <div className="h-3 w-1/4 bg-zinc-200 rounded" />
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : activities.length === 0 ? (
                     <div className="text-center py-12">
-                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-3 border border-white/5">
-                            <Circle className="w-6 h-6 text-zinc-600" />
+                        <div className="w-12 h-12 rounded-full bg-zinc-50 flex items-center justify-center mx-auto mb-3 border border-zinc-200">
+                            <Circle className="w-6 h-6 text-zinc-400" />
                         </div>
                         <p className="text-zinc-500 text-sm">No recent activity found</p>
                     </div>
                 ) : (
-                    activities.map((activity, index) => {
+                    activities.map((activity) => {
                         const Icon = getIcon(activity.label);
                         const colors = getColors(activity.label);
 
@@ -125,8 +130,8 @@ export const RecentActivity = () => {
                                     <Icon className={`w-5 h-5 ${colors.text}`} />
                                 </div>
                                 <div className="flex-1 py-1 min-w-0">
-                                    <p className="text-sm text-zinc-300 leading-relaxed font-medium">
-                                        <span className="text-white font-bold">{activity.user_name}</span>
+                                    <p className="text-sm text-zinc-700 leading-relaxed font-medium">
+                                        <span className="text-zinc-950 font-bold">{activity.user_name}</span>
                                         <span className="mx-1.5 text-zinc-500">•</span>
                                         {activity.status}
                                     </p>

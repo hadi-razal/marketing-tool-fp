@@ -51,16 +51,12 @@ interface ProfileCardProps {
     actionIcon?: React.ElementType;
     onClick?: () => void;
     isSaved?: boolean;
-    actionType?: 'save' | 'delete'; // Add action type to distinguish between save and delete
+    actionType?: 'save' | 'delete';
 }
 
 const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name: string, className?: string }) => {
     const [imageError, setImageError] = useState(false);
-
-    // Check if we have a valid image URL (not empty, not null, not a placeholder)
     const hasValidSrc = src && src.trim() !== '' && !imageError;
-
-    // Generate initials for fallback
     const initials = name
         ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
         : 'U';
@@ -84,7 +80,6 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
 };
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, actionIcon: ActionIcon, onClick, isSaved, actionType = 'save' }) => {
-    // Normalize data - handle initial search response format
     const firstName = lead.first_name || '';
     const lastName = lead.last_name || '';
     const name = lead.name || (firstName && lastName ? `${firstName} ${lastName}` : firstName || 'Unknown');
@@ -98,7 +93,6 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
     const isVerified = lead.status === 'Verified' || lead.email_status === 'verified';
     const saved = isSaved || lead.isSaved;
 
-    // Check if this is a limited data card (from initial search)
     const hasLimitedData = !saved && (
         email === 'Available (Unlock)' ||
         phone === 'Available (Unlock)' ||
@@ -107,58 +101,53 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
         lead.last_name_obfuscated
     );
 
-    // Simple card design for unsaved/limited data
     if (!saved && hasLimitedData) {
         return (
             <div
                 onClick={onClick}
-                className="group relative bg-[#0c0c0d] border border-white/5 rounded-xl overflow-hidden cursor-pointer hover:border-white/10 transition-all duration-300 flex flex-col h-[280px]"
+                className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5 transition-all duration-300 flex flex-col h-[280px]"
             >
-                {/* Simple Header */}
                 <div className="p-4 flex items-start gap-3">
                     <div className="relative shrink-0">
                         <Avatar
                             key={image || 'default'}
                             src={image}
                             name={name}
-                            className="w-10 h-10 rounded-lg object-cover border border-white/10"
+                            className="w-10 h-10 rounded-lg object-cover border border-zinc-200"
                             alt={name}
                         />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h3 className="text-white font-semibold text-sm truncate group-hover:text-orange-400 transition-colors">
+                        <h3 className="text-zinc-950 font-semibold text-sm truncate group-hover:text-orange-600 transition-colors">
                             {name}
                         </h3>
                         <p className="text-zinc-500 text-xs truncate mt-0.5">{title}</p>
                     </div>
                 </div>
 
-                {/* Simple Tags */}
                 <div className="px-4 flex flex-wrap gap-1.5 mb-3">
-                    <span className="inline-flex items-center gap-1.5 bg-white/5 text-zinc-400 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                    <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
                         <Building2 className="w-3 h-3 text-orange-500" />
                         <span className="truncate max-w-[120px]">{company}</span>
                     </span>
                     {location && (
-                        <span className="inline-flex items-center gap-1.5 bg-white/5 text-zinc-400 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                        <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
                             <MapPin className="w-3 h-3 text-blue-500" />
                             <span className="truncate max-w-[100px]">{location}</span>
                         </span>
                     )}
                 </div>
 
-                {/* Limited Info Message */}
                 <div className="mt-auto px-4 pb-4">
-                    <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
-                        <p className="text-[10px] text-orange-400 font-medium text-center">
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                        <p className="text-[10px] text-orange-600 font-medium text-center">
                             Click to view details and save
                         </p>
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="px-4 py-2 border-t border-white/5 bg-black/30">
-                    <span className="text-[9px] text-zinc-600 font-mono truncate">
+                <div className="px-4 py-2 border-t border-zinc-200 bg-zinc-50">
+                    <span className="text-[9px] text-zinc-400 font-mono truncate">
                         ID: {lead.id?.substring(0, 20)}
                     </span>
                 </div>
@@ -166,47 +155,44 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
         );
     }
 
-    // Rich card design for saved leads
     return (
         <div
             onClick={onClick}
-            className="group relative bg-[#0c0c0d] border border-white/5 rounded-xl overflow-hidden cursor-pointer hover:border-white/10 transition-all duration-300 flex flex-col h-[280px]"
+            className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5 transition-all duration-300 flex flex-col h-[280px]"
         >
-            {/* Header */}
             <div className="p-4 flex items-start gap-3">
                 <div className="relative shrink-0">
                     <Avatar
                         key={image || 'default'}
                         src={image}
                         name={name}
-                        className="w-12 h-12 rounded-xl object-cover border border-white/10"
+                        className="w-12 h-12 rounded-xl object-cover border border-zinc-200"
                         alt={name}
                     />
                     {isVerified && (
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center border-2 border-[#0c0c0d]">
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center border-2 border-white">
                             <Check className="w-2.5 h-2.5 text-white" />
                         </div>
                     )}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-semibold text-sm truncate group-hover:text-orange-400 transition-colors">{name}</h3>
+                    <h3 className="text-zinc-950 font-semibold text-sm truncate group-hover:text-orange-600 transition-colors">{name}</h3>
                     <p className="text-zinc-500 text-xs truncate mt-0.5">{title}</p>
                 </div>
                 {onAction && ActionIcon && (
                     <button
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            // Allow delete action even when saved, but only allow save when not saved
+                        onClick={(e) => {
+                            e.stopPropagation();
                             if (actionType === 'delete' || !saved) {
-                                onAction(lead); 
+                                onAction(lead);
                             }
                         }}
                         disabled={actionType === 'save' && saved}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${actionType === 'delete'
-                                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 border ${actionType === 'delete'
+                                ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100 hover:text-red-600'
                                 : saved
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'bg-white/5 text-zinc-500 hover:text-white hover:bg-orange-500'
+                                    ? 'bg-green-50 border-green-200 text-green-500'
+                                    : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-white hover:bg-orange-500 hover:border-orange-500'
                         }`}
                         title={actionType === 'delete' ? 'Delete person' : saved ? 'Already saved' : 'Save person'}
                     >
@@ -223,12 +209,12 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
 
             {/* Tags */}
             <div className="px-4 flex flex-wrap gap-1.5">
-                <span className="inline-flex items-center gap-1.5 bg-white/5 text-zinc-400 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
                     <Building2 className="w-3 h-3 text-orange-500" />
                     <span className="truncate max-w-[100px]">{company}</span>
                 </span>
                 {location && (
-                    <span className="inline-flex items-center gap-1.5 bg-white/5 text-zinc-400 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                    <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
                         <MapPin className="w-3 h-3 text-blue-500" />
                         <span className="truncate max-w-[120px]">{location}</span>
                     </span>
@@ -236,24 +222,24 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
             </div>
 
             {/* Contact Info */}
-            <div className="mt-auto p-4 space-y-2 bg-black/20 border-t border-white/5">
+            <div className="mt-auto p-4 space-y-2 bg-zinc-50 border-t border-zinc-200">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0">
-                        <Mail className="w-3 h-3 text-zinc-500" />
+                    <div className="w-6 h-6 rounded-md bg-white border border-zinc-200 flex items-center justify-center shrink-0">
+                        <Mail className="w-3 h-3 text-zinc-400" />
                     </div>
-                    <span className="text-xs text-zinc-400 truncate flex-1">{email}</span>
+                    <span className="text-xs text-zinc-600 truncate flex-1">{email}</span>
                 </div>
                 <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0">
-                        <Phone className="w-3 h-3 text-zinc-500" />
+                    <div className="w-6 h-6 rounded-md bg-white border border-zinc-200 flex items-center justify-center shrink-0">
+                        <Phone className="w-3 h-3 text-zinc-400" />
                     </div>
-                    <span className="text-xs text-zinc-400">{phone}</span>
+                    <span className="text-xs text-zinc-600">{phone}</span>
                 </div>
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-2.5 border-t border-white/5 flex items-center justify-between bg-black/30">
-                <span className="text-[9px] text-zinc-600 font-mono truncate max-w-[140px]">
+            <div className="px-4 py-2.5 border-t border-zinc-200 flex items-center justify-between bg-zinc-50">
+                <span className="text-[9px] text-zinc-400 font-mono truncate max-w-[140px]">
                     ID: {lead.id?.substring(0, 20)}
                 </span>
                 {linkedin && (
@@ -262,10 +248,10 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="text-[10px] font-semibold text-blue-500 hover:text-blue-400 flex items-center gap-1"
+                        className="text-[10px] font-semibold text-blue-600 hover:text-blue-500 flex items-center gap-1"
                     >
                         <Linkedin className="w-3 h-3" />
-                        LinkedIn Profile
+                        LinkedIn
                     </a>
                 )}
             </div>

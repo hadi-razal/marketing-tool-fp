@@ -22,10 +22,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
         const variants = {
             primary: "bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white shadow-lg shadow-orange-500/20 border border-orange-400/20",
-            secondary: "bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700",
-            ghost: "hover:bg-white/5 text-zinc-400 hover:text-white",
-            danger: "bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20",
-            outline: "bg-transparent border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+            secondary: "bg-white hover:bg-orange-50 text-zinc-900 border border-zinc-200 hover:border-orange-200 shadow-sm",
+            ghost: "hover:bg-orange-50 text-zinc-600 hover:text-zinc-950",
+            danger: "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200",
+            outline: "bg-transparent border border-zinc-300 text-zinc-700 hover:border-orange-300 hover:text-zinc-950 hover:bg-orange-50"
         };
 
         const sizes = {

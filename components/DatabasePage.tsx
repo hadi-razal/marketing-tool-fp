@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin
+    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin, Calendar, Globe, ArrowRight, LayoutGrid, List, ArrowUpDown, ChevronDown, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -14,15 +14,21 @@ import { LeadDetailModal } from './LeadDetailModal';
 import { CompanyCardSkeleton } from './CompanyCardSkeleton';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { databaseService, SavedPerson } from '@/services/databaseService';
+import { zohoApi } from '@/lib/zoho';
+import { DatabaseShowDetailModal } from './DatabaseShowDetailModal';
 
 interface DatabasePageProps {
     notify: (msg: string, type?: string) => void;
 }
 
 export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
-    const [activeView, setActiveView] = useState<'people' | 'companies'>('people');
+    const [activeView, setActiveView] = useState<'people' | 'companies' | 'shows'>('people');
     const [people, setPeople] = useState<SavedPerson[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
+    const [shows, setShows] = useState<any[]>([]);
+    const [showsLoading, setShowsLoading] = useState(false);
+    const [showsView, setShowsView] = useState<'grid' | 'list' | 'calendar'>('grid');
+    const [showsSort, setShowsSort] = useState<'name' | 'date' | 'country'>('name');
     const [dbSearch, setDbSearch] = useState<string>('');
     const [loading, setLoading] = useState(false);
 
@@ -32,7 +38,11 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         industry: '',
         location: '',
         employees: '',
-        contactStatus: [] as string[]
+        contactStatus: [] as string[],
+        showCountry: '',
+        showWorldArea: '',
+        showExhibitorsOnly: false,
+        showFloorplanOnly: false
     });
 
     // Modal States
@@ -41,6 +51,9 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
     const [selectedPerson, setSelectedPerson] = useState<SavedPerson | null>(null);
+
+    const [selectedShow, setSelectedShow] = useState<any | null>(null);
+    const [isShowDetailsOpen, setIsShowDetailsOpen] = useState(false);
 
     // Confirmation modal state
     const [confirmModal, setConfirmModal] = useState<{
@@ -71,6 +84,73 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
         fetchData();
     }, [notify]);
+
+    const fetchShows = useCallback(async () => {
+        setShowsLoading(true);
+        try {
+            const allShows: any[] = [];
+            let from = 0;
+            const limit = 200;
+            let hasMore = true;
+
+            while (hasMore) {
+                const res = await zohoApi.getRecords('Show_List', undefined, from, limit);
+                if (res.code === 3000 && res.data && res.data.length > 0) {
+                    allShows.push(...res.data);
+                    from += limit;
+                    if (res.data.length < limit) {
+                        hasMore = false;
+                    }
+                } else {
+                    hasMore = false;
+                }
+            }
+            setShows(allShows);
+        } catch (error) {
+            console.error('Failed to fetch shows:', error);
+            setShows([]);
+        } finally {
+            setShowsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (activeView === 'shows' && shows.length === 0) {
+            fetchShows();
+        }
+    }, [activeView, shows.length, fetchShows]);
+
+    const filteredShows = useMemo(() => {
+        let result = shows;
+        if (dbSearch) {
+            const q = dbSearch.toLowerCase();
+            result = result.filter((s: any) =>
+                (s.Event || s.Event_Name || s.Name || '').toLowerCase().includes(q) ||
+                (s.City || '').toLowerCase().includes(q) ||
+                (s.Country || '').toLowerCase().includes(q) ||
+                (s.Industry || '').toLowerCase().includes(q)
+            );
+        }
+        if (filters.showCountry) {
+            result = result.filter((s: any) => s.Country === filters.showCountry);
+        }
+        if (filters.showWorldArea) {
+            result = result.filter((s: any) => s.World_Area === filters.showWorldArea);
+        }
+        if (filters.showExhibitorsOnly) {
+            result = result.filter((s: any) => Boolean(s.Exhibitor_List_Link) || Boolean(s.Exhibitor_List) || Boolean(s.Last_edition_n_Exhibitors));
+        }
+        if (filters.showFloorplanOnly) {
+            result = result.filter((s: any) => Boolean(s.Floorplan_Link) || Boolean(s.Floorplan) || Boolean(s.Has_Floorplan));
+        }
+
+        return [...result].sort((a: any, b: any) => {
+            if (showsSort === 'name') return (a.Event || a.Event_Name || a.Name || '').localeCompare(b.Event || b.Event_Name || b.Name || '');
+            if (showsSort === 'date') return (a.Starting_Date || '').localeCompare(b.Starting_Date || '');
+            if (showsSort === 'country') return (a.Country || '').localeCompare(b.Country || '');
+            return 0;
+        });
+    }, [shows, dbSearch, showsSort, filters]);
 
     const filteredData = useMemo(() => {
         const query = dbSearch.toLowerCase();
@@ -160,7 +240,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         try {
             // Save the person to the database
             await databaseService.savePerson(personData);
-            
+
             // Refresh list after creation
             const savedPeople = await databaseService.getSavedPeople();
             setPeople(savedPeople);
@@ -177,10 +257,25 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         notify('Company created successfully', 'success');
     };
 
+    const openShowDetails = (show: any) => {
+        setSelectedShow(show);
+        setIsShowDetailsOpen(true);
+    };
+
     const uniqueIndustries = useMemo(() => {
         const industries = new Set(companies.map(c => c.industry).filter(Boolean));
         return Array.from(industries).sort();
     }, [companies]);
+
+    const uniqueCountries = useMemo(() => {
+        const countries = new Set(shows.map((s: any) => s.Country).filter(Boolean));
+        return Array.from(countries).sort();
+    }, [shows]);
+
+    const uniqueWorldAreas = useMemo(() => {
+        const areas = new Set(shows.map((s: any) => s.World_Area).filter(Boolean));
+        return Array.from(areas).sort();
+    }, [shows]);
 
     const handleUnlock = async (lead: SavedPerson, type: 'email' | 'phone') => {
         try {
@@ -231,101 +326,166 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                     onUnlock={handleUnlock}
                 />
             )}
+
+            <DatabaseShowDetailModal
+                isOpen={isShowDetailsOpen}
+                onClose={() => {
+                    setIsShowDetailsOpen(false);
+                    setSelectedShow(null);
+                }}
+                show={selectedShow}
+            />
+
             {/* Database Sidebar */}
-            <div className="w-full lg:w-72 flex-shrink-0 flex flex-col h-full bg-[#09090b] border border-white/5 rounded-[32px] p-6">
-                <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2.5">
+            <div className="w-full lg:w-72 shrink-0 flex flex-col h-full bg-white/90 border border-zinc-200 rounded-2xl p-6 shadow-xl shadow-zinc-950/5">
+                <h2 className="text-sm font-bold text-zinc-950 mb-6 flex items-center gap-2.5">
                     <Database className="w-4 h-4 text-orange-500" /> Database
                 </h2>
 
                 <div className="space-y-2">
                     <button
                         onClick={() => setActiveView('people')}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'people' ? 'bg-zinc-900 text-white border border-white/5' : 'text-zinc-500 hover:text-white hover:bg-white/5 border border-transparent'}`}
+                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'people' ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 border border-transparent'}`}
                     >
-                        <Users className={`w-4 h-4 ${activeView === 'people' ? 'text-orange-500' : 'text-zinc-600 group-hover:text-zinc-400'}`} />
+                        <Users className={`w-4 h-4 ${activeView === 'people' ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500'}`} />
                         <span>People</span>
-                        {activeView === 'people' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-orange-500"></div>}
+                        {activeView === 'people' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
                     </button>
 
                     <button
                         onClick={() => setActiveView('companies')}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'companies' ? 'bg-zinc-900 text-white border border-white/5' : 'text-zinc-500 hover:text-white hover:bg-white/5 border border-transparent'}`}
+                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'companies' ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 border border-transparent'}`}
                     >
-                        <Building2 className={`w-4 h-4 ${activeView === 'companies' ? 'text-orange-500' : 'text-zinc-600 group-hover:text-zinc-400'}`} />
+                        <Building2 className={`w-4 h-4 ${activeView === 'companies' ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500'}`} />
                         <span>Companies</span>
-                        {activeView === 'companies' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-orange-500"></div>}
+                        {activeView === 'companies' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
+                    </button>
+
+                    <button
+                        onClick={() => setActiveView('shows')}
+                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'shows' ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 border border-transparent'}`}
+                    >
+                        <Calendar className={`w-4 h-4 ${activeView === 'shows' ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500'}`} />
+                        <span>Shows</span>
+                        {activeView === 'shows' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
                     </button>
                 </div>
 
-                <div className="mt-auto pt-4 border-t border-white/5">
+                <div className="mt-auto pt-4 border-t border-zinc-200">
                     <div className="px-4 py-2 text-xs text-zinc-500 flex items-center gap-2">
-                        <FolderOpen className="w-3 h-3" /> {activeView === 'people' ? `${people.length} People` : `${companies.length} Companies`}
+                        <FolderOpen className="w-3 h-3" /> {activeView === 'people' ? `${people.length} People` : activeView === 'companies' ? `${companies.length} Companies` : `${shows.length} Shows`}
                     </div>
                 </div>
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 bg-[#09090b] border border-white/5 rounded-[32px] p-6 lg:p-8 flex flex-col overflow-hidden">
+            <div className="flex-1 bg-white/95 border border-zinc-200 rounded-2xl p-6 lg:p-8 flex flex-col overflow-hidden shadow-xl shadow-zinc-950/5">
                 <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-white tracking-tight mb-1">
-                            {activeView === 'people' ? 'People' : 'Companies'}
+                        <p className="text-xs font-bold text-orange-600 uppercase tracking-[0.22em] mb-1">CRM</p>
+                        <h1 className="text-2xl lg:text-3xl font-bold text-zinc-950 tracking-tight mb-1">
+                            {activeView === 'people' ? 'People' : activeView === 'companies' ? 'Companies' : 'Shows'}
                         </h1>
                         <p className="text-zinc-500 text-xs font-medium">
-                            Manage your {activeView} database
+                            {activeView === 'shows'
+                                ? 'Trade shows and exhibitions in one place — switch views anytime.'
+                                : `Manage your ${activeView} database`}
                         </p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
                         <div className="relative flex-1 sm:flex-none">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                             <input
                                 type="text"
                                 placeholder={`Search ${activeView}...`}
                                 value={dbSearch}
                                 onChange={(e) => setDbSearch(e.target.value)}
-                                className="w-full sm:w-[300px] bg-zinc-900 text-white text-xs font-medium pl-10 pr-4 py-3 rounded-xl border border-white/5 focus:border-white/10 outline-none transition-all placeholder:text-zinc-600"
+                                className="w-full sm:w-[300px] bg-white text-zinc-950 text-xs font-medium pl-10 pr-4 py-3 rounded-xl border border-zinc-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 outline-none transition-all placeholder:text-zinc-400 shadow-sm"
                             />
                         </div>
 
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowFilters(!showFilters)}
-                                className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border ${showFilters ? 'bg-zinc-800 text-white border-white/10' : 'bg-zinc-900 text-zinc-400 border-white/5 hover:text-white hover:bg-zinc-800'}`}
-                            >
-                                <Filter className="w-3.5 h-3.5" /> Filters
-                            </button>
-                            <button
-                                onClick={() => activeView === 'people' ? setIsCreatePersonOpen(true) : setIsCreateCompanyOpen(true)}
-                                className="bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-white/5"
-                            >
-                                <Plus className="w-3.5 h-3.5" /> Add {activeView === 'people' ? 'Person' : 'Company'}
-                            </button>
-                        </div>
+                        {activeView === 'shows' ? (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border ${showFilters ? 'bg-orange-50 text-orange-600 border-orange-300' : 'bg-white text-zinc-700 border-zinc-200 hover:text-zinc-950 hover:bg-orange-50 hover:border-orange-200 shadow-sm'}`}
+                                >
+                                    <Filter className="w-3.5 h-3.5" /> Filters
+                                </button>
+                                <div className="flex bg-zinc-100 rounded-xl p-0.5 shadow-inner">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowsView('grid')}
+                                        className={`p-2 rounded-lg transition-all ${showsView === 'grid' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-700'}`}
+                                        title="Grid view"
+                                    >
+                                        <LayoutGrid className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowsView('list')}
+                                        className={`p-2 rounded-lg transition-all ${showsView === 'list' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-700'}`}
+                                        title="List view"
+                                    >
+                                        <List className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowsView('calendar')}
+                                        className={`p-2 rounded-lg transition-all ${showsView === 'calendar' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-700'}`}
+                                        title="Calendar view"
+                                    >
+                                        <Calendar className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={fetchShows}
+                                    disabled={showsLoading}
+                                    className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-zinc-200 text-zinc-500 hover:text-zinc-950 hover:border-orange-200 hover:bg-orange-50 transition-all disabled:opacity-50 shadow-sm"
+                                >
+                                    <RefreshCw className={`w-3.5 h-3.5 ${showsLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border ${showFilters ? 'bg-orange-50 text-orange-600 border-orange-300' : 'bg-white text-zinc-700 border-zinc-200 hover:text-zinc-950 hover:bg-orange-50 hover:border-orange-200 shadow-sm'}`}
+                                >
+                                    <Filter className="w-3.5 h-3.5" /> Filters
+                                </button>
+                                <button
+                                    onClick={() => activeView === 'people' ? setIsCreatePersonOpen(true) : setIsCreateCompanyOpen(true)}
+                                    className="bg-zinc-950 hover:bg-zinc-800 text-white px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-zinc-950/15"
+                                >
+                                    <Plus className="w-3.5 h-3.5" /> Add {activeView === 'people' ? 'Person' : 'Company'}
+                                </button>
+                            </div>
+                        )}
                     </div >
                 </div >
 
                 {/* Filters Panel */}
                 <AnimatePresence>
                     {
-                        showFilters && (
+                        showFilters && activeView !== 'shows' && (
                             <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
                                 className="overflow-hidden mb-6"
                             >
-                                <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
                                     {activeView === 'companies' ? (
                                         <>
-                                            {/* Industry Filter */}
                                             <div className="space-y-2">
                                                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Industry</label>
                                                 <div className="relative">
                                                     <select
                                                         value={filters.industry}
                                                         onChange={(e) => setFilters(prev => ({ ...prev, industry: e.target.value }))}
-                                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 appearance-none cursor-pointer shadow-sm"
                                                     >
                                                         <option value="">All Industries</option>
                                                         {uniqueIndustries.map(ind => (
@@ -333,34 +493,32 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                         ))}
                                                     </select>
                                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                        <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                        <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* Location Filter */}
                                             <div className="space-y-2">
                                                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Location</label>
                                                 <div className="relative">
-                                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                                                     <input
                                                         type="text"
                                                         placeholder="City, Country..."
                                                         value={filters.location}
                                                         onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
-                                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
+                                                        className="w-full bg-white border border-zinc-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 placeholder:text-zinc-400 shadow-sm"
                                                     />
                                                 </div>
                                             </div>
 
-                                            {/* Employees Filter */}
                                             <div className="space-y-2">
                                                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Employees</label>
                                                 <div className="relative">
                                                     <select
                                                         value={filters.employees}
                                                         onChange={(e) => setFilters(prev => ({ ...prev, employees: e.target.value }))}
-                                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 appearance-none cursor-pointer shadow-sm"
                                                     >
                                                         <option value="">Any Size</option>
                                                         <option value="1-10">1-10 Employees</option>
@@ -371,13 +529,12 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                         <option value="1000+">1000+ Employees</option>
                                                     </select>
                                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                        <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                        <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                                                     </div>
                                                 </div>
                                             </div>
                                         </>
-                                    ) : (
-                                        /* People Filters - Contact Status */
+                                    ) : activeView === 'people' ? (
                                         <div className="space-y-3 md:col-span-3">
                                             <div className="flex flex-wrap gap-2">
                                                 {['Need to Contact', 'Good Lead', 'Not Interested', 'Need a Follow Up'].map((status) => {
@@ -395,9 +552,9 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                                     return { ...prev, contactStatus: newStatus };
                                                                 });
                                                             }}
-                                                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${isActive
-                                                                ? 'bg-zinc-100 text-black border border-transparent'
-                                                                : 'bg-transparent text-zinc-500 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-300'
+                                                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${isActive
+                                                                ? 'bg-zinc-950 text-white border-zinc-950'
+                                                                : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300 hover:text-zinc-950'
                                                                 }`}
                                                         >
                                                             {status}
@@ -407,33 +564,448 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                 {filters.contactStatus.length > 0 && (
                                                     <button
                                                         onClick={() => setFilters(prev => ({ ...prev, contactStatus: [] }))}
-                                                        className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 transition-colors"
+                                                        className="px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-500 transition-colors"
                                                     >
                                                         Clear
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
-                                    )}
+                                    ) : activeView === 'shows' ? (
+                                        <>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Country</label>
+                                                <div className="relative">
+                                                    <select
+                                                        value={filters.showCountry}
+                                                        onChange={(e) => setFilters(prev => ({ ...prev, showCountry: e.target.value }))}
+                                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 appearance-none cursor-pointer shadow-sm"
+                                                    >
+                                                        <option value="">All Countries</option>
+                                                        {uniqueCountries.map(c => (
+                                                            <option key={c} value={c}>{c}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                        <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">World Area</label>
+                                                <div className="relative">
+                                                    <select
+                                                        value={filters.showWorldArea}
+                                                        onChange={(e) => setFilters(prev => ({ ...prev, showWorldArea: e.target.value }))}
+                                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 appearance-none cursor-pointer shadow-sm"
+                                                    >
+                                                        <option value="">All Areas</option>
+                                                        {uniqueWorldAreas.map(a => (
+                                                            <option key={a} value={a}>{a}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                        <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Features</label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        onClick={() => setFilters(prev => ({ ...prev, showExhibitorsOnly: !prev.showExhibitorsOnly }))}
+                                                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${filters.showExhibitorsOnly
+                                                            ? 'bg-zinc-950 text-white border-zinc-950 shadow-sm'
+                                                            : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300 hover:text-zinc-950'
+                                                            }`}
+                                                    >
+                                                        Exhibitors List
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setFilters(prev => ({ ...prev, showFloorplanOnly: !prev.showFloorplanOnly }))}
+                                                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${filters.showFloorplanOnly
+                                                            ? 'bg-zinc-950 text-white border-zinc-950 shadow-sm'
+                                                            : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300 hover:text-zinc-950'
+                                                            }`}
+                                                    >
+                                                        Floorplan
+                                                    </button>
+                                                    {(filters.showExhibitorsOnly || filters.showFloorplanOnly) && (
+                                                        <button
+                                                            onClick={() => setFilters(prev => ({ ...prev, showExhibitorsOnly: false, showFloorplanOnly: false }))}
+                                                            className="px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-500 transition-colors"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : null}
                                 </div>
                             </motion.div>
                         )
                     }
-                </AnimatePresence >
+                </AnimatePresence>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                    {loading ? (
+                    {activeView === 'shows' ? (
+                        showsLoading ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
+                                {[...Array(6)].map((_, i) => (
+                                    <CompanyCardSkeleton key={i} />
+                                ))}
+                            </div>
+                        ) : filteredShows.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center">
+                                <div className="w-24 h-24 rounded-full bg-orange-50 flex items-center justify-center mb-4">
+                                    <Calendar className="w-10 h-10 text-orange-500" />
+                                </div>
+                                <p className="text-zinc-700 font-medium text-sm">No shows found</p>
+                                <p className="text-zinc-500 text-xs mt-1">Try refreshing or broadening your search.</p>
+                            </div>
+                        ) : showsView === 'grid' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 pb-20">
+                                {filteredShows.map((show: any, idx: number) => {
+                                    const showName = show.Event || show.Event_Name || show.Name || 'Unnamed Show';
+                                    const city = show.City || '';
+                                    const country = show.Country || '';
+                                    const industry = show.Industry || '';
+                                    const startDate = show.Starting_Date || '';
+                                    const location = [city, country].filter(Boolean).join(', ');
+                                    let dateShort = '';
+                                    if (startDate) {
+                                        try {
+                                            const d = new Date(startDate);
+                                            if (!Number.isNaN(d.getTime())) {
+                                                dateShort = d.toLocaleDateString(undefined, {
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    year: 'numeric',
+                                                });
+                                            }
+                                        } catch { /* */ }
+                                    }
+
+                                    return (
+                                        <motion.div
+                                            key={show.ID || idx}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: Math.min(idx * 0.04, 0.3) }}
+                                            className="h-full"
+                                        >
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => openShowDetails(show)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        openShowDetails(show);
+                                                    }
+                                                }}
+                                                className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md"
+                                            >
+                                                <div className="flex flex-1 flex-col p-5">
+                                                    <div className="mb-4 flex items-start justify-between gap-2">
+                                                        {dateShort ? (
+                                                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">
+                                                                <Calendar className="h-3 w-3 text-zinc-400" />
+                                                                {dateShort}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50 px-2.5 py-1 text-[11px] font-medium text-zinc-400">
+                                                                Date TBC
+                                                            </span>
+                                                        )}
+                                                        {industry && (
+                                                            <span className="max-w-[45%] truncate rounded-md bg-zinc-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-600">
+                                                                {industry}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <h3 className="line-clamp-2 min-h-10 text-base font-semibold leading-snug text-zinc-950 transition-colors group-hover:text-zinc-600">
+                                                        {showName}
+                                                    </h3>
+                                                    {location && (
+                                                        <p className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500">
+                                                            <MapPin className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                                                            <span className="line-clamp-2">{location}</span>
+                                                        </p>
+                                                    )}
+                                                    <div className="mt-auto flex items-center justify-between border-t border-zinc-100 pt-4 text-xs font-semibold text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100">
+                                                        <span className="flex items-center gap-1">
+                                                            View details
+                                                            <ArrowRight className="h-3.5 w-3.5" />
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        ) : showsView === 'list' ? (
+                            <div className="space-y-2.5 pb-20">
+                                {filteredShows.map((show: any, idx: number) => {
+                                    const showName = show.Event || show.Event_Name || show.Name || 'Unnamed Show';
+                                    const city = show.City || '';
+                                    const country = show.Country || '';
+                                    const industry = show.Industry || '';
+                                    const startDate = show.Starting_Date || '';
+                                    const organiser = show.Organiser || '';
+                                    const exhibitors = show.Last_edition_n_Exhibitors || '';
+                                    const location = [city, country].filter(Boolean).join(', ');
+
+                                    return (
+                                        <motion.div
+                                            key={show.ID || idx}
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: Math.min(idx * 0.02, 0.2) }}
+                                        >
+                                            <div
+                                                className="group flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-4 transition-all duration-200 hover:border-zinc-300 hover:shadow-md cursor-pointer"
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => openShowDetails(show)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        openShowDetails(show);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 text-zinc-400">
+                                                    <Calendar className="h-4 w-4" />
+                                                </div>
+
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="truncate text-sm font-semibold text-zinc-900 transition-colors group-hover:text-zinc-600">
+                                                        {showName}
+                                                    </h3>
+                                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+                                                        {organiser && <span className="truncate max-w-[140px]">{organiser}</span>}
+                                                        {organiser && location && <span className="text-zinc-300">·</span>}
+                                                        {location && (
+                                                            <span className="flex min-w-0 max-w-[200px] items-center gap-1 truncate">
+                                                                <MapPin className="h-3 w-3 shrink-0 text-zinc-400" />
+                                                                {location}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {industry && (
+                                                    <span className="hidden sm:inline-flex shrink-0 items-center rounded-md border border-zinc-100 bg-zinc-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                                                        {industry}
+                                                    </span>
+                                                )}
+
+                                                {exhibitors && (
+                                                    <div className="hidden shrink-0 flex-col items-center px-2 md:flex">
+                                                        <span className="text-sm font-bold text-zinc-950">{exhibitors}</span>
+                                                        <span className="text-[9px] uppercase text-zinc-500">exhibitors</span>
+                                                    </div>
+                                                )}
+
+                                                {startDate && (
+                                                    <div className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-600">
+                                                        <span className="whitespace-nowrap">{startDate}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="space-y-10 pb-20">
+                                {(() => {
+                                    const months: Record<string, any[]> = {};
+                                    filteredShows.forEach((show: any) => {
+                                        const raw = show.Starting_Date || '';
+                                        let key = 'No Date';
+                                        if (raw) {
+                                            try {
+                                                const d = new Date(raw);
+                                                if (!isNaN(d.getTime())) {
+                                                    key = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                                                }
+                                            } catch { /* keep 'No Date' */ }
+                                        }
+                                        if (!months[key]) months[key] = [];
+                                        months[key].push(show);
+                                    });
+
+                                    const currentMonthKey = new Date().toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                    });
+                                    const monthKeyToSortTime = (key: string): number => {
+                                        if (key === 'No Date') return Number.MAX_SAFE_INTEGER;
+                                        const m = key.match(/^(\S+)\s+(\d{4})$/);
+                                        if (!m) return Number.MAX_SAFE_INTEGER - 1;
+                                        const t = new Date(`${m[1]} 1, ${m[2]}`).getTime();
+                                        return isNaN(t) ? Number.MAX_SAFE_INTEGER - 1 : t;
+                                    };
+                                    const currentMonthTime = monthKeyToSortTime(currentMonthKey);
+                                    const sortedMonthEntries = Object.entries(months).sort((a, b) => {
+                                        const [keyA, keyB] = [a[0], b[0]];
+                                        // Current month always first
+                                        if (keyA === currentMonthKey && keyB !== currentMonthKey) return -1;
+                                        if (keyB === currentMonthKey && keyA !== currentMonthKey) return 1;
+
+                                        const timeA = monthKeyToSortTime(keyA);
+                                        const timeB = monthKeyToSortTime(keyB);
+                                        const aIsFuture = timeA >= currentMonthTime;
+                                        const bIsFuture = timeB >= currentMonthTime;
+
+                                        // Future months come before past months
+                                        if (aIsFuture && !bIsFuture) return -1;
+                                        if (!aIsFuture && bIsFuture) return 1;
+
+                                        // Among future months: ascending (nearest first)
+                                        if (aIsFuture && bIsFuture) return timeA - timeB;
+
+                                        // Among past months: descending (most recent first)
+                                        return timeB - timeA;
+                                    });
+
+                                    return sortedMonthEntries.map(([month, items]) => {
+                                        const sortedItems = [...items].sort((a: any, b: any) => {
+                                            const ta = a.Starting_Date ? new Date(a.Starting_Date).getTime() : 0;
+                                            const tb = b.Starting_Date ? new Date(b.Starting_Date).getTime() : 0;
+                                            return ta - tb;
+                                        });
+                                        const isThisMonth = month === currentMonthKey;
+                                        const isPast = month !== 'No Date' && monthKeyToSortTime(month) < currentMonthTime;
+                                        return (
+                                            <div
+                                                key={month}
+                                                className={`relative overflow-hidden rounded-3xl border border-zinc-200 bg-white ${isPast ? 'opacity-60 bg-zinc-50/50' : ''}`}
+                                            >
+                                                <div className="p-5 pl-6 sm:p-6 sm:pl-8">
+                                                    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Month</p>
+                                                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                                <h3 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">{month}</h3>
+                                                                {isThisMonth && (
+                                                                    <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-700">
+                                                                        This month
+                                                                    </span>
+                                                                )}
+                                                                {isPast && (
+                                                                    <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                                                                        Past
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-100 bg-zinc-50">
+                                                                <Calendar className="h-5 w-5 text-zinc-400" />
+                                                            </span>
+                                                            <div className="text-right">
+                                                                <p className="text-2xl font-bold leading-none text-zinc-950">{items.length}</p>
+                                                                <p className="text-[10px] font-medium uppercase text-zinc-500">event{items.length !== 1 ? 's' : ''}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="relative space-y-2">
+                                                        <div className="pointer-events-none absolute left-[22px] top-2 bottom-2 w-px bg-zinc-100 sm:left-[26px]" />
+                                                        {sortedItems.map((show: any, i: number) => {
+                                                            const showName = show.Event || show.Event_Name || show.Name || 'Unnamed Show';
+                                                            const city = show.City || '';
+                                                            const country = show.Country || '';
+                                                            const industry = show.Industry || '';
+                                                            const startDate = show.Starting_Date || '';
+                                                            const location = [city, country].filter(Boolean).join(', ');
+                                                            let dayNum = '';
+                                                            let weekDay = '';
+                                                            if (startDate) {
+                                                                try {
+                                                                    const d = new Date(startDate);
+                                                                    if (!Number.isNaN(d.getTime())) {
+                                                                        dayNum = String(d.getDate());
+                                                                        weekDay = d.toLocaleDateString(undefined, { weekday: 'short' });
+                                                                    }
+                                                                } catch { /* */ }
+                                                            }
+
+                                                            return (
+                                                                <div
+                                                                    key={show.ID || i}
+                                                                    className="group relative flex gap-3 pl-0 sm:gap-4"
+                                                                >
+                                                                    <div className="relative z-10 flex w-12 shrink-0 flex-col items-center sm:w-14">
+                                                                        {dayNum ? (
+                                                                            <div className="flex h-12 w-12 flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-white shadow-sm sm:h-14 sm:w-14">
+                                                                                <span className="text-[9px] font-bold uppercase text-zinc-400">{weekDay}</span>
+                                                                                <span className="text-lg font-bold leading-none text-zinc-900">{dayNum}</span>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 sm:h-14 sm:w-14">
+                                                                                <span className="text-[10px] font-bold">—</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div
+                                                                        role="button"
+                                                                        tabIndex={0}
+                                                                        onClick={() => openShowDetails(show)}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                                e.preventDefault();
+                                                                                openShowDetails(show);
+                                                                            }
+                                                                        }}
+                                                                        className="min-w-0 flex-1 cursor-pointer rounded-2xl border border-zinc-200 bg-white p-3.5 transition-all duration-200 hover:border-zinc-300 hover:shadow-md sm:p-4"
+                                                                    >
+                                                                        <h4 className="text-sm font-semibold text-zinc-900 transition-colors group-hover:text-zinc-600 sm:text-base">
+                                                                            {showName}
+                                                                        </h4>
+                                                                        {location && (
+                                                                            <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
+                                                                                <MapPin className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                                                                                <span className="truncate">{location}</span>
+                                                                            </p>
+                                                                        )}
+                                                                        {industry && (
+                                                                            <span className="mt-2 inline-flex rounded-md border border-zinc-100 bg-zinc-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-600">
+                                                                                {industry}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                            </div>
+                        )
+                    ) : loading ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
                             {[...Array(6)].map((_, i) => (
                                 <CompanyCardSkeleton key={i} />
                             ))}
                         </div>
                     ) : filteredData.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center opacity-40">
-                            <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center mb-4 border border-white/5">
-                                <Database className="w-10 h-10 text-zinc-600" />
+                        <div className="h-full flex flex-col items-center justify-center">
+                            <div className="w-24 h-24 rounded-full bg-orange-50 flex items-center justify-center mb-4">
+                                <Database className="w-10 h-10 text-orange-500" />
                             </div>
-                            <p className="text-zinc-500 font-medium text-sm">No {activeView} found</p>
+                            <p className="text-zinc-700 font-medium text-sm">No {activeView} found</p>
+                            <p className="text-zinc-500 text-xs mt-1">Try adjusting your filters or add a new record.</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">

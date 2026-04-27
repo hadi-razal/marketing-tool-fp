@@ -4,6 +4,12 @@ import { StatsGrid } from '@/components/Dashboard/StatsGrid';
 import { RecentActivity } from '@/components/Dashboard/RecentActivity';
 import { createClient } from '@/lib/supabase';
 
+type DashboardTask = {
+    id: string | number;
+    status?: string | null;
+    related_to?: string | null;
+};
+
 export default function DashboardPage() {
     const [stats, setStats] = useState({
         totalCompanies: 0,
@@ -70,10 +76,10 @@ export default function DashboardPage() {
                     .select('id, status, related_to');
                 
                 // Count unique tasks that are either pending OR have a related_to value
-                const relevantTasks = allTasks?.filter((task: any) => 
+                const relevantTasks = (allTasks as DashboardTask[] | null)?.filter((task) =>
                     task.status === 'Pending' || (task.related_to && task.related_to.trim() !== '')
                 ) || [];
-                const pendingTasksCount = new Set(relevantTasks.map((t: any) => t.id)).size;
+                const pendingTasksCount = new Set(relevantTasks.map((t) => t.id)).size;
 
                 setStats(prev => ({
                     ...prev,
@@ -115,9 +121,12 @@ export default function DashboardPage() {
         <div className="h-full overflow-y-auto custom-scrollbar">
             <div className="max-w-7xl mx-auto p-6 lg:p-8 space-y-8">
                 {/* Header */}
-                <div className="space-y-1">
-                    <p className="text-zinc-500 text-sm">{getGreeting()}, <span className="text-white font-medium">{userName || 'User'}</span></p>
-                    <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
+                <div className="rounded-2xl border border-zinc-200 bg-white/90 p-6 lg:p-8 shadow-xl shadow-zinc-950/5">
+                    <p className="text-zinc-500 text-sm">{getGreeting()}, <span className="text-zinc-950 font-semibold">{userName || 'User'}</span></p>
+                    <h1 className="mt-2 text-3xl lg:text-4xl font-bold text-zinc-950 tracking-tight">Dashboard</h1>
+                    <p className="mt-2 text-sm text-zinc-500 max-w-2xl">
+                        A cleaner overview of companies, leads, follow-ups, and tasks across your Fairplatz marketing workflow.
+                    </p>
                 </div>
 
                 {/* Stats */}

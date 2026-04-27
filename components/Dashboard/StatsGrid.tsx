@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Users, Sparkles, Phone, Clock, ListTodo } from 'lucide-react';
+import { Building2, Users, Sparkles, Phone, Clock, ListTodo, type LucideIcon } from 'lucide-react';
 
 interface StatsGridProps {
     stats: {
@@ -13,18 +13,18 @@ interface StatsGridProps {
     };
 }
 
-const StatCard = ({ label, value, icon: Icon, accent }: { label: string; value: string | number; icon: any; accent: string }) => (
-    <div className="group relative overflow-hidden bg-zinc-900/40 backdrop-blur-sm rounded-md p-5 border border-white/5 hover:border-white/10 transition-all duration-300 hover:bg-zinc-900/60 shadow-lg shadow-black/20">
-        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full bg-gradient-to-br ${accent} opacity-5 group-hover:opacity-10 transition-opacity blur-2xl`} />
+const StatCard = ({ label, value, icon: Icon, accent }: { label: string; value: string | number; icon: LucideIcon; accent: string }) => (
+    <div className="group relative overflow-hidden bg-white rounded-2xl p-5 border border-zinc-200 hover:border-orange-200 transition-all duration-300 hover:bg-orange-50/30 shadow-sm hover:shadow-lg hover:shadow-zinc-950/5">
+        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full bg-linear-to-br ${accent} opacity-10 group-hover:opacity-20 transition-opacity blur-2xl`} />
 
         <div className="relative flex items-start justify-between">
             <div className="space-y-4">
-                <div className={`w-10 h-10 rounded-md bg-gradient-to-br ${accent} bg-opacity-10 border border-white/5 flex items-center justify-center`}>
-                    <Icon className="w-5 h-5 text-white/90" />
+                <div className={`w-10 h-10 rounded-xl bg-linear-to-br ${accent} flex items-center justify-center shadow-lg shadow-zinc-950/10`}>
+                    <Icon className="w-5 h-5 text-white" />
                 </div>
                 <div>
                     <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">{label}</p>
-                    <p className="text-2xl font-bold text-white tracking-tight">{value}</p>
+                    <p className="text-2xl font-bold text-zinc-950 tracking-tight">{value}</p>
                 </div>
             </div>
             {/* Optional sparkline or indicator could go here */}

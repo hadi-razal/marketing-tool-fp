@@ -24,18 +24,18 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
 
     const getPriorityStyles = (priority: string) => {
         switch (priority.toLowerCase()) {
-            case 'high': return 'bg-red-500/10 text-red-400 border-red-500/20';
-            case 'medium': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-            case 'low': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-            default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
+            case 'high': return 'bg-red-50 text-red-600 border-red-200';
+            case 'medium': return 'bg-amber-50 text-amber-600 border-amber-200';
+            case 'low': return 'bg-blue-50 text-blue-600 border-blue-200';
+            default: return 'bg-zinc-100 text-zinc-600 border-zinc-200';
         }
     };
 
     const getStatusStyles = (status: string) => {
         switch (status.toLowerCase()) {
-            case 'completed': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-            case 'in progress': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-            default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
+            case 'completed': return 'bg-emerald-50 text-emerald-600 border-emerald-200';
+            case 'in progress': return 'bg-amber-50 text-amber-600 border-amber-200';
+            default: return 'bg-zinc-100 text-zinc-600 border-zinc-200';
         }
     };
 
@@ -48,21 +48,15 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 pointer-events-auto"
+                        className="fixed inset-0 bg-zinc-950/45 backdrop-blur-sm z-50 pointer-events-auto"
                     />
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
                         transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
-                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-[#09090b] border border-white/10 rounded-3xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh] pointer-events-auto"
+                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white border border-zinc-200 rounded-3xl shadow-2xl shadow-zinc-950/20 z-50 overflow-hidden flex flex-col max-h-[90vh] pointer-events-auto"
                     >
-                        {/* Status Stripe */}
-                        <div className={`h-1 w-full ${task.status === 'Completed' ? 'bg-emerald-500' : task.priority === 'High' ? 'bg-red-500' : 'bg-blue-500'}`} />
-
-                        {/* Subtle Gradient Backglow */}
-                        <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-
                         {/* Header */}
                         <div className="relative p-8 pb-4 flex items-start justify-between z-10">
                             <div className="space-y-4 pr-12 flex-1">
@@ -75,11 +69,11 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                                         {task.status}
                                     </div>
                                 </div>
-                                <h2 className="text-2xl font-bold text-white leading-tight break-words">{task.title}</h2>
+                                <h2 className="text-2xl font-bold text-zinc-950 leading-tight wrap-break-word">{task.title}</h2>
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-2.5 rounded-full bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/20 text-zinc-400 hover:text-white transition-all shadow-lg flex-shrink-0"
+                                className="p-2.5 rounded-full bg-zinc-50 border border-zinc-200 hover:bg-orange-50 hover:border-orange-200 text-zinc-500 hover:text-zinc-950 transition-all shadow-sm shrink-0"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -94,22 +88,22 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
                                             Description
                                         </h3>
-                                        <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">
+                                        <p className="text-zinc-700 text-sm leading-relaxed whitespace-pre-wrap">
                                             {task.description}
                                         </p>
                                     </div>
                                 )}
 
-                                {task.description && <div className="h-px bg-white/5" />}
+                                {task.description && <div className="h-px bg-zinc-200" />}
 
-                                {/* Meta Grid - Clean & Minimal */}
+                                {/* Meta Grid */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-4">
                                     {/* Due Date */}
                                     <div className="flex items-start gap-3">
-                                        <Calendar className="w-5 h-5 text-zinc-500 mt-0.5" />
+                                        <Calendar className="w-5 h-5 text-zinc-400 mt-0.5" />
                                         <div>
                                             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Due Date</p>
-                                            <p className="text-white font-medium text-sm">
+                                            <p className="text-zinc-950 font-medium text-sm">
                                                 {task.due_date ? format(new Date(task.due_date), 'MMMM d, yyyy') : 'No due date'}
                                             </p>
                                         </div>
@@ -117,10 +111,10 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
 
                                     {/* Related To */}
                                     <div className="flex items-start gap-3">
-                                        <Layout className="w-5 h-5 text-zinc-500 mt-0.5" />
+                                        <Layout className="w-5 h-5 text-zinc-400 mt-0.5" />
                                         <div>
                                             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Related To</p>
-                                            <p className="text-white font-medium text-sm">
+                                            <p className="text-zinc-950 font-medium text-sm">
                                                 {task.related_to || 'Not specified'}
                                             </p>
                                         </div>
@@ -128,7 +122,7 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
 
                                     {/* Created By */}
                                     <div className="flex items-start gap-3">
-                                        <div className="w-5 h-5 mt-0.5 rounded-full bg-zinc-800 border border-white/5 flex items-center justify-center text-[10px] font-bold text-zinc-400 overflow-hidden ring-1 ring-black">
+                                        <div className="w-5 h-5 mt-0.5 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-600 overflow-hidden">
                                             {task.profile_url ? (
                                                 <img src={task.profile_url} alt={task.created_by} className="w-full h-full object-cover" />
                                             ) : (
@@ -137,20 +131,19 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                                         </div>
                                         <div>
                                             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Created By</p>
-                                            <p className="text-white font-medium text-sm">{task.created_by}</p>
+                                            <p className="text-zinc-950 font-medium text-sm">{task.created_by}</p>
                                             {task.created_at && (
-                                                <p className="text-[10px] text-zinc-600 mt-0.5">
+                                                <p className="text-[10px] text-zinc-500 mt-0.5">
                                                     {format(new Date(task.created_at), 'MMM d, yyyy')}
                                                 </p>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Closed By - Only if Completed */}
-                                    {/* Closed By - Only if Completed */}
+                                    {/* Closed By */}
                                     {(task.status === 'Completed' || task.closed_by) && (
                                         <div className="flex items-start gap-3">
-                                            <div className="w-5 h-5 mt-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                                            <div className="w-5 h-5 mt-0.5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
                                                 <CheckCircle2 className="w-3 h-3" />
                                             </div>
                                             <div>
@@ -160,14 +153,14 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                                                         <img
                                                             src={task.closed_by_profile_url}
                                                             alt={task.closed_by_name || 'User'}
-                                                            className="w-5 h-5 rounded-full object-cover border border-white/10"
+                                                            className="w-5 h-5 rounded-full object-cover border border-zinc-200"
                                                         />
                                                     ) : (
-                                                        <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-[10px] font-bold text-emerald-500">
+                                                        <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[10px] font-bold text-emerald-600">
                                                             {(task.closed_by_name?.[0] || '?').toUpperCase()}
                                                         </div>
                                                     )}
-                                                    <p className="text-white font-medium text-sm">
+                                                    <p className="text-zinc-950 font-medium text-sm">
                                                         {task.closed_by_name || 'Unknown'}
                                                     </p>
                                                 </div>
@@ -177,25 +170,25 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
 
                                     {/* Assigned People */}
                                     <div className="flex items-start gap-3">
-                                        <Users className="w-5 h-5 text-zinc-500 mt-0.5" />
+                                        <Users className="w-5 h-5 text-zinc-400 mt-0.5" />
                                         <div className="flex-1">
                                             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Assigned People</p>
                                             {task.assigned_to_profiles && task.assigned_to_profiles.length > 0 ? (
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {task.assigned_to_profiles.map((profile, i) => (
-                                                        <div 
-                                                            key={profile.uid || i} 
-                                                            className="relative h-6 w-6 rounded-full ring-1 ring-[#09090b] bg-zinc-800 shadow-sm overflow-hidden hover:ring-orange-500/50 transition-all cursor-pointer group"
+                                                        <div
+                                                            key={profile.uid || i}
+                                                            className="relative h-6 w-6 rounded-full ring-1 ring-white bg-zinc-100 border border-zinc-200 shadow-sm overflow-hidden hover:ring-orange-400 transition-all cursor-pointer group"
                                                             title={profile.name || 'Unknown'}
                                                         >
                                                             {profile.photo_url ? (
-                                                                <img 
-                                                                    src={profile.photo_url} 
-                                                                    alt={profile.name} 
-                                                                    className="h-full w-full object-cover" 
+                                                                <img
+                                                                    src={profile.photo_url}
+                                                                    alt={profile.name}
+                                                                    className="h-full w-full object-cover"
                                                                 />
                                                             ) : (
-                                                                <div className="flex items-center justify-center w-full h-full text-[9px] text-zinc-400 font-bold uppercase">
+                                                                <div className="flex items-center justify-center w-full h-full text-[9px] text-zinc-600 font-bold uppercase">
                                                                     {profile.name?.charAt(0) || '?'}
                                                                 </div>
                                                             )}
@@ -203,9 +196,9 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-800/50 border border-white/5">
-                                                    <Globe className="w-4 h-4 text-zinc-500" />
-                                                    <span className="text-zinc-400 text-sm">All (Default)</span>
+                                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-200">
+                                                    <Globe className="w-4 h-4 text-zinc-400" />
+                                                    <span className="text-zinc-600 text-sm">All (Default)</span>
                                                 </div>
                                             )}
                                         </div>
@@ -215,10 +208,10 @@ export const TaskDetailsModal = ({ isOpen, onClose, task }: TaskDetailsModalProp
                         </div>
 
                         {/* Footer */}
-                        <div className="p-8 border-t border-white/5 bg-[#09090b] flex justify-end z-10">
+                        <div className="p-8 border-t border-zinc-200 bg-zinc-50 flex justify-end z-10">
                             <button
                                 onClick={onClose}
-                                className="px-8 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-sm font-bold transition-all border border-white/5 hover:border-white/10"
+                                className="px-8 py-3 rounded-2xl bg-white hover:bg-orange-50 text-zinc-950 text-sm font-bold transition-all border border-zinc-200 hover:border-orange-200 shadow-sm"
                             >
                                 Close
                             </button>

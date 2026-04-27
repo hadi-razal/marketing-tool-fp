@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Trash2, Edit2, Plus, Search, Filter, CheckCircle2, Circle, Clock, Globe, Lock, ChevronDown, MoreHorizontal, Calendar, User, AlertCircle, ArrowUpCircle, ArrowDownCircle, MinusCircle, LayoutGrid, List, Sparkles } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Plus, Search, Filter, CheckCircle2, Circle, Clock, Globe, Lock, MoreHorizontal, Calendar, AlertCircle, ArrowUpCircle, ArrowDownCircle, MinusCircle, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { Task } from '@/types/task';
 import { TaskModal } from '../Tasks/TaskModal';
 import { TaskDetailsModal } from '../Tasks/TaskDetailsModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, formatDistanceToNow, isPast, parseISO, isValid } from 'date-fns';
+import { format, isPast, parseISO, isValid } from 'date-fns';
 import { toast } from 'sonner';
 
 export const TasksTable = () => {
@@ -18,28 +18,14 @@ export const TasksTable = () => {
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [viewTask, setViewTask] = useState<Task | null>(null);
-    const [confirmModal, setConfirmModal] = useState<{
-        isOpen: boolean;
-        taskId: string | null;
-    }>({
-        isOpen: false,
-        taskId: null
-    });
+    const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; taskId: string | null }>({ isOpen: false, taskId: null });
     const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
     const [currentUserName, setCurrentUserName] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [openStatusDropdownId, setOpenStatusDropdownId] = useState<string | null>(null);
     const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [showMyTasksOnly, setShowMyTasksOnly] = useState(false);
+    const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'completed'>('all');
 
-    // Filter States
-    const [statusFilter, setStatusFilter] = useState<string[]>([]);
-    const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-
-    const dropdownRef = useRef<HTMLDivElement>(null);
     const actionMenuRef = useRef<HTMLDivElement>(null);
-    const filterRef = useRef<HTMLDivElement>(null);
     const supabase = createClient();
 
     const fetchUser = async () => {
@@ -47,55 +33,33 @@ export const TasksTable = () => {
         if (user) {
             setCurrentUserEmail(user.email || '');
             setCurrentUserId(user.id);
-
-            const { data: userData } = await supabase
-                .from('users')
-                .select('name')
-                .eq('uid', user.id)
-                .single();
-
-            if (userData) {
-                setCurrentUserName(userData.name || '');
-            }
+            const { data: userData } = await supabase.from('users').select('name').eq('uid', user.id).single();
+            if (userData) setCurrentUserName(userData.name || '');
         }
     };
 
     const fetchTasks = async () => {
         setLoading(true);
         try {
-            const { data: tasks, error } = await supabase
-                .from('tasks')
-                .select('*')
-                .order('created_at', { ascending: false }) as any;
-
+            const { data: tasks, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false }) as any;
             if (error) throw error;
 
-            // Collect all unique user IDs (both creators, closers, and assignees)
             const creators = tasks?.map((t: any) => t.uid).filter(Boolean) || [];
             const closers = tasks?.map((t: any) => t.closed_by).filter((id: any) => typeof id === 'string' && id.length > 0) || [];
             const assignees = tasks?.flatMap((t: any) => t.assigned_to || []).filter(Boolean) || [];
             const userIds = [...new Set([...creators, ...closers, ...assignees])];
-
             let userMap: Record<string, any> = {};
 
             if (userIds.length > 0) {
-                const { data: users } = await supabase
-                    .from('users')
-                    .select('uid, name, email, profile_url')
-                    .in('uid', userIds);
-
+                const { data: users } = await supabase.from('users').select('uid, name, email, profile_url').in('uid', userIds);
                 if (users) {
-                    userMap = users.reduce((acc: any, user: any) => {
-                        acc[user.uid] = user;
-                        return acc;
-                    }, {});
+                    userMap = users.reduce((acc: any, user: any) => { acc[user.uid] = user; return acc; }, {});
                 }
             }
 
             const mappedTasks = tasks?.map((t: any) => {
                 const creator = userMap[t.uid];
                 const closer = t.closed_by ? userMap[t.closed_by] : null;
-
                 const assignedProfiles = (t.assigned_to || []).map((uid: string) => {
                     const user = userMap[uid];
                     return user ? { uid: user.uid, name: user.name, photo_url: user.profile_url } : null;
@@ -120,21 +84,12 @@ export const TasksTable = () => {
         }
     };
 
-    useEffect(() => {
-        fetchUser();
-        fetchTasks();
-    }, []);
+    useEffect(() => { fetchUser(); fetchTasks(); }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setOpenStatusDropdownId(null);
-            }
             if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
                 setOpenActionMenuId(null);
-            }
-            if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-                setIsFilterOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -144,97 +99,43 @@ export const TasksTable = () => {
     const logActivity = async (label: string, actionDescription: string) => {
         if (!currentUserId) return;
         const name = currentUserName || currentUserEmail || 'User';
-        const statusMessage = `${name} ${actionDescription}`;
         try {
-            await supabase
-                .from('activities')
-                .insert([{
-                    label,
-                    status: statusMessage,
-                    uid: currentUserId,
-                    created_at: new Date().toISOString()
-                }]);
-        } catch (error) {
-            console.error('Error logging activity:', error);
-        }
+            await supabase.from('activities').insert([{ label, status: `${name} ${actionDescription}`, uid: currentUserId, created_at: new Date().toISOString() }]);
+        } catch (error) { console.error('Error logging activity:', error); }
     };
 
     const handleSaveTask = async (taskData: Partial<Task>) => {
         try {
-            if (!currentUserId) {
-                toast.error('User not found. Please log in again.');
-                return;
-            }
-
-            const payload: any = {
-                title: taskData.title,
-                description: taskData.description,
-                due_date: taskData.due_date,
-                priority: taskData.priority,
-                status: taskData.status,
-                visibility: taskData.visibility,
-                related_to: taskData.related_to,
-                assigned_to: taskData.assigned_to,
-                uid: currentUserId,
-                closed_by: taskData.status === 'Completed' ? currentUserId : null
-            };
+            if (!currentUserId) { toast.error('User not found. Please log in again.'); return; }
+            const payload: any = { title: taskData.title, description: taskData.description, due_date: taskData.due_date, priority: taskData.priority, status: taskData.status, visibility: taskData.visibility, related_to: taskData.related_to, assigned_to: taskData.assigned_to, uid: currentUserId, closed_by: taskData.status === 'Completed' ? currentUserId : null };
 
             if (selectedTask) {
-                const { error } = await supabase
-                    .from('tasks')
-                    .update(payload)
-                    .eq('id', selectedTask.id) as any;
+                const { error } = await supabase.from('tasks').update(payload).eq('id', selectedTask.id) as any;
                 if (error) throw error;
                 logActivity('Edited', 'edited a task');
                 toast.success('Task updated successfully');
             } else {
-                const { error } = await supabase
-                    .from('tasks')
-                    .insert([payload]) as any;
+                const { error } = await supabase.from('tasks').insert([payload]) as any;
                 if (error) throw error;
                 logActivity('Added', 'added a new task');
                 toast.success('Task created successfully');
             }
             fetchTasks();
-        } catch (error) {
-            console.error('Error saving task:', error);
-            throw error;
-        }
+        } catch (error) { console.error('Error saving task:', error); throw error; }
     };
 
     const handleStatusUpdate = async (id: string, newStatus: Task['status']) => {
         try {
-            setOpenStatusDropdownId(null);
-
+            setOpenActionMenuId(null);
             const updates: any = { status: newStatus };
-            if (newStatus === 'Completed') {
-                updates.closed_by = currentUserId;
-            } else {
-                updates.closed_by = null;
-            }
-
-            setData(prev => prev.map(t => t.id === id ? {
-                ...t,
-                ...updates,
-                closed_by_name: newStatus === 'Completed' ? currentUserName : undefined
-            } : t));
-
-            const { error } = await supabase
-                .from('tasks')
-                .update(updates)
-                .eq('id', id) as any;
-
-            if (error) {
-                throw error;
-                fetchTasks();
-            } else {
-                logActivity(`Marked as ${newStatus}`, `marked a task as ${newStatus}`);
-                toast.success(`Task marked as ${newStatus}`);
-                fetchTasks();
-            }
-        } catch (error) {
-            console.error('Error updating status:', error);
-        }
+            if (newStatus === 'Completed') updates.closed_by = currentUserId; else updates.closed_by = null;
+            setData(prev => prev.map(t => t.id === id ? { ...t, ...updates, closed_by_name: newStatus === 'Completed' ? currentUserName : undefined } : t));
+            const { error } = await supabase.from('tasks').update(updates).eq('id', id) as any;
+            if (error) { fetchTasks(); throw error; }
+            logActivity(`Marked as ${newStatus}`, `marked a task as ${newStatus}`);
+            toast.success(`Task marked as ${newStatus}`);
+            fetchTasks();
+        } catch (error) { console.error('Error updating status:', error); }
     };
 
     const handleVisibilityToggle = async (task: Task) => {
@@ -242,500 +143,286 @@ export const TasksTable = () => {
             setOpenActionMenuId(null);
             const newVisibility = task.visibility === 'Public' ? 'Private' : 'Public';
             setData(prev => prev.map(t => t.id === task.id ? { ...t, visibility: newVisibility } : t));
-            const { error } = await supabase
-                .from('tasks')
-                .update({ visibility: newVisibility })
-                .eq('id', task.id) as any;
-
-            if (error) {
-                throw error;
-                fetchTasks();
-            } else {
-                logActivity(`Visibility changed to ${newVisibility}`, `changed task visibility to ${newVisibility}`);
-                toast.success(`Task visibility changed to ${newVisibility}`);
-            }
-        } catch (error) {
-            console.error('Error updating visibility:', error);
-        }
+            const { error } = await supabase.from('tasks').update({ visibility: newVisibility }).eq('id', task.id) as any;
+            if (error) { fetchTasks(); throw error; }
+            logActivity(`Visibility changed to ${newVisibility}`, `changed task visibility to ${newVisibility}`);
+            toast.success(`Task visibility changed to ${newVisibility}`);
+        } catch (error) { console.error('Error updating visibility:', error); }
     };
 
-    const handleDeleteTaskClick = (id: string) => {
-        setOpenActionMenuId(null);
-        setConfirmModal({ isOpen: true, taskId: id });
-    };
-
+    const handleDeleteTaskClick = (id: string) => { setOpenActionMenuId(null); setConfirmModal({ isOpen: true, taskId: id }); };
     const confirmDeleteTask = async () => {
         if (!confirmModal.taskId) return;
-        const id = confirmModal.taskId;
-
         try {
-            const { error } = await supabase
-                .from('tasks')
-                .delete()
-                .eq('id', id) as any;
+            const { error } = await supabase.from('tasks').delete().eq('id', confirmModal.taskId) as any;
             if (error) throw error;
             logActivity('Deleted', 'deleted a task');
             toast.success('Task deleted');
             fetchTasks();
-        } catch (error) {
-            console.error('Error deleting task:', error);
-        }
+        } catch (error) { console.error('Error deleting task:', error); }
     };
+    const handleEditClick = (task: Task) => { setOpenActionMenuId(null); setSelectedTask(task); setIsModalOpen(true); };
+    const handleAddClick = () => { setSelectedTask(null); setIsModalOpen(true); };
+    const handleViewTask = (task: Task) => { setViewTask(task); setIsViewModalOpen(true); };
 
-    const handleEditClick = (task: Task) => {
-        setOpenActionMenuId(null);
-        setSelectedTask(task);
-        setIsModalOpen(true);
-    };
-
-    const handleAddClick = () => {
-        setSelectedTask(null);
-        setIsModalOpen(true);
-    };
-
-    const handleViewTask = (task: Task) => {
-        setViewTask(task);
-        setIsViewModalOpen(true);
-    };
-
-    const getPriorityIcon = (priority: string) => {
+    const getPriorityDot = (priority: string) => {
         switch (priority.toLowerCase()) {
-            case 'high': return <ArrowUpCircle className="w-3.5 h-3.5" />;
-            case 'medium': return <AlertCircle className="w-3.5 h-3.5" />;
-            case 'low': return <ArrowDownCircle className="w-3.5 h-3.5" />;
-            default: return <MinusCircle className="w-3.5 h-3.5" />;
+            case 'high': return 'bg-red-500';
+            case 'medium': return 'bg-amber-500';
+            case 'low': return 'bg-blue-500';
+            default: return 'bg-zinc-400';
         }
-    };
-
-    const getPriorityColor = (priority: string) => {
-        switch (priority.toLowerCase()) {
-            case 'high': return 'text-red-500';
-            case 'medium': return 'text-amber-500';
-            case 'low': return 'text-blue-500';
-            default: return 'text-zinc-500';
-        }
-    };
-
-    const getStatusIcon = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'completed': return <CheckCircle2 className="w-5 h-5 text-emerald-500" />;
-            case 'in progress': return <Clock className="w-5 h-5 text-amber-500" />;
-            default: return <Circle className="w-5 h-5 text-zinc-600 group-hover:text-zinc-500 transition-colors" />;
-        }
-    };
-
-    const formatDueDate = (dateString?: string) => {
-        if (!dateString) return null;
-        const date = parseISO(dateString);
-        if (!isValid(date)) return null;
-
-        const isOverdue = isPast(date) && !isPast(new Date(date.getTime() + 86400000));
-
-        return (
-            <div className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md border ${isOverdue ? 'bg-red-500/10 text-red-400 border-red-500/10' : 'bg-zinc-800/50 text-zinc-400 border-white/5'}`}>
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{format(date, 'MMM d')}</span>
-            </div>
-        );
-    };
-
-    const toggleFilter = (type: 'status' | 'priority', value: string) => {
-        if (type === 'status') {
-            setStatusFilter(prev => prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]);
-        } else {
-            setPriorityFilter(prev => prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]);
-        }
-    };
-
-    const clearFilters = () => {
-        setStatusFilter([]);
-        setPriorityFilter([]);
-        setShowMyTasksOnly(false);
     };
 
     const filteredData = data.filter(item => {
-        const matchesSearch = item.title.toLowerCase().includes(search.toLowerCase()) ||
-            (item.description && item.description.toLowerCase().includes(search.toLowerCase()));
-
+        const matchesSearch = item.title.toLowerCase().includes(search.toLowerCase()) || (item.description && item.description.toLowerCase().includes(search.toLowerCase()));
         const isVisible = item.visibility === 'Public' || item.uid === currentUserId;
-
-        const matchesStatus = statusFilter.length === 0 || statusFilter.includes(item.status);
-        const matchesPriority = priorityFilter.length === 0 || priorityFilter.includes(item.priority);
-        const matchesMyTasks = !showMyTasksOnly || item.uid === currentUserId;
-
-        return matchesSearch && isVisible && matchesStatus && matchesPriority && matchesMyTasks;
+        const matchesTab = activeTab === 'all' || (activeTab === 'pending' && item.status !== 'Completed') || (activeTab === 'completed' && item.status === 'Completed');
+        return matchesSearch && isVisible && matchesTab;
     });
 
-    const activeFiltersCount = statusFilter.length + priorityFilter.length + (showMyTasksOnly ? 1 : 0);
+    const pendingCount = data.filter(t => t.status !== 'Completed' && (t.visibility === 'Public' || t.uid === currentUserId)).length;
+    const completedCount = data.filter(t => t.status === 'Completed' && (t.visibility === 'Public' || t.uid === currentUserId)).length;
+
+    const tabs = [
+        { id: 'all' as const, label: 'All', count: data.filter(t => t.visibility === 'Public' || t.uid === currentUserId).length },
+        { id: 'pending' as const, label: 'Active', count: pendingCount },
+        { id: 'completed' as const, label: 'Done', count: completedCount },
+    ];
 
     return (
-        <div className="h-full flex flex-col">
-            <ConfirmModal
-                isOpen={confirmModal.isOpen}
-                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-                onConfirm={confirmDeleteTask}
-                title="Delete Task"
-                message="Are you sure you want to delete this task? This action cannot be undone."
-                confirmText="Delete Task"
-                isDestructive={true}
-            />
+        <div className="flex flex-col h-full">
+            <ConfirmModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })} onConfirm={confirmDeleteTask} title="Delete Task" message="Are you sure you want to delete this task? This action cannot be undone." confirmText="Delete Task" isDestructive={true} />
+            <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveTask} initialData={selectedTask} />
+            <TaskDetailsModal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} task={viewTask} />
 
-            <TaskModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSave={handleSaveTask}
-                initialData={selectedTask}
-            />
+            {/* Fixed Header */}
+            <div className="shrink-0 space-y-6 pb-6">
+                {/* Page Header */}
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-bold text-orange-600 uppercase tracking-[0.22em] mb-1">Productivity</p>
+                        <h1 className="text-3xl lg:text-4xl font-bold text-zinc-950 tracking-tight">Tasks</h1>
+                        <p className="text-zinc-500 text-sm mt-1.5">Stay organized and on track.</p>
+                    </div>
+                    <button
+                        onClick={handleAddClick}
+                        className="h-11 px-6 flex items-center gap-2 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-medium shadow-lg shadow-zinc-950/15 transition-all active:scale-95 self-start sm:self-auto"
+                    >
+                        <Plus className="w-4 h-4" />
+                        <span>New Task</span>
+                    </button>
+                </div>
 
-            <TaskDetailsModal
-                isOpen={isViewModalOpen}
-                onClose={() => setIsViewModalOpen(false)}
-                task={viewTask}
-            />
-
-            {/* Controls Toolbar */}
-            <div className="relative z-30 flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-md backdrop-blur-xl shadow-xl mb-6">
-                {/* Search */}
-                <div className="relative flex-1 group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-purple-500/10 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <div className="relative flex items-center">
-                        <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-orange-400 transition-colors" />
+                {/* Search + Tabs bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                         <input
                             type="text"
                             placeholder="Search tasks..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-md pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
+                            className="w-full bg-white border border-zinc-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all placeholder:text-zinc-400 shadow-sm"
                         />
                     </div>
-                </div>
-
-                {/* Actions Group */}
-                <div className="flex items-center gap-3">
-                    {/* Filter Button */}
-                    <div className="relative" ref={filterRef}>
-                        <button
-                            onClick={() => setIsFilterOpen(!isFilterOpen)}
-                            className={`h-11 px-5 flex items-center gap-2 rounded-md font-medium text-xs transition-colors border ${activeFiltersCount > 0
-                                ? 'bg-orange-500/10 border-orange-500/50 text-orange-500'
-                                : 'bg-transparent border-white/10 text-zinc-400 hover:text-white hover:border-white/20'
-                                }`}
-                        >
-                            <Filter className="w-4 h-4" />
-                            <span>Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}</span>
-                        </button>
-
-                        <AnimatePresence>
-                            {isFilterOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    className="absolute right-0 top-full mt-3 w-72 bg-[#121214] border border-white/10 rounded-md shadow-2xl z-50 p-5 backdrop-blur-xl"
-                                >
-                                    <div className="flex items-center justify-between mb-5">
-                                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Active Filters</h3>
-                                        {activeFiltersCount > 0 && (
-                                            <button onClick={clearFilters} className="text-[10px] text-zinc-500 hover:text-white transition-colors">
-                                                Clear all
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div className="space-y-5">
-                                        <div>
-                                            <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2.5 block">Show Only</label>
-                                            <button
-                                                onClick={() => setShowMyTasksOnly(!showMyTasksOnly)}
-                                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium transition-all border ${showMyTasksOnly
-                                                    ? 'bg-zinc-800 text-white border-zinc-700'
-                                                    : 'bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-white/5'
-                                                    }`}
-                                            >
-                                                <span>My Tasks</span>
-                                                {showMyTasksOnly && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                                            </button>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2.5 block">Status</label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {['Pending', 'In Progress', 'Completed'].map(status => (
-                                                    <button
-                                                        key={status}
-                                                        onClick={() => toggleFilter('status', status)}
-                                                        className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all border ${statusFilter.includes(status)
-                                                            ? 'bg-white text-black border-white'
-                                                            : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300'
-                                                            }`}
-                                                    >
-                                                        {status}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2.5 block">Priority</label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {['High', 'Medium', 'Low'].map(priority => (
-                                                    <button
-                                                        key={priority}
-                                                        onClick={() => toggleFilter('priority', priority)}
-                                                        className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all border ${priorityFilter.includes(priority)
-                                                            ? 'bg-white text-black border-white'
-                                                            : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300'
-                                                            }`}
-                                                    >
-                                                        {priority}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                    <div className="flex bg-zinc-100 rounded-2xl p-1 shadow-inner">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === tab.id ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                            >
+                                {tab.label}
+                                <span className={`ml-1.5 text-[10px] ${activeTab === tab.id ? 'text-orange-600' : 'text-zinc-400'}`}>{tab.count}</span>
+                            </button>
+                        ))}
                     </div>
-
-                    <div className="w-px h-8 bg-white/10 mx-1 hidden md:block" />
-
-                    {/* Refresh */}
                     <button
                         onClick={fetchTasks}
                         disabled={loading}
-                        className="h-11 w-11 flex items-center justify-center rounded-md bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5 hover:border-white/20 transition-all disabled:opacity-50"
+                        className="h-10 w-10 shrink-0 flex items-center justify-center rounded-2xl bg-white border border-zinc-200 text-zinc-500 hover:text-zinc-950 hover:border-orange-200 hover:bg-orange-50 transition-all disabled:opacity-50 shadow-sm"
                     >
                         <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     </button>
-
-                    {/* Add Button */}
-                    <button
-                        onClick={handleAddClick}
-                        className="h-11 px-6 flex items-center gap-2 rounded-md bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-medium shadow-lg shadow-orange-500/20 transition-all active:scale-95 group"
-                    >
-                        <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" />
-                        <span className="hidden sm:inline">Add Task</span>
-                    </button>
                 </div>
+
+                {/* Stats */}
+                {!loading && data.length > 0 && (
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
+                        <div className="flex items-center gap-4">
+                            <span>{pendingCount} active</span>
+                            <span className="text-zinc-300">·</span>
+                            <span>{completedCount} done</span>
+                        </div>
+                        <span>{filteredData.length} shown</span>
+                    </div>
+                )}
             </div>
 
-            {/* Table Container */}
-            <div className="flex-1 glass-panel rounded-md overflow-hidden flex flex-col border border-white/5 bg-black/40">
-                <div className="overflow-x-auto custom-scrollbar flex-1">
-                    <table className="w-full text-left text-sm text-zinc-400">
-                        <thead className="bg-zinc-900/80 text-zinc-400 uppercase text-[10px] font-bold sticky top-0 z-10 backdrop-blur-md border-b border-white/5 tracking-wider">
-                            <tr>
-                                <th className="px-6 py-4 w-12">Status</th>
-                                <th className="px-6 py-4">Task</th>
-                                <th className="px-6 py-4 hidden md:table-cell">Assigned To</th>
-                                <th className="px-6 py-4 hidden lg:table-cell">Priority</th>
-                                <th className="px-6 py-4 hidden xl:table-cell">Due Date</th>
-                                <th className="px-6 py-4 hidden xl:table-cell">Created By</th>
-                                <th className="px-6 py-4 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {loading && data.length === 0 ? (
-                                [...Array(5)].map((_, i) => (
-                                    <tr key={i}>
-                                        <td className="px-6 py-4"><div className="w-5 h-5 rounded-full bg-zinc-800 animate-pulse" /></td>
-                                        <td className="px-6 py-4">
-                                            <div className="h-4 w-48 bg-zinc-800 rounded animate-pulse mb-2" />
-                                            <div className="h-3 w-32 bg-zinc-800/50 rounded animate-pulse" />
-                                        </td>
-                                        <td className="px-6 py-4 hidden md:table-cell"><div className="flex -space-x-1"><div className="h-6 w-6 rounded-full bg-zinc-800 animate-pulse ring-2 ring-black" /><div className="h-6 w-6 rounded-full bg-zinc-800 animate-pulse ring-2 ring-black" /></div></td>
-                                        <td className="px-6 py-4 hidden lg:table-cell"><div className="h-4 w-16 bg-zinc-800 rounded animate-pulse" /></td>
-                                        <td className="px-6 py-4 hidden xl:table-cell"><div className="h-4 w-20 bg-zinc-800 rounded animate-pulse" /></td>
-                                        <td className="px-6 py-4 hidden xl:table-cell"><div className="h-8 w-8 rounded-full bg-zinc-800 animate-pulse" /></td>
-                                        <td className="px-6 py-4"><div className="h-8 w-8 rounded-md bg-zinc-800 animate-pulse ml-auto" /></td>
-                                    </tr>
-                                ))
-                            ) : filteredData.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="px-6 py-20 text-center text-zinc-500">
-                                        <div className="flex flex-col items-center justify-center">
-                                            <div className="w-16 h-16 rounded-full bg-zinc-900/50 border border-white/5 flex items-center justify-center mb-4">
-                                                <Sparkles className="w-6 h-6 text-zinc-700" />
-                                            </div>
-                                            <p className="font-medium text-zinc-400">No tasks found</p>
-                                            <p className="text-xs text-zinc-600 mt-1">Get started by creating a new task</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredData.map((item) => (
-                                    <tr
-                                        key={item.id}
-                                        onClick={() => handleViewTask(item)}
-                                        className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
-                                    >
-                                        {/* Status Checkbox */}
-                                        <td className="px-6 py-4 align-top pt-5">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const nextStatus = item.status === 'Completed' ? 'Pending' : 'Completed';
-                                                    handleStatusUpdate(item.id, nextStatus);
-                                                }}
-                                                className="text-zinc-600 hover:text-white transition-colors hover:scale-110 active:scale-90"
-                                            >
-                                                {getStatusIcon(item.status)}
-                                            </button>
-                                        </td>
+            {/* Scrollable Task List */}
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-6 space-y-2">
+                {loading && data.length === 0 ? (
+                    <div className="space-y-2">
+                        {[...Array(4)].map((_, i) => (
+                            <div key={i} className="rounded-2xl border border-zinc-100 bg-white p-5 animate-pulse">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-6 h-6 rounded-full bg-zinc-200" />
+                                    <div className="flex-1 space-y-2">
+                                        <div className="h-4 w-56 bg-zinc-200 rounded-lg" />
+                                        <div className="h-3 w-36 bg-zinc-100 rounded-lg" />
+                                    </div>
+                                    <div className="h-6 w-16 bg-zinc-100 rounded-full" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : filteredData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="w-16 h-16 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center mb-4">
+                            <Sparkles className="w-7 h-7" />
+                        </div>
+                        <p className="font-semibold text-zinc-700 text-lg">No tasks yet</p>
+                        <p className="text-zinc-500 text-sm mt-1 max-w-xs">Create your first task to start tracking your work.</p>
+                        <button onClick={handleAddClick} className="mt-5 px-5 py-2.5 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-950/10">
+                            <Plus className="w-4 h-4 inline mr-1.5 -mt-0.5" />Create Task
+                        </button>
+                    </div>
+                ) : (
+                    <AnimatePresence initial={false}>
+                        {filteredData.map((item) => {
+                            const isCompleted = item.status === 'Completed';
+                            const dueDateObj = item.due_date ? parseISO(item.due_date) : null;
+                            const isOverdue = dueDateObj && isValid(dueDateObj) && isPast(dueDateObj) && !isCompleted;
 
-                                        {/* Task Title & Description */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                {item.visibility === 'Private' && <Lock className="w-3 h-3 text-zinc-600" />}
-                                                <span className={`text-sm font-bold ${item.status === 'Completed' ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                            return (
+                                <motion.div
+                                    key={item.id}
+                                    layout
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -8 }}
+                                    transition={{ duration: 0.2 }}
+                                    onClick={() => handleViewTask(item)}
+                                    className={`group relative rounded-2xl border bg-white p-4 sm:p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-zinc-950/5 ${isCompleted ? 'border-zinc-100 opacity-70 hover:opacity-100' : 'border-zinc-200 hover:border-orange-200'}`}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        {/* Status toggle */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleStatusUpdate(item.id, isCompleted ? 'Pending' : 'Completed');
+                                            }}
+                                            className="mt-0.5 shrink-0 transition-transform hover:scale-110 active:scale-90"
+                                        >
+                                            {isCompleted
+                                                ? <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                                                : item.status === 'In Progress'
+                                                    ? <Clock className="w-6 h-6 text-amber-500" />
+                                                    : <Circle className="w-6 h-6 text-zinc-300 group-hover:text-zinc-400 transition-colors" />
+                                            }
+                                        </button>
+
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                {item.visibility === 'Private' && <Lock className="w-3 h-3 text-zinc-400 shrink-0" />}
+                                                <span className={`text-[15px] font-semibold leading-snug ${isCompleted ? 'line-through text-zinc-400' : 'text-zinc-950'}`}>
                                                     {item.title}
                                                 </span>
                                             </div>
-                                            {item.description && (
-                                                <p className="text-xs text-zinc-500 line-clamp-1 max-w-sm">{item.description}</p>
-                                            )}
-                                        </td>
 
-                                        {/* Assigned To */}
-                                        <td className="px-6 py-4 hidden md:table-cell align-middle">
-                                            <div className="flex -space-x-2 overflow-visible">
+                                            {item.description && (
+                                                <p className={`text-sm mt-1 line-clamp-1 ${isCompleted ? 'text-zinc-400' : 'text-zinc-500'}`}>{item.description}</p>
+                                            )}
+
+                                            {/* Metadata row */}
+                                            <div className="flex items-center gap-3 mt-3 flex-wrap">
+                                                {/* Priority */}
+                                                <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+                                                    <span className={`w-2 h-2 rounded-full ${getPriorityDot(item.priority)}`} />
+                                                    {item.priority}
+                                                </span>
+
+                                                {/* Due date */}
+                                                {dueDateObj && isValid(dueDateObj) && (
+                                                    <span className={`flex items-center gap-1 text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-zinc-500'}`}>
+                                                        <Calendar className="w-3 h-3" />
+                                                        {format(dueDateObj, 'MMM d')}
+                                                    </span>
+                                                )}
+
+                                                {/* Assignees */}
                                                 {item.assigned_to_profiles && item.assigned_to_profiles.length > 0 ? (
-                                                    item.assigned_to_profiles.map((profile, i) => (
-                                                        <div key={i} className="relative inline-block h-6 w-6 rounded-full ring-2 ring-[#09090b] bg-zinc-800 shadow-sm" title={profile.name}>
-                                                            {profile.photo_url ? (
-                                                                <img src={profile.photo_url} alt={profile.name} className="h-full w-full object-cover rounded-full" />
-                                                            ) : (
-                                                                <div className="flex items-center justify-center w-full h-full text-[9px] text-zinc-400 font-bold uppercase">
-                                                                    {profile.name.charAt(0)}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800/50 border border-white/5 text-[10px] text-zinc-400 whitespace-nowrap">
-                                                        <Globe className="w-3 h-3" />
-                                                        <span>All</span>
+                                                    <div className="flex -space-x-1.5">
+                                                        {item.assigned_to_profiles.slice(0, 3).map((profile, i) => (
+                                                            <div key={i} className="w-5 h-5 rounded-full ring-2 ring-white bg-zinc-200 overflow-hidden" title={profile.name}>
+                                                                {profile.photo_url
+                                                                    ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
+                                                                    : <span className="flex items-center justify-center w-full h-full text-[8px] font-bold text-zinc-600">{profile.name?.charAt(0)}</span>
+                                                                }
+                                                            </div>
+                                                        ))}
+                                                        {item.assigned_to_profiles.length > 3 && (
+                                                            <div className="w-5 h-5 rounded-full ring-2 ring-white bg-zinc-100 flex items-center justify-center text-[8px] font-bold text-zinc-500">+{item.assigned_to_profiles.length - 3}</div>
+                                                        )}
                                                     </div>
+                                                ) : (
+                                                    <span className="flex items-center gap-1 text-xs text-zinc-400">
+                                                        <Globe className="w-3 h-3" /> Everyone
+                                                    </span>
                                                 )}
                                             </div>
-                                        </td>
-
-                                        {/* Priority */}
-                                        <td className="px-6 py-4 hidden lg:table-cell align-middle">
-                                            <div className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${getPriorityColor(item.priority)}`}>
-                                                {getPriorityIcon(item.priority)}
-                                                <span>{item.priority}</span>
-                                            </div>
-                                        </td>
-
-                                        {/* Due Date */}
-                                        <td className="px-6 py-4 hidden xl:table-cell align-middle">
-                                            {formatDueDate(item.due_date)}
-                                        </td>
-
-                                        {/* Created By */}
-                                        <td className="px-6 py-4 hidden xl:table-cell align-middle">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-zinc-800 border border-white/5 flex items-center justify-center text-[10px] font-bold text-zinc-400 overflow-hidden ring-1 ring-black">
-                                                    {item.profile_url ? (
-                                                        <img src={item.profile_url} alt={item.created_by} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        (item.created_by || 'U').charAt(0).toUpperCase()
-                                                    )}
-                                                </div>
-                                                <span className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                                                    {item.created_by === currentUserEmail ? 'You' : (item.created_by || 'Unknown')}
-                                                </span>
-                                            </div>
-                                        </td>
+                                        </div>
 
                                         {/* Actions */}
-                                        <td className="px-6 py-4 text-right align-middle">
-                                            <div className="relative inline-block" onClick={e => e.stopPropagation()}>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setOpenActionMenuId(openActionMenuId === item.id ? null : item.id);
-                                                    }}
-                                                    className="p-2 rounded-md hover:bg-white/5 text-zinc-500 hover:text-white transition-colors"
-                                                >
-                                                    <MoreHorizontal className="w-4 h-4" />
-                                                </button>
+                                        <div className="relative shrink-0" ref={openActionMenuId === item.id ? actionMenuRef : undefined} onClick={e => e.stopPropagation()}>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenActionMenuId(openActionMenuId === item.id ? null : item.id);
+                                                }}
+                                                className="p-2 rounded-xl text-zinc-400 hover:text-zinc-950 hover:bg-orange-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            >
+                                                <MoreHorizontal className="w-4 h-4" />
+                                            </button>
 
-                                                <AnimatePresence>
-                                                    {openActionMenuId === item.id && (
-                                                        <motion.div
-                                                            initial={{ opacity: 0, scale: 0.95, x: -10 }}
-                                                            animate={{ opacity: 1, scale: 1, x: 0 }}
-                                                            exit={{ opacity: 0, scale: 0.95 }}
-                                                            className="absolute right-full top-0 mr-2 w-48 bg-[#121214] border border-white/10 rounded-md shadow-2xl z-50 p-1.5 overflow-hidden backdrop-blur-xl"
-                                                        >
-                                                            {item.uid === currentUserId ? (
-                                                                <>
-                                                                    <button
-                                                                        onClick={() => handleEditClick(item)}
-                                                                        className="w-full text-left px-3 py-2.5 rounded-md text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/5 flex items-center gap-2.5 transition-colors"
-                                                                    >
-                                                                        <Edit2 className="w-3.5 h-3.5" />
-                                                                        Edit Task
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleVisibilityToggle(item)}
-                                                                        className="w-full text-left px-3 py-2.5 rounded-md text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/5 flex items-center gap-2.5 transition-colors"
-                                                                    >
-                                                                        {item.visibility === 'Public' ? (
-                                                                            <><Lock className="w-3.5 h-3.5" /> Make Private</>
-                                                                        ) : (
-                                                                            <><Globe className="w-3.5 h-3.5" /> Make Public</>
-                                                                        )}
-                                                                    </button>
-                                                                    <div className="h-px bg-white/5 my-1" />
-                                                                    <button
-                                                                        onClick={() => handleDeleteTaskClick(item.id)}
-                                                                        className="w-full text-left px-3 py-2.5 rounded-md text-xs font-medium text-red-500 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors"
-                                                                    >
-                                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                                        Delete Task
-                                                                    </button>
-                                                                </>
-                                                            ) : (
-                                                                <div className="px-3 py-3 text-xs text-zinc-500 text-center italic">
-                                                                    Read only
-                                                                </div>
-                                                            )}
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                            <AnimatePresence>
+                                                {openActionMenuId === item.id && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                        exit={{ opacity: 0, scale: 0.95 }}
+                                                        className="absolute right-0 top-full mt-1 w-44 bg-white border border-zinc-200 rounded-xl shadow-xl shadow-zinc-950/10 z-50 p-1 overflow-hidden"
+                                                    >
+                                                        {item.uid === currentUserId ? (
+                                                            <>
+                                                                <button onClick={() => handleEditClick(item)} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-zinc-700 hover:text-zinc-950 hover:bg-orange-50 flex items-center gap-2 transition-colors">
+                                                                    <Edit2 className="w-3.5 h-3.5" /> Edit
+                                                                </button>
+                                                                <button onClick={() => handleVisibilityToggle(item)} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-zinc-700 hover:text-zinc-950 hover:bg-orange-50 flex items-center gap-2 transition-colors">
+                                                                    {item.visibility === 'Public' ? <><Lock className="w-3.5 h-3.5" /> Make Private</> : <><Globe className="w-3.5 h-3.5" /> Make Public</>}
+                                                                </button>
+                                                                <div className="h-px bg-zinc-100 my-0.5" />
+                                                                <button onClick={() => handleDeleteTaskClick(item.id)} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                                                                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <div className="px-3 py-2.5 text-xs text-zinc-500 text-center italic">Read only</div>
+                                                        )}
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </AnimatePresence>
+                )}
             </div>
 
-            {/* Footer Stats */}
-            {!loading && data.length > 0 && (
-                <div className="mt-4 p-4 bg-zinc-900/50 border border-white/5 rounded-md backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-zinc-400">
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                            <span>Total: <span className="text-white ml-1">{data.length}</span></span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span>Completed: <span className="text-white ml-1">{data.filter(t => t.status === 'Completed').length}</span></span>
-                        </div>
-                    </div>
-
-                    <div className="text-[10px] uppercase tracking-wider opacity-50">
-                        {filteredData.length} Shown
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

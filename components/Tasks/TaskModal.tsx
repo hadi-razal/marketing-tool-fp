@@ -112,28 +112,28 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50"
+                        className="fixed inset-0 bg-zinc-950/45 backdrop-blur-sm z-50"
                     />
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
-                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-[#09090b] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
+                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white border border-zinc-200 rounded-3xl shadow-2xl shadow-zinc-950/20 z-50 overflow-hidden flex flex-col max-h-[90vh]"
                     >
                         {/* Header */}
-                        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                        <div className="p-6 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
                             <div>
-                                <h2 className="text-xl font-bold text-white tracking-tight">
+                                <h2 className="text-xl font-bold text-zinc-950 tracking-tight">
                                     {initialData ? 'Edit Task' : 'New Task'}
                                 </h2>
-                                <p className="text-xs text-zinc-400 mt-1">
+                                <p className="text-xs text-zinc-500 mt-1">
                                     {initialData ? 'Update task details below.' : 'Create a new task to track progress.'}
                                 </p>
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-2 rounded-full hover:bg-white/5 text-zinc-400 hover:text-white transition-colors"
+                                className="p-2 rounded-full hover:bg-orange-50 text-zinc-500 hover:text-zinc-950 transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -150,7 +150,7 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                         value={formData.title}
                                         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                         placeholder="What needs to be done?"
-                                        className="w-full bg-zinc-900/50 border border-white/10 rounded-md px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-zinc-600"
+                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all placeholder:text-zinc-400 shadow-sm"
                                         required
                                     />
                                 </div>
@@ -163,7 +163,7 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                         placeholder="Add more details..."
                                         rows={4}
-                                        className="w-full bg-zinc-900/50 border border-white/10 rounded-md px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-zinc-600 resize-none"
+                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all placeholder:text-zinc-400 resize-none shadow-sm"
                                     />
                                 </div>
 
@@ -174,31 +174,31 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                         <button
                                             type="button"
                                             onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
-                                            className="w-full flex items-center justify-between bg-zinc-900/50 border border-white/10 rounded-md px-4 py-3 text-sm text-zinc-300 hover:border-white/20 transition-all"
+                                            className="w-full flex items-center justify-between bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-700 hover:border-zinc-300 transition-all shadow-sm"
                                         >
                                             <div className="flex items-center gap-2 overflow-hidden">
-                                                <User className="w-4 h-4 text-zinc-500 shrink-0" />
+                                                <User className="w-4 h-4 text-zinc-400 shrink-0" />
                                                 {(formData.assigned_to?.length || 0) === 0 ? (
-                                                    <span className="text-zinc-500">All (Default)</span>
+                                                    <span className="text-zinc-400">All (Default)</span>
                                                 ) : (
                                                     <div className="flex -space-x-2">
                                                         {formData.assigned_to?.slice(0, 5).map(uid => {
                                                             const user = users.find(u => u.uid === uid);
                                                             return (
-                                                                <div key={uid} className="w-5 h-5 rounded-full ring-2 ring-[#09090b] bg-zinc-800 flex items-center justify-center overflow-hidden" title={user?.name}>
-                                                                    {user?.profile_url ? <img src={user.profile_url} alt="" className="w-full h-full object-cover" /> : <span className="text-[8px] font-bold">{user?.name?.[0]}</span>}
+                                                                <div key={uid} className="w-5 h-5 rounded-full ring-2 ring-white bg-zinc-200 flex items-center justify-center overflow-hidden" title={user?.name}>
+                                                                    {user?.profile_url ? <img src={user.profile_url} alt="" className="w-full h-full object-cover" /> : <span className="text-[8px] font-bold text-zinc-600">{user?.name?.[0]}</span>}
                                                                 </div>
                                                             );
                                                         })}
                                                         {(formData.assigned_to?.length || 0) > 5 && (
-                                                            <div className="w-5 h-5 rounded-full ring-2 ring-[#09090b] bg-zinc-800 flex items-center justify-center text-[8px] font-bold text-zinc-400">
+                                                            <div className="w-5 h-5 rounded-full ring-2 ring-white bg-zinc-200 flex items-center justify-center text-[8px] font-bold text-zinc-600">
                                                                 +{(formData.assigned_to?.length || 0) - 5}
                                                             </div>
                                                         )}
                                                     </div>
                                                 )}
                                             </div>
-                                            <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${isAssigneeDropdownOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${isAssigneeDropdownOpen ? 'rotate-180' : ''}`} />
                                         </button>
 
                                         <AnimatePresence>
@@ -207,15 +207,15 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    className="absolute top-full left-0 right-0 mt-2 bg-[#121214] border border-white/10 rounded-lg shadow-xl z-50 p-2 max-h-60 overflow-y-auto custom-scrollbar"
+                                                    className="absolute top-full left-0 right-0 mt-2 bg-white border border-zinc-200 rounded-xl shadow-2xl shadow-zinc-950/15 z-50 p-2 max-h-60 overflow-y-auto custom-scrollbar"
                                                 >
                                                     <button
                                                         type="button"
                                                         onClick={() => { clearAssignees(); setIsAssigneeDropdownOpen(false); }}
-                                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${(formData.assigned_to?.length || 0) === 0 ? 'bg-blue-500/10 text-blue-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${(formData.assigned_to?.length || 0) === 0 ? 'bg-orange-50 text-orange-600' : 'text-zinc-600 hover:bg-orange-50 hover:text-zinc-950'
                                                             }`}
                                                     >
-                                                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center border border-white/5">
+                                                        <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center border border-zinc-200">
                                                             <Globe className="w-4 h-4" />
                                                         </div>
                                                         <div className="flex-1 text-left">
@@ -225,7 +225,7 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                                         {(formData.assigned_to?.length || 0) === 0 && <CheckCircle2 className="w-4 h-4" />}
                                                     </button>
 
-                                                    <div className="h-px bg-white/5 my-2" />
+                                                    <div className="h-px bg-zinc-100 my-2" />
 
                                                     {users.map(user => {
                                                         const isSelected = formData.assigned_to?.includes(user.uid);
@@ -234,14 +234,14 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                                                 key={user.uid}
                                                                 type="button"
                                                                 onClick={() => toggleAssignee(user.uid)}
-                                                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${isSelected ? 'bg-blue-500/10 text-blue-500' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                                                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${isSelected ? 'bg-orange-50 text-orange-600' : 'text-zinc-600 hover:bg-orange-50 hover:text-zinc-950'
                                                                     }`}
                                                             >
-                                                                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden border border-white/5">
+                                                                <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center overflow-hidden border border-zinc-200">
                                                                     {user.profile_url ? (
                                                                         <img src={user.profile_url} alt="" className="w-full h-full object-cover" />
                                                                     ) : (
-                                                                        <span className="font-bold">{user.name?.[0]}</span>
+                                                                        <span className="font-bold text-zinc-600">{user.name?.[0]}</span>
                                                                     )}
                                                                 </div>
                                                                 <div className="flex-1 text-left">
@@ -263,12 +263,12 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Due Date</label>
                                         <div className="relative">
-                                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                                             <input
                                                 type="date"
                                                 value={formData.due_date}
                                                 onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                                                className="w-full bg-zinc-900/50 border border-white/10 rounded-md pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all [color-scheme:dark]"
+                                                className="w-full bg-white border border-zinc-200 rounded-xl pl-10 pr-4 py-3 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all shadow-sm"
                                             />
                                         </div>
                                     </div>
@@ -276,15 +276,15 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                     {/* Priority */}
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Priority</label>
-                                        <div className="flex bg-zinc-900/50 border border-white/10 rounded-md p-1">
+                                        <div className="flex bg-zinc-50 border border-zinc-200 rounded-xl p-1 shadow-sm">
                                             {['Low', 'Medium', 'High'].map(p => (
                                                 <button
                                                     key={p}
                                                     type="button"
-                                                    onClick={() => setFormData({ ...formData, priority: p as any })}
-                                                    className={`flex-1 py-1.5 text-xs font-medium rounded transition-all ${formData.priority === p
-                                                            ? 'bg-zinc-800 text-white shadow-sm'
-                                                            : 'text-zinc-500 hover:text-zinc-300'
+                                                    onClick={() => setFormData({ ...formData, priority: p as Task['priority'] })}
+                                                    className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${formData.priority === p
+                                                            ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200'
+                                                            : 'text-zinc-500 hover:text-zinc-700'
                                                         }`}
                                                 >
                                                     {p}
@@ -302,10 +302,10 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                             <button
                                                 key={v}
                                                 type="button"
-                                                onClick={() => setFormData({ ...formData, visibility: v as any })}
-                                                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-md border text-sm font-medium transition-all ${formData.visibility === v
-                                                        ? 'bg-blue-500/10 border-blue-500/50 text-blue-500'
-                                                        : 'bg-zinc-900/50 border-white/10 text-zinc-400 hover:bg-white/5 hover:border-white/20'
+                                                onClick={() => setFormData({ ...formData, visibility: v as Task['visibility'] })}
+                                                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border text-sm font-medium transition-all ${formData.visibility === v
+                                                        ? 'bg-orange-50 border-orange-300 text-orange-600'
+                                                        : 'bg-white border-zinc-200 text-zinc-600 hover:bg-orange-50 hover:border-orange-200'
                                                     }`}
                                             >
                                                 {v === 'Private' ? <Lock className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
@@ -318,11 +318,11 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                         </div>
 
                         {/* Footer */}
-                        <div className="p-6 border-t border-white/5 flex items-center justify-end gap-3 bg-zinc-900/50 backdrop-blur-sm">
+                        <div className="p-6 border-t border-zinc-200 flex items-center justify-end gap-3 bg-zinc-50">
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-5 py-2.5 rounded-md text-xs font-bold text-zinc-400 hover:text-white transition-colors"
+                                className="px-5 py-2.5 rounded-xl text-xs font-bold text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 transition-colors"
                             >
                                 Cancel
                             </button>
@@ -330,7 +330,7 @@ export const TaskModal = ({ isOpen, onClose, onSave, initialData }: TaskModalPro
                                 type="submit"
                                 form="task-form"
                                 disabled={loading}
-                                className="px-6 py-2.5 rounded-md bg-white text-black text-xs font-bold hover:bg-zinc-200 transition-colors shadow-lg shadow-white/10 disabled:opacity-50 flex items-center gap-2"
+                                className="px-6 py-2.5 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-xs font-bold shadow-lg shadow-orange-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 {loading ? 'Saving...' : initialData ? 'Save Changes' : 'Create Task'}
                                 {!loading && <Check className="w-3.5 h-3.5" />}

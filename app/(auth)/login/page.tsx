@@ -18,10 +18,18 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
     const supabase = createClient();
+    const blockedDefaultCredentials = [
+        { email: 'admin', password: 'admin' },
+        { email: 'admin@admin.com', password: 'admin' },
+        { email: 'admin@example.com', password: 'admin' },
+    ];
 
     const validate = () => {
         const newErrors: { email?: string; password?: string } = {};
         if (!email.trim()) newErrors.email = 'Email is required';
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+            newErrors.email = 'Enter a valid email address';
+        }
         if (!password) newErrors.password = 'Password is required';
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -31,9 +39,21 @@ export default function LoginPage() {
         e.preventDefault();
         if (!validate()) return;
 
+        const normalizedEmail = email.trim().toLowerCase();
+        const normalizedPassword = password.trim().toLowerCase();
+        const isBlockedDefault = blockedDefaultCredentials.some(
+            ({ email: blockedEmail, password: blockedPassword }) =>
+                normalizedEmail === blockedEmail && normalizedPassword === blockedPassword
+        );
+
+        if (isBlockedDefault) {
+            toast.error('Default credentials are not allowed. Please use your real account.');
+            return;
+        }
+
         setLoading(true);
         try {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
             if (error) throw error;
             router.push('/dashboard');
             router.refresh();

@@ -14,12 +14,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <>
             {showSplash && <SplashIntro onComplete={() => setShowSplash(false)} />}
 
-            <div className={`h-screen bg-[#09090b] text-zinc-100 font-sans selection:bg-orange-500/30 overflow-hidden flex relative transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
+            <div className={`h-screen bg-[#f7f5f2] text-zinc-950 font-sans selection:bg-orange-500/20 overflow-hidden flex relative transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
                 {/* Background Effects */}
                 <div className="absolute inset-0 pointer-events-none z-0">
-                    <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-orange-500/5 rounded-full blur-[120px]" />
-                    <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 rounded-full blur-[120px]" />
-                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+                    <div className="absolute top-[-18%] left-[-10%] w-[48%] h-[48%] bg-orange-400/18 rounded-full blur-[130px]" />
+                    <div className="absolute bottom-[-20%] right-[-12%] w-[46%] h-[46%] bg-zinc-900/8 rounded-full blur-[120px]" />
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(17,17,17,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(17,17,17,0.035)_1px,transparent_1px)] bg-size-[44px_44px]"></div>
                 </div>
 
                 {/* Sidebar */}
@@ -28,10 +28,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 {/* Main Content Area */}
                 <main className="flex-1 h-full overflow-hidden relative flex flex-col z-10 lg:ml-20 transition-all duration-300">
                     {/* Mobile Header */}
-                    <div className="lg:hidden p-4 flex items-center justify-between bg-zinc-900/50 backdrop-blur-md border-b border-white/5 z-30">
-                        <div className="font-bold text-lg text-white">Fairplatz</div>
-                        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 hover:bg-white/10 rounded-lg">
-                            <Menu className="w-6 h-6 text-white" />
+                    <div className="lg:hidden p-4 flex items-center justify-between bg-white/90 backdrop-blur-md border-b border-zinc-200 z-30">
+                        <img src="/FP_black.png" alt="Fairplatz" className="h-8 w-auto object-contain" />
+                        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 hover:bg-orange-50 rounded-lg">
+                            <Menu className="w-6 h-6 text-zinc-950" />
                         </button>
                     </div>
 

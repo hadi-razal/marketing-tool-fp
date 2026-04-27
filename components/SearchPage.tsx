@@ -535,7 +535,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
             {/* Search Sidebar / Panel */}
             <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
-                <div className="bg-gradient-to-br from-[#09090b] via-[#0a0a0d] to-[#09090b] border border-white/10 rounded-2xl p-6 shadow-2xl shadow-black/50 backdrop-blur-sm">
+                <div className="bg-white/90 border border-zinc-200 rounded-2xl p-6 shadow-xl shadow-zinc-950/5">
                     {/* NOTE: Bulk Import mode removed from UI - code kept below for future use */}
                     {/* Mode toggle removed - only Manual Search is available now */}
 
@@ -543,25 +543,25 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     {mode === 'search' ? (
                         <div className="space-y-5">
                             {/* Search Type Toggle - Redesigned */}
-                            <div className="grid grid-cols-2 gap-2.5 p-1 bg-zinc-950/60 rounded-xl border border-white/10">
+                            <div className="grid grid-cols-2 gap-2.5 p-1 bg-zinc-100 rounded-xl border border-zinc-200">
                                 <button
                                     onClick={() => { setSearchType('people'); setResults([]); }}
                                     className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'people'
-                                        ? 'bg-gradient-to-br from-orange-500/20 to-red-600/20 border-2 border-orange-500/50 text-orange-400 shadow-lg shadow-orange-500/20'
-                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                                        ? 'bg-linear-to-r from-orange-600 to-orange-500 border-2 border-orange-400/20 text-white shadow-lg shadow-orange-500/20'
+                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-950 hover:bg-orange-50'
                                         }`}
                                 >
-                                    <Users className={`w-4 h-4 ${searchType === 'people' ? 'text-orange-400' : ''}`} />
+                                    <Users className={`w-4 h-4 ${searchType === 'people' ? 'text-white' : ''}`} />
                                     <span>People</span>
                                 </button>
                                 <button
                                     onClick={() => { setSearchType('companies'); setResults([]); }}
                                     className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'companies'
-                                        ? 'bg-gradient-to-br from-blue-500/20 to-cyan-600/20 border-2 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/20'
-                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                                        ? 'bg-linear-to-r from-orange-600 to-orange-500 border-2 border-orange-400/20 text-white shadow-lg shadow-orange-500/20'
+                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-950 hover:bg-orange-50'
                                         }`}
                                 >
-                                    <Building2 className={`w-4 h-4 ${searchType === 'companies' ? 'text-blue-400' : ''}`} />
+                                    <Building2 className={`w-4 h-4 ${searchType === 'companies' ? 'text-white' : ''}`} />
                                     <span>Companies</span>
                                 </button>
                             </div>
@@ -571,9 +571,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                 <button
                                     onClick={handleSearch}
                                     disabled={loading}
-                                    className="group relative w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-red-600 text-white font-bold text-sm shadow-2xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
+                                    className="group relative w-full py-4 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm shadow-lg shadow-zinc-950/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
                                 >
-                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                                     {loading ? (
                                         <>
                                             <Loader2 className="animate-spin w-5 h-5 relative z-10" />
@@ -614,10 +613,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                     <>
                                         <div className="relative my-4">
                                             <div className="absolute inset-0 flex items-center">
-                                                <div className="w-full border-t border-white/10"></div>
+                                                <div className="w-full border-t border-zinc-200"></div>
                                             </div>
                                             <div className="relative flex justify-center">
-                                                <span className="bg-[#09090b] px-3 text-xs text-zinc-500 font-medium">Additional Filters</span>
+                                                <span className="bg-white px-3 text-xs text-zinc-500 font-medium">Additional Filters</span>
                                             </div>
                                         </div>
                                         <div className="relative">
@@ -652,13 +651,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                 </div>
 
                                 {searchType === 'people' && (
-                                    <div className="relative bg-gradient-to-br from-zinc-950/80 to-zinc-900/40 p-5 rounded-xl border border-white/10 shadow-inner">
+                                    <div className="relative bg-zinc-50 p-5 rounded-xl border border-zinc-200">
                                         <div className="flex justify-between items-center mb-3">
-                                            <span className="text-xs font-bold text-zinc-300 flex items-center gap-2 uppercase tracking-wider">
+                                            <span className="text-xs font-bold text-zinc-700 flex items-center gap-2 uppercase tracking-wider">
                                                 <User className="w-3.5 h-3.5 text-orange-500" />
                                                 Max Results
                                             </span>
-                                            <span className="bg-gradient-to-r from-orange-500/20 to-red-600/20 text-orange-400 px-3 py-1 rounded-full text-xs font-bold border border-orange-500/30">
+                                            <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
                                                 {filters.quantity === 13 ? 'No Limit' : filters.quantity}
                                             </span>
                                         </div>
@@ -669,12 +668,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                                 max="13"
                                                 value={filters.quantity}
                                                 onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
-                                                className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:cursor-pointer"
+                                                className="w-full h-2 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-pointer"
                                             />
                                             <div className="relative mt-2 h-4">
                                                 <span className="text-[10px] text-zinc-500 absolute left-0">1</span>
                                                 <span className="text-[10px] text-zinc-500 absolute" style={{ left: 'calc((12 - 1) / (13 - 1) * 100%)' }}>12</span>
-                                                <span className="text-[10px] text-orange-400 font-semibold absolute right-0">No Limit</span>
+                                                <span className="text-[10px] text-orange-500 font-semibold absolute right-0">No Limit</span>
                                             </div>
                                         </div>
                                         <p className="text-[10px] text-zinc-500 mt-2">Adjust the maximum number of results to fetch</p>
@@ -689,13 +688,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     {false && mode === 'import' && (
                         <div className="flex flex-col gap-6">
                             {/* Quantity Slider - Enhanced */}
-                            <div className="relative bg-gradient-to-br from-zinc-950/80 to-zinc-900/40 p-5 rounded-xl border border-white/10 shadow-inner">
+                            <div className="relative bg-zinc-50 p-5 rounded-xl border border-zinc-200">
                                 <div className="flex justify-between items-center mb-3">
-                                    <span className="text-xs font-bold text-zinc-300 flex items-center gap-2 uppercase tracking-wider">
+                                    <span className="text-xs font-bold text-zinc-700 flex items-center gap-2 uppercase tracking-wider">
                                         <Sliders className="w-3.5 h-3.5 text-orange-500" />
                                         People Per Company
                                     </span>
-                                    <span className="bg-gradient-to-r from-orange-500/20 to-red-600/20 text-orange-400 px-3 py-1 rounded-full text-xs font-bold border border-orange-500/30">
+                                    <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
                                         {filters.quantity}
                                     </span>
                                 </div>
@@ -705,7 +704,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                     max="12"
                                     value={filters.quantity}
                                     onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
-                                    className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:cursor-pointer"
+                                    className="w-full h-2 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-pointer"
                                 />
                                 <p className="text-[10px] text-zinc-500 mt-2">
                                     If you upload <span className="text-orange-400 font-semibold">10 companies</span>, we will fetch <span className="text-orange-400 font-semibold">{filters.quantity * 10} leads</span> total.
@@ -716,36 +715,36 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                             {loading ? (
                                 <div className="flex flex-col items-center justify-center text-center space-y-5 py-12">
                                     <div className="relative">
-                                        <div className="absolute inset-0 bg-orange-500/20 blur-2xl rounded-full animate-pulse" />
-                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-orange-500/30 flex items-center justify-center relative z-10 shadow-2xl">
+                                        <div className="absolute inset-0 bg-orange-100 blur-2xl rounded-full animate-pulse" />
+                                        <div className="w-16 h-16 rounded-2xl bg-white border-2 border-orange-500/30 flex items-center justify-center relative z-10 shadow-xl">
                                             <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-white font-bold text-base mb-1">{processingStatus}</p>
+                                        <p className="text-zinc-950 font-bold text-base mb-1">{processingStatus}</p>
                                         <p className="text-zinc-500 text-xs">Processing your file...</p>
                                     </div>
                                 </div>
                             ) : (
                                 <div
                                     className={`group relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center p-10 transition-all duration-300 cursor-pointer overflow-hidden ${dragActive
-                                        ? 'border-orange-500 bg-gradient-to-br from-orange-500/20 to-red-600/20 shadow-2xl shadow-orange-500/20 scale-[1.02]'
-                                        : 'border-zinc-700/50 bg-gradient-to-br from-zinc-900/40 to-zinc-950/40 hover:border-orange-500/50 hover:bg-zinc-900/60 hover:shadow-xl hover:shadow-orange-500/10'
+                                        ? 'border-orange-500 bg-orange-50 shadow-xl shadow-orange-500/10 scale-[1.02]'
+                                        : 'border-zinc-300 bg-zinc-50 hover:border-orange-500/50 hover:bg-orange-50/50 hover:shadow-lg hover:shadow-orange-500/5'
                                         }`}
                                     onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
                                     onDragLeave={() => setDragActive(false)}
                                     onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); }}
                                 >
-                                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                    <div className="absolute inset-0 bg-linear-to-br from-orange-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                                     <div className="relative z-10">
                                         <div className={`mb-4 transition-all duration-300 ${dragActive ? 'scale-110 text-orange-500' : 'text-zinc-500 group-hover:text-orange-500/70'}`}>
                                             <UploadCloud className="w-12 h-12 mx-auto" />
                                         </div>
-                                        <p className="text-white font-bold text-base mb-2">Drop Company List</p>
+                                        <p className="text-zinc-950 font-bold text-base mb-2">Drop Company List</p>
                                         <p className="text-zinc-500 text-xs mb-6 max-w-xs">
                                             Upload a CSV or Excel file with <span className="text-orange-400 font-semibold">'Company'</span> and <span className="text-orange-400 font-semibold">'Domain'</span> columns
                                         </p>
-                                        <label className="inline-flex items-center gap-2 bg-gradient-to-r from-white to-zinc-100 text-black px-6 py-3 rounded-xl font-bold text-sm cursor-pointer hover:from-zinc-100 hover:to-zinc-200 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95">
+                                        <label className="inline-flex items-center gap-2 bg-linear-to-r from-white to-zinc-100 text-black px-6 py-3 rounded-xl font-bold text-sm cursor-pointer hover:from-zinc-100 hover:to-zinc-200 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95">
                                             <UploadCloud className="w-4 h-4" />
                                             <span>Browse Files</span>
                                             <input
@@ -764,36 +763,36 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             </div>
 
             {/* Results Area */}
-            <div className="flex-1 bg-[#09090b] border border-white/5 rounded-md p-6 lg:p-8 overflow-hidden flex flex-col relative">
+            <div className="flex-1 bg-white/95 border border-zinc-200 rounded-[32px] shadow-xl shadow-zinc-950/5 p-6 lg:p-8 overflow-hidden flex flex-col relative">
                 <div className="mb-8">
-                    <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">Live Results</h1>
-                    <p className="text-zinc-400 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
+                    <h1 className="text-2xl lg:text-3xl font-bold text-zinc-950 tracking-tight">Live Results</h1>
+                    <p className="text-zinc-500 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     {loading && results.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center gap-8">
                             <div className="relative">
-                                <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full animate-pulse" />
-                                <div className="w-20 h-20 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center relative z-10 shadow-2xl">
+                                <div className="absolute inset-0 bg-orange-100 blur-3xl rounded-full animate-pulse" />
+                                <div className="w-20 h-20 rounded-2xl bg-white border border-zinc-200 shadow-lg flex items-center justify-center relative z-10">
                                     <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
                                 </div>
                             </div>
                             <div className="text-center space-y-2">
-                                <p className="text-white font-bold text-lg">Searching Apollo Database...</p>
+                                <p className="text-zinc-950 font-bold text-lg">Searching Apollo Database...</p>
                                 <p className="text-zinc-500 text-sm">Finding the best contacts for you</p>
                             </div>
                         </div>
                     ) : results.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center gap-6 text-zinc-600">
                             <div className="relative">
-                                <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full opacity-20 animate-pulse" />
-                                <div className="w-32 h-32 rounded-3xl bg-zinc-900/50 flex items-center justify-center border border-white/5 shadow-2xl backdrop-blur-sm relative z-10">
-                                    <Search className="w-12 h-12 text-zinc-700" />
+                                <div className="absolute inset-0 bg-orange-100 blur-3xl rounded-full opacity-40 animate-pulse" />
+                                <div className="w-32 h-32 rounded-3xl bg-orange-50 flex items-center justify-center border border-zinc-200 shadow-xl relative z-10">
+                                    <Search className="w-12 h-12 text-orange-500" />
                                 </div>
                             </div>
                             <div className="text-center max-w-md">
-                                <h3 className="font-bold text-xl text-white mb-2">Ready to Search</h3>
+                                <h3 className="font-bold text-xl text-zinc-950 mb-2">Ready to Search</h3>
                                 <p className="text-sm text-zinc-500 leading-relaxed">
                                     Enter criteria to find verified {searchType === 'people' ? 'professional contacts' : 'companies'} using Apollo's database.
                                 </p>
@@ -845,7 +844,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                     <button
                                         onClick={handleLoadMore}
                                         disabled={loadingMore}
-                                        className="px-6 py-3 rounded-md bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-orange-500/20"
+                                        className="px-6 py-3 rounded-md bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm transition-all shadow-lg shadow-zinc-950/15 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {loadingMore ? (
                                             <>

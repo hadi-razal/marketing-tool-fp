@@ -38,34 +38,32 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
     return (
         <div
             onClick={onClick}
-            className="group relative bg-zinc-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl transition-all duration-300 hover:bg-zinc-900/80 hover:border-white/10 hover:shadow-2xl hover:shadow-black/50 cursor-pointer flex flex-col h-full overflow-hidden"
+            className="group relative bg-white border border-zinc-200 p-5 rounded-2xl transition-all duration-300 hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5 cursor-pointer flex flex-col h-full overflow-hidden"
         >
             {/* Top Gradient Line */}
             <div
-                className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--brand-color)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-(--brand-color) to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                 style={{ '--brand-color': brandColor } as React.CSSProperties}
             />
 
             {/* Header Section */}
             <div className="flex justify-between items-start mb-4 relative z-10">
                 <div className="flex gap-4">
-                    {/* Logo */}
-                    <div className="relative w-12 h-12 rounded-xl bg-white/5 border border-white/10 p-2 flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-105 group-hover:border-white/20">
+                    <div className="relative w-12 h-12 rounded-xl bg-zinc-50 border border-zinc-200 p-2 flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-105">
                         {company.logo ? (
                             <img src={company.logo} alt={company.name} className="w-full h-full object-contain" />
                         ) : (
-                            <Building2 className="w-6 h-6 text-zinc-500" />
+                            <Building2 className="w-6 h-6 text-zinc-400" />
                         )}
                     </div>
 
-                    {/* Name & Industry */}
                     <div>
-                        <h3 className="text-white font-bold text-lg leading-tight tracking-tight group-hover:text-white/90 transition-colors">
+                        <h3 className="text-zinc-950 font-bold text-lg leading-tight tracking-tight group-hover:text-orange-600 transition-colors">
                             {company.name}
                         </h3>
                         {company.industry && (
                             <div className="mt-1">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/5 border border-white/5 text-[10px] font-medium text-zinc-400">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-50 border border-zinc-200 text-[10px] font-medium text-zinc-600">
                                     {company.industry}
                                 </span>
                             </div>
@@ -73,12 +71,11 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
                     </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex gap-2">
                     {onAction && ActionIcon && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onAction(); }}
-                            className="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 flex items-center justify-center text-zinc-400 hover:text-red-500 transition-all"
+                            className="w-8 h-8 rounded-lg bg-zinc-50 hover:bg-red-50 border border-zinc-200 hover:border-red-200 flex items-center justify-center text-zinc-400 hover:text-red-600 transition-all"
                         >
                             <ActionIcon className="w-4 h-4" />
                         </button>
@@ -86,22 +83,21 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
                 </div>
             </div>
 
-            {/* Description */}
-            <p className="text-zinc-400 text-xs leading-relaxed line-clamp-2 mb-5 min-h-[2.5em]">
+            <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-5 min-h-[2.5em]">
                 {company.description || 'No description available for this company.'}
             </p>
 
             {/* Metadata Tags */}
             <div className="flex flex-wrap gap-2 mt-auto mb-5">
                 {company.location && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5 text-[10px] text-zinc-300 font-medium">
-                        <MapPin className="w-3 h-3 text-zinc-500" />
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[10px] text-zinc-700 font-medium">
+                        <MapPin className="w-3 h-3 text-zinc-400" />
                         <span className="truncate max-w-[100px]">{company.location}</span>
                     </div>
                 )}
                 {company.employees && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5 text-[10px] text-zinc-300 font-medium">
-                        <Users className="w-3 h-3 text-zinc-500" />
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[10px] text-zinc-700 font-medium">
+                        <Users className="w-3 h-3 text-zinc-400" />
                         <span>{company.employees.toLocaleString()}</span>
                     </div>
                 )}
@@ -111,16 +107,16 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5 text-[10px] text-zinc-300 font-medium hover:bg-white/10 hover:text-white transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[10px] text-zinc-700 font-medium hover:bg-orange-50 hover:border-orange-200 hover:text-zinc-950 transition-colors"
                     >
-                        <Globe className="w-3 h-3 text-zinc-500" />
+                        <Globe className="w-3 h-3 text-zinc-400" />
                         <span>Website</span>
                     </a>
                 )}
             </div>
 
             {/* Footer */}
-            <div className="pt-4 border-t border-white/5 flex items-center justify-between mt-auto">
+            <div className="pt-4 border-t border-zinc-200 flex items-center justify-between mt-auto">
                 <div className="flex items-center gap-3">
                     {company.founded_year && (
                         <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-medium">
@@ -136,7 +132,7 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
                     )}
                 </div>
 
-                <div className="flex items-center gap-1 text-[10px] font-bold text-zinc-500 group-hover:text-white transition-colors">
+                <div className="flex items-center gap-1 text-[10px] font-bold text-zinc-500 group-hover:text-orange-600 transition-colors">
                     View Details
                     <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
                 </div>

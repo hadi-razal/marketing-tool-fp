@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 
 import { COUNTRIES } from '@/lib/countries';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 interface ExhibitorFormModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -208,20 +210,20 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2 w-full">
-                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Type</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Type</label>
                         <div className="relative group">
                             <select
                                 value={formData.Company_Type}
                                 onChange={(e) => setFormData({ ...formData, Company_Type: e.target.value })}
-                                className="w-full bg-zinc-900/50 border border-zinc-800 text-white rounded-xl px-4 py-3.5 outline-none transition-all duration-200 appearance-none cursor-pointer focus:border-orange-500/50 focus:bg-zinc-900 focus:shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] hover:border-zinc-700"
+                                className="w-full bg-white border border-zinc-200 text-zinc-950 rounded-xl px-4 py-3.5 outline-none transition-all duration-200 appearance-none cursor-pointer focus:border-orange-400 focus:ring-4 focus:ring-orange-100 hover:border-zinc-300 shadow-sm"
                             >
-                                <option value="" className="bg-zinc-900 text-zinc-600">Select Type</option>
-                                <option value="LLP" className="bg-zinc-900 text-white">LLP (Limited Liability Partnership)</option>
-                                <option value="LTD / LLC" className="bg-zinc-900 text-white">LTD / LLC (Limited / Limited Liability Company)</option>
-                                <option value="Partnership" className="bg-zinc-900 text-white">Partnership</option>
-                                <option value="PLC / INC" className="bg-zinc-900 text-white">PLC / INC (Public Limited Company / Incorporated)</option>
-                                <option value="Sole Ownership" className="bg-zinc-900 text-white">Sole Ownership</option>
-                                <option value="Other" className="bg-zinc-900 text-white">Other</option>
+                                <option value="">Select Type</option>
+                                <option value="LLP">LLP (Limited Liability Partnership)</option>
+                                <option value="LTD / LLC">LTD / LLC (Limited / Limited Liability Company)</option>
+                                <option value="Partnership">Partnership</option>
+                                <option value="PLC / INC">PLC / INC (Public Limited Company / Incorporated)</option>
+                                <option value="Sole Ownership">Sole Ownership</option>
+                                <option value="Other">Other</option>
                             </select>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 group-focus-within:text-orange-500 transition-colors">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,13 +236,13 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
 
                     <SoftInput label="City" value={formData.City} onChange={(e) => setFormData({ ...formData, City: e.target.value })} placeholder="e.g. London" icon={<MapPin className="w-4 h-4" />} />
                     <div className="space-y-2 w-full">
-                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Country</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Country</label>
                         <div className="relative group">
                             <div
                                 onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
-                                className="w-full bg-zinc-900/50 border border-zinc-800 text-white rounded-xl px-4 py-3.5 outline-none transition-all duration-200 cursor-pointer focus-within:border-orange-500/50 focus-within:bg-zinc-900 focus-within:shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] hover:border-zinc-700 flex items-center justify-between min-h-[44px]"
+                                className="w-full bg-white border border-zinc-200 text-zinc-950 rounded-xl px-4 py-3.5 outline-none transition-all duration-200 cursor-pointer focus-within:border-orange-400 focus-within:ring-4 focus-within:ring-orange-100 hover:border-zinc-300 flex items-center justify-between min-h-[44px] shadow-sm"
                             >
-                                <span className={formData.Country ? 'text-white' : 'text-zinc-600'}>
+                                <span className={formData.Country ? 'text-zinc-950' : 'text-zinc-400'}>
                                     {formData.Country || 'Select country...'}
                                 </span>
                                 {formData.Country && (
@@ -250,7 +252,7 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                                             e.stopPropagation();
                                             setFormData({ ...formData, Country: '' });
                                         }}
-                                        className="hover:bg-white/10 rounded-full p-1 transition-colors"
+                                        className="hover:bg-orange-50 rounded-full p-1 transition-colors"
                                     >
                                         <X className="w-4 h-4 text-zinc-400" />
                                     </button>
@@ -265,8 +267,8 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                                             setCountrySearch('');
                                         }}
                                     />
-                                    <div className="absolute z-20 w-full mt-1 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-                                        <div className="p-2 border-b border-white/5">
+                                    <div className="absolute z-20 w-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-2xl shadow-zinc-950/15 overflow-hidden">
+                                        <div className="p-2 border-b border-zinc-200">
                                             <div className="relative">
                                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                                                 <input
@@ -275,7 +277,7 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                                                     value={countrySearch}
                                                     onChange={(e) => setCountrySearch(e.target.value)}
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-all placeholder:text-zinc-600"
+                                                    className="w-full bg-zinc-50 border border-zinc-200 rounded-lg pl-9 pr-3 py-2 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 transition-all placeholder:text-zinc-400"
                                                     autoFocus
                                                 />
                                             </div>
@@ -294,8 +296,8 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                                                             onClick={() => handleCountrySelect(country)}
                                                             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                                                                 formData.Country === country
-                                                                    ? 'bg-orange-500/20 text-orange-400'
-                                                                    : 'text-zinc-300 hover:bg-white/5 hover:text-white'
+                                                                    ? 'bg-orange-50 text-orange-600'
+                                                                    : 'text-zinc-700 hover:bg-orange-50 hover:text-zinc-950'
                                                             }`}
                                                         >
                                                             {country}
@@ -318,7 +320,7 @@ export const ExhibitorFormModal: React.FC<ExhibitorFormModalProps> = ({ isOpen, 
                 <SoftInput label="LinkedIn" value={formData.Company_Linkedin} onChange={(e) => setFormData({ ...formData, Company_Linkedin: e.target.value })} placeholder="LinkedIn URL" icon={<Linkedin className="w-4 h-4" />} />
                 <SoftInput label="Events" value={formData.Events} onChange={(e) => setFormData({ ...formData, Events: e.target.value })} placeholder="Associated Events" />
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                <div className="flex justify-end gap-3 pt-4 border-t border-zinc-200">
                     <Button variant="ghost" onClick={onClose}>Cancel</Button>
                     <Button onClick={handleSubmit} isLoading={loading} leftIcon={<Save className="w-4 h-4" />}>
                         Save Exhibitor

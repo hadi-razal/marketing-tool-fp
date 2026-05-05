@@ -5,7 +5,7 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { id, reveal_email, reveal_phone } = body;
 
-        const apiKey = process.env.APOLLO_API_KEY;
+        const apiKey = process.env.APOLLO_API_KEY?.trim();
 
         if (!apiKey) {
             return NextResponse.json(
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
             headers: {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-cache',
-                'X-Api-Key': apiKey
+                'x-api-key': apiKey,
             },
             body: JSON.stringify({
                 id: id,
@@ -40,12 +40,16 @@ export async function POST(request: Request) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Apollo Enrich Error:', errorData);
-            return NextResponse.json(
-                { error: errorData.message || 'Failed to enrich person' },
-                { status: response.status }
-            );
+            const text = await response.text();
+            let message = 'Failed to enrich person';
+            try {
+                const errorData = JSON.parse(text) as { message?: string; error?: string };
+                message = errorData.message || errorData.error || message;
+            } catch {
+                if (text?.trim()) message = text.trim();
+            }
+            console.error('Apollo Enrich Error:', response.status, message);
+            return NextResponse.json({ error: message }, { status: response.status });
         }
 
         const data = await response.json();

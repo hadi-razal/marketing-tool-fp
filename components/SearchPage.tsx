@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-    User, Sliders, Loader2, Zap, UploadCloud, Save, LayoutGrid, Search, Filter, Building2, Users, Download
+    User, Loader2, Zap, Save, LayoutGrid, Search, Filter, Building2, Users
 } from 'lucide-react';
 import { SoftInput } from './ui/Input';
 import { ProfileCard } from './ProfileCard';
@@ -11,40 +11,14 @@ import { motion } from 'framer-motion';
 import { databaseService } from '@/services/databaseService';
 import { toast } from 'sonner';
 
-// Mock Data Services (Moved from page.tsx)
-const enrichCompanyData = async (inputName: string, inputDomain: string, quantity: number) => {
-    const cleanDomain = inputDomain ? inputDomain.replace(/^https?:\/\//, '').split('/')[0] : 'company.com';
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    return Array.from({ length: quantity }).map((_, i) => {
-        const gender = Math.random() > 0.5 ? 'men' : 'women';
-        const name = ['Alice', 'Bob', 'Charlie', 'David', 'Emma', 'Frank', 'Grace', 'Henry'][Math.floor(Math.random() * 8)] +
-            ' ' + ['Johnson', 'Smith', 'Lee', 'Chen', 'Wilson', 'Bond'][Math.floor(Math.random() * 6)];
-
-        return {
-            id: `lead_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`,
-            name: name,
-            title: ['CEO', 'CTO', 'Marketing Director', 'Sales Manager', 'Developer'][i % 5],
-            company: inputName || 'Unknown Corp',
-            website: cleanDomain,
-            location: ['New York, NY', 'San Francisco, CA', 'London, UK', 'Austin, TX'][i % 4],
-            email: `${name.split(' ')[0].toLowerCase()}@${cleanDomain}`,
-            phone: `+1 555.01${Math.floor(Math.random() * 90) + 10}`,
-            linkedin: `linkedin.com/in/${name.replace(' ', '').toLowerCase()}`,
-            image: `https://randomuser.me/api/portraits/${gender}/${Math.floor(Math.random() * 50)}.jpg`,
-            status: 'Enriched',
-            score: Math.floor(Math.random() * 60) + 40, // Mock Score 40-100
-        };
-    });
-};
+/** Matches Apollo `per_page` max (100) for "No Limit" pagination. */
+const APOLLO_NO_LIMIT_PAGE_SIZE = 100;
 
 interface SearchPageProps {
     onSave: (leads: any[]) => void;
 }
 
 export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
-    // NOTE: mode state kept for future bulk import feature, but UI only shows 'search' mode
-    const [mode, setMode] = useState<'search' | 'import'>('search');
     const [searchType, setSearchType] = useState<'people' | 'companies'>('people');
     const [filters, setFilters] = useState({ company: '', website: '', titles: [] as string[], location: '', keywords: '', quantity: 9 });
 
@@ -55,9 +29,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
     const [hasMore, setHasMore] = useState(true);
     const [selectedCompany, setSelectedCompany] = useState<any>(null);
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-    const [dragActive, setDragActive] = useState(false);
-    const [processingStatus, setProcessingStatus] = useState('');
-    const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<any>(null);
 
     const handleSearch = async () => {
@@ -73,12 +44,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             const endpoint = searchType === 'people' ? '/api/apollo/search' : '/api/apollo/companies';
             const isNoLimit = filters.quantity === 13;
 
-            // Convert titles array to comma-separated string for API
-            // For "No Limit", use a reasonable per_page (25) and paginate
+            // Convert titles array to comma-separated string for API (route splits into person_titles[])
+            // For "No Limit", use max per_page and paginate
             const apiFilters = {
                 ...filters,
-                title: filters.titles.join(','), // Convert array to comma-separated string
-                quantity: isNoLimit ? 25 : filters.quantity, // Use 25 for "No Limit" mode
+                title: filters.titles.join(','),
+                quantity: isNoLimit ? APOLLO_NO_LIMIT_PAGE_SIZE : filters.quantity,
                 page: 1
             };
             const response = await fetch(endpoint, {
@@ -127,17 +98,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
 
                 setResults(leadsWithStatus);
 
-                // For "No Limit" mode, check pagination to see if there are more pages
-                if (isNoLimit && data.pagination) {
-                    setHasMore(data.pagination.page < data.pagination.total_pages);
-                } else if (isNoLimit) {
-                    // If no pagination data, assume there might be more if we got a full page
-                    setHasMore(leads.length >= 25);
-                } else if (isNoLimit) {
-                    // For "No Limit" mode, check if we got a full page (might be more)
-                    setHasMore(leads.length >= 25);
+                if (isNoLimit) {
+                    if (data.pagination) {
+                        setHasMore(data.pagination.page < data.pagination.total_pages);
+                    } else {
+                        setHasMore(leads.length >= APOLLO_NO_LIMIT_PAGE_SIZE);
+                    }
                 } else {
-                    setHasMore(false); // Limited mode doesn't support load more
+                    setHasMore(false);
                 }
 
                 if (leads.length === 0) toast.error('No people found matching criteria');
@@ -161,8 +129,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 if (data.pagination) {
                     setHasMore(data.pagination.page < data.pagination.total_pages);
                 } else {
-                    // Fallback logic: if we got fewer results than requested, there are no more
-                    setHasMore(companies.length >= (isNoLimit ? 25 : filters.quantity));
+                    setHasMore(companies.length >= (isNoLimit ? APOLLO_NO_LIMIT_PAGE_SIZE : filters.quantity));
                 }
 
                 if (companies.length === 0) {
@@ -175,12 +142,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     toast.success(totalText);
                 }
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Search failed:', error);
-            // Show "No results" instead of API error
             setResults([]);
             setHasMore(false);
-            // Don't show error toast, just show empty results
+            const message = error instanceof Error ? error.message : 'Search failed';
+            toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -198,7 +165,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             const apiFilters = {
                 ...filters,
                 title: filters.titles.join(','),
-                quantity: isNoLimit ? 25 : filters.quantity, // Use 25 for "No Limit" mode
+                quantity: isNoLimit ? APOLLO_NO_LIMIT_PAGE_SIZE : filters.quantity,
                 page: nextPage
             };
 
@@ -256,7 +223,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     if (data.pagination) {
                         setHasMore(data.pagination.page < data.pagination.total_pages);
                     } else {
-                        setHasMore(leads.length >= 25);
+                        setHasMore(leads.length >= APOLLO_NO_LIMIT_PAGE_SIZE);
                     }
                 }
             } else {
@@ -278,15 +245,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     if (data.pagination) {
                         setHasMore(data.pagination.page < data.pagination.total_pages);
                     } else {
-                        setHasMore(companies.length >= (isNoLimit ? 25 : filters.quantity));
+                        setHasMore(companies.length >= (isNoLimit ? APOLLO_NO_LIMIT_PAGE_SIZE : filters.quantity));
                     }
                 }
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Load more failed:', error);
-            // Just stop loading more instead of showing error
             setHasMore(false);
+            const message = error instanceof Error ? error.message : 'Could not load more results';
+            toast.error(message);
         } finally {
             setLoadingMore(false);
         }
@@ -365,8 +333,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 }
             }
 
-            // Save to database
-            await databaseService.savePerson(fullPersonData);
+            // Save to database (Apollo / LinkedIn search origin)
+            await databaseService.savePerson({ ...fullPersonData, saved_from: fullPersonData.saved_from || 'linkedin' });
 
             // Fetch fresh data from Supabase after saving (with timeout)
             let updatedPerson;
@@ -409,29 +377,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
         }
     };
 
-    // NOTE: Bulk Import functionality - kept for future use but not currently active in UI
-    const processFile = async (file: File) => {
-        setLoading(true);
-        setProcessingStatus('Parsing file...');
-        setTimeout(async () => {
-            const mockRows = [
-                { Company: 'Google', Domain: 'google.com' },
-                { Company: 'Microsoft', Domain: 'microsoft.com' },
-                { Company: 'Apple', Domain: 'apple.com' },
-            ];
-            setProcessingStatus(`Fetching ${filters.quantity} people from ${mockRows.length} companies...`);
-            let allEnriched: any[] = [];
-            for (const row of mockRows) {
-                const enriched = await enrichCompanyData(row.Company, row.Domain, filters.quantity);
-                allEnriched = [...allEnriched, ...enriched];
-            }
-            setResults(allEnriched);
-            setLoading(false);
-            setProcessingStatus('');
-            toast.success(`Bulk Search complete: Found ${allEnriched.length} total leads`);
-        }, 1500);
-    };
-
     const handleSaveAll = async () => {
         if (results.length === 0) return;
 
@@ -442,7 +387,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             for (const person of results) {
                 if (person.isSaved) continue;
                 try {
-                    await databaseService.savePerson(person);
+                    await databaseService.savePerson({ ...person, saved_from: 'linkedin' });
                     savedCount++;
                     // Fetch fresh data from Supabase after saving (with timeout)
                     try {
@@ -503,7 +448,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 throw new Error(data.error || 'Failed to unlock contact info');
             }
 
-            const unlockedLead = { ...data.lead, isSaved: true };
+            const unlockedLead = { ...lead, ...data.lead, isSaved: true, saved_from: lead.saved_from || 'linkedin' };
 
             // Save to database automatically
             await databaseService.savePerson(unlockedLead);
@@ -530,65 +475,64 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                     lead={selectedLead}
                     onClose={() => setSelectedLead(null)}
                     onUnlock={handleUnlock}
+                    onPersonUpdated={(updated) => {
+                        setResults((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                        setSelectedLead(updated);
+                    }}
                 />
             )}
 
             {/* Search Sidebar / Panel */}
             <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
                 <div className="bg-white/90 border border-zinc-200 rounded-2xl p-6 shadow-xl shadow-zinc-950/5">
-                    {/* NOTE: Bulk Import mode removed from UI - code kept below for future use */}
-                    {/* Mode toggle removed - only Manual Search is available now */}
+                    <div className="space-y-5">
+                        <div className="grid grid-cols-2 gap-2.5 p-1 bg-zinc-100 rounded-xl border border-zinc-200">
+                            <button
+                                type="button"
+                                onClick={() => { setSearchType('people'); setResults([]); }}
+                                className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'people'
+                                    ? 'bg-linear-to-r from-orange-600 to-orange-500 border-2 border-orange-400/20 text-white shadow-lg shadow-orange-500/20'
+                                    : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-950 hover:bg-orange-50'
+                                    }`}
+                            >
+                                <Users className={`w-4 h-4 ${searchType === 'people' ? 'text-white' : ''}`} />
+                                <span>People</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setSearchType('companies'); setResults([]); }}
+                                className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'companies'
+                                    ? 'bg-linear-to-r from-orange-600 to-orange-500 border-2 border-orange-400/20 text-white shadow-lg shadow-orange-500/20'
+                                    : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-950 hover:bg-orange-50'
+                                    }`}
+                            >
+                                <Building2 className={`w-4 h-4 ${searchType === 'companies' ? 'text-white' : ''}`} />
+                                <span>Companies</span>
+                            </button>
+                        </div>
 
-                    {/* Manual Search Mode - Always Active */}
-                    {mode === 'search' ? (
-                        <div className="space-y-5">
-                            {/* Search Type Toggle - Redesigned */}
-                            <div className="grid grid-cols-2 gap-2.5 p-1 bg-zinc-100 rounded-xl border border-zinc-200">
-                                <button
-                                    onClick={() => { setSearchType('people'); setResults([]); }}
-                                    className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'people'
-                                        ? 'bg-linear-to-r from-orange-600 to-orange-500 border-2 border-orange-400/20 text-white shadow-lg shadow-orange-500/20'
-                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-950 hover:bg-orange-50'
-                                        }`}
-                                >
-                                    <Users className={`w-4 h-4 ${searchType === 'people' ? 'text-white' : ''}`} />
-                                    <span>People</span>
-                                </button>
-                                <button
-                                    onClick={() => { setSearchType('companies'); setResults([]); }}
-                                    className={`relative py-3 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 ${searchType === 'companies'
-                                        ? 'bg-linear-to-r from-orange-600 to-orange-500 border-2 border-orange-400/20 text-white shadow-lg shadow-orange-500/20'
-                                        : 'bg-transparent border-2 border-transparent text-zinc-500 hover:text-zinc-950 hover:bg-orange-50'
-                                        }`}
-                                >
-                                    <Building2 className={`w-4 h-4 ${searchType === 'companies' ? 'text-white' : ''}`} />
-                                    <span>Companies</span>
-                                </button>
-                            </div>
+                        <div>
+                            <button
+                                type="button"
+                                onClick={handleSearch}
+                                disabled={loading}
+                                className="group relative w-full py-4 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm shadow-lg shadow-zinc-950/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="animate-spin w-5 h-5 relative z-10" />
+                                        <span className="relative z-10">Searching...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Zap className="w-5 h-5 fill-white relative z-10 group-hover:rotate-12 transition-transform" />
+                                        <span className="relative z-10">{searchType === 'people' ? 'Find People' : 'Find Companies'}</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
 
-                            {/* Search Button - Enhanced - Moved to Top */}
-                            <div>
-                                <button
-                                    onClick={handleSearch}
-                                    disabled={loading}
-                                    className="group relative w-full py-4 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm shadow-lg shadow-zinc-950/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="animate-spin w-5 h-5 relative z-10" />
-                                            <span className="relative z-10">Searching...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Zap className="w-5 h-5 fill-white relative z-10 group-hover:rotate-12 transition-transform" />
-                                            <span className="relative z-10">{searchType === 'people' ? 'Find People' : 'Find Companies'}</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Form Fields - Enhanced */}
-                            <div className="space-y-4">
+                        <div className="space-y-4">
                                 <div className="relative">
                                     <SoftInput
                                         label="Company Name"
@@ -672,93 +616,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                                             />
                                             <div className="relative mt-2 h-4">
                                                 <span className="text-[10px] text-zinc-500 absolute left-0">1</span>
-                                                <span className="text-[10px] text-zinc-500 absolute" style={{ left: 'calc((12 - 1) / (13 - 1) * 100%)' }}>12</span>
                                                 <span className="text-[10px] text-orange-500 font-semibold absolute right-0">No Limit</span>
                                             </div>
                                         </div>
                                         <p className="text-[10px] text-zinc-500 mt-2">Adjust the maximum number of results to fetch</p>
                                     </div>
                                 )}
-                            </div>
                         </div>
-                    ) : null}
-
-                    {/* BULK IMPORT MODE - NOT CURRENTLY IN USE */}
-                    {/* Code kept below for future implementation */}
-                    {false && mode === 'import' && (
-                        <div className="flex flex-col gap-6">
-                            {/* Quantity Slider - Enhanced */}
-                            <div className="relative bg-zinc-50 p-5 rounded-xl border border-zinc-200">
-                                <div className="flex justify-between items-center mb-3">
-                                    <span className="text-xs font-bold text-zinc-700 flex items-center gap-2 uppercase tracking-wider">
-                                        <Sliders className="w-3.5 h-3.5 text-orange-500" />
-                                        People Per Company
-                                    </span>
-                                    <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
-                                        {filters.quantity}
-                                    </span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="12"
-                                    value={filters.quantity}
-                                    onChange={(e) => setFilters({ ...filters, quantity: parseInt(e.target.value) })}
-                                    className="w-full h-2 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-orange-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-pointer"
-                                />
-                                <p className="text-[10px] text-zinc-500 mt-2">
-                                    If you upload <span className="text-orange-400 font-semibold">10 companies</span>, we will fetch <span className="text-orange-400 font-semibold">{filters.quantity * 10} leads</span> total.
-                                </p>
-                            </div>
-
-                            {/* Upload Area - Enhanced */}
-                            {loading ? (
-                                <div className="flex flex-col items-center justify-center text-center space-y-5 py-12">
-                                    <div className="relative">
-                                        <div className="absolute inset-0 bg-orange-100 blur-2xl rounded-full animate-pulse" />
-                                        <div className="w-16 h-16 rounded-2xl bg-white border-2 border-orange-500/30 flex items-center justify-center relative z-10 shadow-xl">
-                                            <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-zinc-950 font-bold text-base mb-1">{processingStatus}</p>
-                                        <p className="text-zinc-500 text-xs">Processing your file...</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div
-                                    className={`group relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center p-10 transition-all duration-300 cursor-pointer overflow-hidden ${dragActive
-                                        ? 'border-orange-500 bg-orange-50 shadow-xl shadow-orange-500/10 scale-[1.02]'
-                                        : 'border-zinc-300 bg-zinc-50 hover:border-orange-500/50 hover:bg-orange-50/50 hover:shadow-lg hover:shadow-orange-500/5'
-                                        }`}
-                                    onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
-                                    onDragLeave={() => setDragActive(false)}
-                                    onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); }}
-                                >
-                                    <div className="absolute inset-0 bg-linear-to-br from-orange-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                                    <div className="relative z-10">
-                                        <div className={`mb-4 transition-all duration-300 ${dragActive ? 'scale-110 text-orange-500' : 'text-zinc-500 group-hover:text-orange-500/70'}`}>
-                                            <UploadCloud className="w-12 h-12 mx-auto" />
-                                        </div>
-                                        <p className="text-zinc-950 font-bold text-base mb-2">Drop Company List</p>
-                                        <p className="text-zinc-500 text-xs mb-6 max-w-xs">
-                                            Upload a CSV or Excel file with <span className="text-orange-400 font-semibold">'Company'</span> and <span className="text-orange-400 font-semibold">'Domain'</span> columns
-                                        </p>
-                                        <label className="inline-flex items-center gap-2 bg-linear-to-r from-white to-zinc-100 text-black px-6 py-3 rounded-xl font-bold text-sm cursor-pointer hover:from-zinc-100 hover:to-zinc-200 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95">
-                                            <UploadCloud className="w-4 h-4" />
-                                            <span>Browse Files</span>
-                                            <input
-                                                type="file"
-                                                className="hidden"
-                                                accept=".csv,.xlsx"
-                                                onChange={(e: any) => e.target.files[0] && processFile(e.target.files[0])}
-                                            />
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    </div>
                 </div>
             </div>
 
@@ -766,7 +631,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
             <div className="flex-1 bg-white/95 border border-zinc-200 rounded-[32px] shadow-xl shadow-zinc-950/5 p-6 lg:p-8 overflow-hidden flex flex-col relative">
                 <div className="mb-8">
                     <h1 className="text-2xl lg:text-3xl font-bold text-zinc-950 tracking-tight">Live Results</h1>
-                    <p className="text-zinc-500 text-sm mt-1">{results.length > 0 ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}` : 'Start a search to see results'}</p>
+                    <p className="text-zinc-500 text-sm mt-1">
+                        {results.length > 0
+                            ? `Found ${results.length} ${searchType === 'people' ? 'enriched profiles' : 'companies'}`
+                            : 'Start a search to see results'}
+                    </p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
@@ -794,7 +663,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                             <div className="text-center max-w-md">
                                 <h3 className="font-bold text-xl text-zinc-950 mb-2">Ready to Search</h3>
                                 <p className="text-sm text-zinc-500 leading-relaxed">
-                                    Enter criteria to find verified {searchType === 'people' ? 'professional contacts' : 'companies'} using Apollo's database.
+                                    Enter criteria to find verified {searchType === 'people' ? 'professional contacts' : 'companies'} using Apollo&apos;s database.
                                 </p>
                             </div>
                         </div>
@@ -874,6 +743,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSave }) => {
                 isOpen={isCompanyModalOpen}
                 onClose={() => setIsCompanyModalOpen(false)}
                 onSave={handleSaveCompany}
+                onPersonRemoved={(personId) => setResults((prev) => prev.filter((p) => p.id !== personId))}
+                onCompanyUpdated={(updated) => {
+                    setResults((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+                    setSelectedCompany(updated);
+                }}
             />
         </div>
     );

@@ -1,6 +1,5 @@
 import React from 'react';
-import { Building2, MapPin, Users, Globe, ArrowRight, Trash2, Calendar, MessageSquare } from 'lucide-react';
-import { getBrandColor } from '@/lib/utils';
+import { Building2, MapPin } from 'lucide-react';
 import { Comment } from '@/services/databaseService';
 
 export interface Company {
@@ -23,6 +22,24 @@ export interface Company {
     saved_by?: string;
     saved_by_profile_url?: string;
     comments?: Comment[];
+    /** Extra DB fields merged in from `mapDbCompanyToAppCompany` */
+    primary_domain?: string;
+    website_url?: string;
+    street_address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postal_code?: string;
+    raw_address?: string;
+    sanitized_phone?: string;
+    sic_codes?: string[];
+    naics_codes?: string[];
+    publicly_traded_symbol?: string;
+    publicly_traded_exchange?: string;
+    alexa_ranking?: number;
+    retail_location_count?: number;
+    organization_revenue?: number;
+    organization_revenue_printed?: string;
 }
 
 interface CompanyCardProps {
@@ -33,23 +50,18 @@ interface CompanyCardProps {
 }
 
 export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAction, actionIcon: ActionIcon }) => {
-    const brandColor = getBrandColor(company.name);
+    const locationLabel = [company.city, company.country].filter(Boolean).join(', ') || company.location || '';
+    const websiteLabel = (company.website || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const description = company.description?.trim() || 'Company profile available. Open details to edit and enrich this record.';
 
     return (
         <div
             onClick={onClick}
-            className="group relative bg-white border border-zinc-200 p-5 rounded-2xl transition-all duration-300 hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5 cursor-pointer flex flex-col h-full overflow-hidden"
+            className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/8"
         >
-            {/* Top Gradient Line */}
-            <div
-                className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-(--brand-color) to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                style={{ '--brand-color': brandColor } as React.CSSProperties}
-            />
-
-            {/* Header Section */}
-            <div className="flex justify-between items-start mb-4 relative z-10">
-                <div className="flex gap-4">
-                    <div className="relative w-12 h-12 rounded-xl bg-zinc-50 border border-zinc-200 p-2 flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-105">
+            <div className="relative z-10 mb-3 flex items-start justify-between gap-2.5">
+                <div className="flex min-w-0 gap-3">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 p-1.5 transition-transform duration-300 group-hover:scale-105">
                         {company.logo ? (
                             <img src={company.logo} alt={company.name} className="w-full h-full object-contain" />
                         ) : (
@@ -57,85 +69,44 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
                         )}
                     </div>
 
-                    <div>
-                        <h3 className="text-zinc-950 font-bold text-lg leading-tight tracking-tight group-hover:text-orange-600 transition-colors">
+                    <div className="min-w-0">
+                        <h3 className="truncate text-[15px] font-bold tracking-tight text-zinc-950 transition-colors group-hover:text-orange-600 sm:text-base">
                             {company.name}
                         </h3>
                         {company.industry && (
-                            <div className="mt-1">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-50 border border-zinc-200 text-[10px] font-medium text-zinc-600">
+                            <div className="mt-1.5">
+                                <span className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600">
                                     {company.industry}
                                 </span>
                             </div>
                         )}
+                        {websiteLabel && (
+                            <p className="mt-1 truncate text-[10px] font-medium text-zinc-400">{websiteLabel}</p>
+                        )}
                     </div>
                 </div>
 
-                <div className="flex gap-2">
-                    {onAction && ActionIcon && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onAction(); }}
-                            className="w-8 h-8 rounded-lg bg-zinc-50 hover:bg-red-50 border border-zinc-200 hover:border-red-200 flex items-center justify-center text-zinc-400 hover:text-red-600 transition-all"
-                        >
-                            <ActionIcon className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
+                {onAction && ActionIcon && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onAction(); }}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-400 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    >
+                        <ActionIcon className="h-3.5 w-3.5" />
+                    </button>
+                )}
             </div>
 
-            <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-5 min-h-[2.5em]">
-                {company.description || 'No description available for this company.'}
+            <p className="mb-3 min-h-[2.6em] text-[11px] leading-relaxed text-zinc-500 line-clamp-2">
+                {description}
             </p>
 
-            {/* Metadata Tags */}
-            <div className="flex flex-wrap gap-2 mt-auto mb-5">
-                {company.location && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[10px] text-zinc-700 font-medium">
-                        <MapPin className="w-3 h-3 text-zinc-400" />
-                        <span className="truncate max-w-[100px]">{company.location}</span>
+            <div className="mb-3 grid grid-cols-2 gap-1.5">
+                {locationLabel && (
+                    <div className="col-span-2 flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-[9px] font-medium text-zinc-700">
+                        <MapPin className="h-3 w-3 shrink-0 text-zinc-400" />
+                        <span className="truncate">{locationLabel}</span>
                     </div>
                 )}
-                {company.employees && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[10px] text-zinc-700 font-medium">
-                        <Users className="w-3 h-3 text-zinc-400" />
-                        <span>{company.employees.toLocaleString()}</span>
-                    </div>
-                )}
-                {company.website && (
-                    <a
-                        href={company.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[10px] text-zinc-700 font-medium hover:bg-orange-50 hover:border-orange-200 hover:text-zinc-950 transition-colors"
-                    >
-                        <Globe className="w-3 h-3 text-zinc-400" />
-                        <span>Website</span>
-                    </a>
-                )}
-            </div>
-
-            {/* Footer */}
-            <div className="pt-4 border-t border-zinc-200 flex items-center justify-between mt-auto">
-                <div className="flex items-center gap-3">
-                    {company.founded_year && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-medium">
-                            <Calendar className="w-3 h-3" />
-                            <span>{company.founded_year}</span>
-                        </div>
-                    )}
-                    {company.comments && company.comments.length > 0 && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-medium">
-                            <MessageSquare className="w-3 h-3" />
-                            <span>{company.comments.length}</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-1 text-[10px] font-bold text-zinc-500 group-hover:text-orange-600 transition-colors">
-                    View Details
-                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
-                </div>
             </div>
         </div>
     );

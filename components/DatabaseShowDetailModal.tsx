@@ -1,18 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import {
     Calendar,
     MapPin,
-    Globe,
     ExternalLink,
     Download,
-    Hash,
-    Building2,
     Link2,
     FileText,
-    Sparkles,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { getZohoConfig } from '@/lib/zoho';
@@ -51,30 +47,15 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
     onClose,
     show,
 }) => {
-    const [noteOpen, setNoteOpen] = useState(false);
-
-    useEffect(() => {
-        if (isOpen) setNoteOpen(false);
-    }, [isOpen, show?.ID]);
-
     if (!isOpen || !show) return null;
 
     const title = String(show.Event || show.Event_Name || show.Name || 'Show');
     const startLabel = formatEventDate(show.Starting_Date as string | undefined);
-    const industry = show.Industry ? String(show.Industry) : '';
-    const organiser = show.Organiser ? String(show.Organiser) : '';
     const city = show.City ? String(show.City) : '';
     const country = show.Country ? String(show.Country) : '';
     const worldArea = show.World_Area ? String(show.World_Area) : '';
     const location = [city, country, worldArea].filter(Boolean).join(', ');
-    const size = show.Exhibition_Size ? String(show.Exhibition_Size) : '';
-    const exhibitorCount = show.Last_edition_n_Exhibitors
-        ? String(show.Last_edition_n_Exhibitors)
-        : '';
-    const frequency = show.Frequency ? String(show.Frequency) : '';
     const level = show.Level ? String(show.Level) : '';
-    const note1 = show.Note1 ? String(show.Note1) : '';
-    const website = linkValue(show.Website);
     const exhibitorList = linkValue(show.Exhibitor_List_Link);
     const floorplanLink = linkValue(show.Floorplan_Link);
     const floorplanRaw = show.Floorplan;
@@ -206,14 +187,12 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                     </div>
                 </div>
 
-                <div className="px-6 sm:px-10 py-8 space-y-10">
-                    {/* Quick Links Section */}
-                    {(exhibitorList || floorplanLink || floorplanFileUrl) && (
-                        <div>
-                            <h4 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400 mb-4">
-                                Quick links
-                            </h4>
-                            <div className="grid gap-3 sm:grid-cols-2">
+                {(exhibitorList || floorplanLink || floorplanFileUrl) && (
+                    <div className="px-6 sm:px-10 py-8">
+                        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400 mb-4">
+                            Quick links
+                        </h4>
+                        <div className="grid gap-3 sm:grid-cols-2">
                                 {exhibitorList && (
                                     <a
                                         href={exhibitorList || undefined}
@@ -271,88 +250,12 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                                     </button>
                                 )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Details Section */}
-                    <div>
-                        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400 mb-4">
-                            Details
-                        </h4>
-                        <div className="border border-zinc-100 rounded-2xl overflow-hidden">
-                            <div className="divide-y divide-zinc-50">
-                                {industry && <Row label="Industry" value={industry} />}
-                                {location && <Row label="Location" value={location} icon={<MapPin className="h-3.5 w-3.5 text-zinc-400" />} />}
-                                {organiser && <Row label="Organiser" value={organiser} />}
-                                {exhibitorCount && <Row label="Exhibitors" value={exhibitorCount} />}
-                                {size && <Row label="Size" value={size} />}
-                                {frequency && <Row label="Frequency" value={frequency} />}
-                                {website && (
-                                    <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:gap-6">
-                                        <span className="w-32 shrink-0 text-xs text-zinc-500 font-medium">Website</span>
-                                        <a
-                                            href={website || undefined}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="group flex items-center gap-2 text-sm text-zinc-900 hover:text-orange-600 transition-colors min-w-0"
-                                        >
-                                            <Globe className="h-3.5 w-3.5 shrink-0 text-zinc-400 group-hover:text-orange-500 transition-colors" />
-                                            <span className="truncate">{website}</span>
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     </div>
-
-                    {/* Note Section */}
-                    {note1 && (
-                        <div className="rounded-2xl bg-zinc-50/50 p-6">
-                            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-3">
-                                <Building2 className="h-3.5 w-3.5" />
-                                Show Notes
-                            </div>
-                            <p className={`text-sm leading-relaxed text-zinc-700 ${noteOpen ? '' : 'line-clamp-4'}`}>
-                                {note1}
-                            </p>
-                            {note1.length > 200 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setNoteOpen(!noteOpen)}
-                                    className="mt-3 text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
-                                >
-                                    {noteOpen ? 'Show less' : 'Read more'}
-                                </button>
-                            )}
-                        </div>
-                    )}
-                </div>
+                )}
             </div>
         </Modal>
     );
 };
-
-function Row({
-    label,
-    value,
-    icon,
-}: {
-    label: string;
-    value: string;
-    icon?: React.ReactNode;
-}) {
-    return (
-        <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-            <span className="w-32 shrink-0 text-[11px] font-bold uppercase tracking-wide text-zinc-500">
-                {label}
-            </span>
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-zinc-900">
-                {icon}
-                <span className="min-w-0 wrap-break-word">{value}</span>
-            </span>
-        </div>
-    );
-}
 
 function LayoutTemplateIcon() {
     return (

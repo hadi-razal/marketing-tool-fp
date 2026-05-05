@@ -1,5 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Building2, MapPin, Mail, Phone, Check, Linkedin } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+    Building2,
+    MapPin,
+    Mail,
+    Phone,
+    Check,
+    Circle,
+    UserCheck,
+    TrendingUp,
+    Sparkles,
+    Clock,
+    XCircle,
+    Linkedin,
+    type LucideIcon,
+} from 'lucide-react';
+import { getBrandColor, isPersonSavedFromLinkedInSearch } from '@/lib/utils';
 
 interface Lead {
     id: string;
@@ -43,6 +58,8 @@ interface Lead {
     functions?: string[];
     isSaved?: boolean;
     description?: string;
+    contact_status?: string;
+    saved_from?: string | null;
 }
 
 interface ProfileCardProps {
@@ -63,6 +80,7 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
 
     if (hasValidSrc) {
         return (
+            // eslint-disable-next-line @next/next/no-img-element -- external avatar URLs
             <img
                 src={src}
                 alt={alt}
@@ -72,11 +90,62 @@ const Avatar = ({ src, alt, name, className }: { src?: string, alt: string, name
         );
     }
 
+    const accent = getBrandColor(name || alt);
+
     return (
-        <div className={`${className} flex items-center justify-center bg-orange-500 text-white font-bold text-sm`}>
+        <div
+            className={`${className} flex items-center justify-center border border-black/8 text-[11px] font-semibold leading-none tracking-tight text-white antialiased shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] ring-1 ring-inset ring-white/20 sm:text-xs`}
+            style={{ backgroundColor: accent }}
+        >
             {initials}
         </div>
     );
+};
+
+const PIPELINE_VISUAL: Record<
+    string,
+    { Icon: LucideIcon; chip: string; iconClass: string }
+> = {
+    New: {
+        Icon: Circle,
+        chip: 'border-zinc-200 bg-zinc-50 text-zinc-800',
+        iconClass: 'text-zinc-500',
+    },
+    'Need to Contact': {
+        Icon: Phone,
+        chip: 'border-blue-200 bg-blue-50 text-blue-900',
+        iconClass: 'text-blue-600',
+    },
+    Contacted: {
+        Icon: UserCheck,
+        chip: 'border-purple-200 bg-purple-50 text-purple-900',
+        iconClass: 'text-purple-600',
+    },
+    'In Progress': {
+        Icon: TrendingUp,
+        chip: 'border-orange-200 bg-orange-50 text-orange-900',
+        iconClass: 'text-orange-600',
+    },
+    'Good Lead': {
+        Icon: Sparkles,
+        chip: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+        iconClass: 'text-emerald-600',
+    },
+    'Need a Follow Up': {
+        Icon: Clock,
+        chip: 'border-amber-200 bg-amber-50 text-amber-950',
+        iconClass: 'text-amber-600',
+    },
+    'Not Interested': {
+        Icon: XCircle,
+        chip: 'border-red-200 bg-red-50 text-red-900',
+        iconClass: 'text-red-600',
+    },
+    Qualified: {
+        Icon: Sparkles,
+        chip: 'border-blue-200 bg-blue-50 text-blue-900',
+        iconClass: 'text-blue-600',
+    },
 };
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, actionIcon: ActionIcon, onClick, isSaved, actionType = 'save' }) => {
@@ -89,9 +158,12 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
     const email = lead.email || 'N/A';
     const phone = lead.phone || 'N/A';
     const image = lead.photo_url || lead.image;
-    const linkedin = lead.linkedin || lead.linkedin_url;
     const isVerified = lead.status === 'Verified' || lead.email_status === 'verified';
     const saved = isSaved || lead.isSaved;
+
+    const pipelineLabel = (lead.contact_status || 'New').trim() || 'New';
+    const pipelineVisual = PIPELINE_VISUAL[pipelineLabel] ?? PIPELINE_VISUAL.New;
+    const PipelineStatusIcon = pipelineVisual.Icon;
 
     const hasLimitedData = !saved && (
         email === 'Available (Unlock)' ||
@@ -105,15 +177,15 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
         return (
             <div
                 onClick={onClick}
-                className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5 transition-all duration-300 flex flex-col h-[280px]"
+                className="group relative flex h-48 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white cursor-pointer transition-all duration-300 hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5"
             >
-                <div className="p-4 flex items-start gap-3">
+                <div className="flex items-start gap-2 p-2.5">
                     <div className="relative shrink-0">
                         <Avatar
                             key={image || 'default'}
                             src={image}
                             name={name}
-                            className="w-10 h-10 rounded-lg object-cover border border-zinc-200"
+                            className="h-9 w-9 rounded-lg border border-zinc-200 object-cover"
                             alt={name}
                         />
                     </div>
@@ -121,35 +193,29 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                         <h3 className="text-zinc-950 font-semibold text-sm truncate group-hover:text-orange-600 transition-colors">
                             {name}
                         </h3>
-                        <p className="text-zinc-500 text-xs truncate mt-0.5">{title}</p>
+                        <p className="mt-0 truncate text-[11px] text-zinc-500">{title}</p>
                     </div>
                 </div>
 
-                <div className="px-4 flex flex-wrap gap-1.5 mb-3">
-                    <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                <div className="mb-1.5 flex flex-wrap gap-1 px-2.5">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
                         <Building2 className="w-3 h-3 text-orange-500" />
                         <span className="truncate max-w-[120px]">{company}</span>
                     </span>
                     {location && (
-                        <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
+                        <span className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
                             <MapPin className="w-3 h-3 text-blue-500" />
                             <span className="truncate max-w-[100px]">{location}</span>
                         </span>
                     )}
                 </div>
 
-                <div className="mt-auto px-4 pb-4">
-                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                <div className="mt-auto px-2.5 pb-2.5">
+                    <div className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-2">
                         <p className="text-[10px] text-orange-600 font-medium text-center">
                             Click to view details and save
                         </p>
                     </div>
-                </div>
-
-                <div className="px-4 py-2 border-t border-zinc-200 bg-zinc-50">
-                    <span className="text-[9px] text-zinc-400 font-mono truncate">
-                        ID: {lead.id?.substring(0, 20)}
-                    </span>
                 </div>
             </div>
         );
@@ -158,15 +224,15 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
     return (
         <div
             onClick={onClick}
-            className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5 transition-all duration-300 flex flex-col h-[280px]"
+            className="group relative flex h-48 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white cursor-pointer transition-all duration-300 hover:border-orange-200 hover:shadow-xl hover:shadow-zinc-950/5"
         >
-            <div className="p-4 flex items-start gap-3">
+            <div className="flex items-start gap-2 p-2.5">
                 <div className="relative shrink-0">
                     <Avatar
                         key={image || 'default'}
                         src={image}
                         name={name}
-                        className="w-12 h-12 rounded-xl object-cover border border-zinc-200"
+                        className="h-10 w-10 rounded-lg border border-zinc-200 object-cover"
                         alt={name}
                     />
                     {isVerified && (
@@ -177,7 +243,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                 </div>
                 <div className="flex-1 min-w-0">
                     <h3 className="text-zinc-950 font-semibold text-sm truncate group-hover:text-orange-600 transition-colors">{name}</h3>
-                    <p className="text-zinc-500 text-xs truncate mt-0.5">{title}</p>
+                    <p className="mt-0 truncate text-[11px] text-zinc-500">{title}</p>
                 </div>
                 {onAction && ActionIcon && (
                     <button
@@ -188,7 +254,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                             }
                         }}
                         disabled={actionType === 'save' && saved}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 border ${actionType === 'delete'
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all ${actionType === 'delete'
                                 ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100 hover:text-red-600'
                                 : saved
                                     ? 'bg-green-50 border-green-200 text-green-500'
@@ -208,52 +274,51 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
             </div>
 
             {/* Tags */}
-            <div className="px-4 flex flex-wrap gap-1.5">
-                <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
-                    <Building2 className="w-3 h-3 text-orange-500" />
+            <div className="flex flex-wrap gap-1 px-2.5">
+                <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
+                    <Building2 className="h-3 w-3 shrink-0 text-orange-500" />
                     <span className="truncate max-w-[100px]">{company}</span>
                 </span>
                 {location && (
-                    <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] px-2.5 py-1 rounded-md font-medium">
-                        <MapPin className="w-3 h-3 text-blue-500" />
+                    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
+                        <MapPin className="h-3 w-3 shrink-0 text-blue-500" />
                         <span className="truncate max-w-[120px]">{location}</span>
+                    </span>
+                )}
+                {saved && (
+                    <span
+                        className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold ${pipelineVisual.chip}`}
+                        title={`Pipeline: ${pipelineLabel}`}
+                    >
+                        <PipelineStatusIcon className={`h-3 w-3 shrink-0 ${pipelineVisual.iconClass}`} strokeWidth={2} />
+                        <span className="min-w-0 truncate">{pipelineLabel}</span>
+                    </span>
+                )}
+                {saved && isPersonSavedFromLinkedInSearch(lead.saved_from) && (
+                    <span
+                        className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md border border-[#0a66c2]/30 bg-[#0a66c2]/8 px-2 py-0.5 text-[9px] font-bold leading-tight text-[#0a66c2] sm:text-[10px]"
+                        title="Saved from LinkedIn / Apollo search"
+                    >
+                        <Linkedin className="h-3 w-3 shrink-0" />
+                        <span className="min-w-0">Saved from LinkedIn</span>
                     </span>
                 )}
             </div>
 
             {/* Contact Info */}
-            <div className="mt-auto p-4 space-y-2 bg-zinc-50 border-t border-zinc-200">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-md bg-white border border-zinc-200 flex items-center justify-center shrink-0">
-                        <Mail className="w-3 h-3 text-zinc-400" />
+            <div className="mt-auto space-y-1 border-t border-zinc-200 bg-zinc-50 px-2.5 py-2">
+                <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-200 bg-white">
+                        <Mail className="h-2.5 w-2.5 text-zinc-400" />
                     </div>
-                    <span className="text-xs text-zinc-600 truncate flex-1">{email}</span>
+                    <span className="flex-1 truncate text-[11px] text-zinc-600">{email}</span>
                 </div>
-                <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-md bg-white border border-zinc-200 flex items-center justify-center shrink-0">
-                        <Phone className="w-3 h-3 text-zinc-400" />
+                <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-200 bg-white">
+                        <Phone className="h-2.5 w-2.5 text-zinc-400" />
                     </div>
-                    <span className="text-xs text-zinc-600">{phone}</span>
+                    <span className="text-[11px] text-zinc-600">{phone}</span>
                 </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-4 py-2.5 border-t border-zinc-200 flex items-center justify-between bg-zinc-50">
-                <span className="text-[9px] text-zinc-400 font-mono truncate max-w-[140px]">
-                    ID: {lead.id?.substring(0, 20)}
-                </span>
-                {linkedin && (
-                    <a
-                        href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-[10px] font-semibold text-blue-600 hover:text-blue-500 flex items-center gap-1"
-                    >
-                        <Linkedin className="w-3 h-3" />
-                        LinkedIn
-                    </a>
-                )}
             </div>
         </div>
     );

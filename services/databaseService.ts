@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase';
+import { normalizeOrganizationDomain } from '@/lib/utils';
 
 const supabase = createClient();
 
@@ -47,6 +48,8 @@ export interface SavedPerson {
     email?: string;
     email_status?: string;
     contact_status?: string;
+    /** How the row was first created: e.g. `linkedin` (Apollo search), `manual`, `import` */
+    saved_from?: string | null;
     phone?: string;
     sanitized_phone?: string;
     linkedin_url?: string;
@@ -120,6 +123,7 @@ export const databaseService = {
                 alexa_ranking: company.alexa_ranking,
                 retail_location_count: company.retail_location_count,
                 raw_address: company.raw_address,
+                description: company.description,
                 publicly_traded_symbol: company.publicly_traded_symbol,
                 publicly_traded_exchange: company.publicly_traded_exchange,
                 saved_uid: user?.id,
@@ -138,6 +142,25 @@ export const databaseService = {
         }
 
         return data;
+    },
+
+    getCompanyById: async (id: string) => {
+        const supabase = createClient();
+        const { data: row, error } = await supabase.from('companies').select('*').eq('id', id).single();
+        if (error || !row) {
+            if (error && error.code !== 'PGRST116') console.error('Error fetching company:', error);
+            return null;
+        }
+        let savedByName: string | undefined;
+        let savedByProfileUrl: string | undefined;
+        if (row.saved_uid) {
+            const { data: u } = await supabase.from('users').select('name, profile_url').eq('uid', row.saved_uid).single();
+            if (u) {
+                savedByName = u.name;
+                savedByProfileUrl = u.profile_url;
+            }
+        }
+        return mapDbCompanyToAppCompany(row, savedByName, savedByProfileUrl);
     },
 
     // Check if a company is already saved
@@ -261,38 +284,51 @@ export const databaseService = {
 
         const fullName = person.full_name || person.name || `${person.first_name || ''} ${person.last_name || ''}`.trim();
 
+        const upsertPayload: Record<string, unknown> = {
+            id: person.id,
+            saved_uid: user?.id,
+            first_name: person.first_name,
+            last_name: person.last_name,
+            full_name: fullName,
+            title: person.title,
+            headline: person.headline,
+            email: person.email,
+            email_status: person.email_status,
+            linkedin_url: person.linkedin || person.linkedin_url,
+            photo_url: person.image || person.photo_url,
+            twitter_url: person.twitter || person.twitter_url,
+            github_url: person.github || person.github_url,
+            facebook_url: person.facebook || person.facebook_url,
+            country: person.country,
+            state: person.state,
+            city: person.city,
+            postal_code: person.postal_code,
+            formatted_address: person.location || person.formatted_address,
+            time_zone: person.time_zone,
+            organization_id: person.company_id || person.organization_id,
+            organization_name: person.company || person.organization_name,
+            organization_domain: person.website || person.company_website || person.organization_domain,
+            departments: person.departments || [],
+            subdepartments: person.subdepartments || [],
+            seniority: person.seniority,
+            employment_history: person.employment_history || [],
+            organization: person.organization || null,
+            phone: person.phone,
+            sanitized_phone: person.sanitized_phone,
+            contact_status: person.contact_status,
+        };
+
+        if (
+            Object.prototype.hasOwnProperty.call(person, 'saved_from') &&
+            person.saved_from != null &&
+            String(person.saved_from).trim() !== ''
+        ) {
+            upsertPayload.saved_from = String(person.saved_from).trim();
+        }
+
         const { data, error } = await supabase
             .from('people')
-            .upsert({
-                id: person.id,
-                saved_uid: user?.id,
-                first_name: person.first_name,
-                last_name: person.last_name,
-                full_name: fullName,
-                title: person.title,
-                headline: person.headline,
-                email: person.email,
-                email_status: person.email_status,
-                linkedin_url: person.linkedin || person.linkedin_url,
-                photo_url: person.image || person.photo_url,
-                twitter_url: person.twitter || person.twitter_url,
-                github_url: person.github || person.github_url,
-                facebook_url: person.facebook || person.facebook_url,
-                country: person.country,
-                state: person.state,
-                city: person.city,
-                postal_code: person.postal_code,
-                formatted_address: person.location || person.formatted_address,
-                time_zone: person.time_zone,
-                organization_id: person.company_id || person.organization_id,
-                organization_name: person.company || person.organization_name,
-                organization_domain: person.website || person.company_website || person.organization_domain,
-                departments: person.departments || [],
-                subdepartments: person.subdepartments || [],
-                seniority: person.seniority,
-                employment_history: person.employment_history || [],
-                organization: person.organization || null,
-            }, { onConflict: 'id' })
+            .upsert(upsertPayload, { onConflict: 'id' })
             .select()
             .single();
 
@@ -800,21 +836,80 @@ export const databaseService = {
         return comments;
     },
 
-    // Get people associated with a company
-    getPeopleByCompany: async (companyId: string) => {
+    /**
+     * People linked to a company: same `organization_id`, or same company name (case-insensitive),
+     * or same primary domain (helps imported / manual rows that never got Apollo org IDs).
+     */
+    getPeopleByCompany: async (
+        companyId: string,
+        opts?: { companyName?: string; domain?: string | null },
+    ) => {
         const supabase = createClient();
-        const { data: people, error } = await supabase
-            .from('people')
-            .select('*')
-            .eq('organization_id', companyId)
-            .order('created_at', { ascending: false });
+        const byId = new Map<string, Record<string, unknown>>();
 
-        if (error) {
-            console.error('Error fetching people for company:', error);
-            return [];
+        const merge = (rows: Record<string, unknown>[] | null) => {
+            for (const row of rows || []) {
+                if (row?.id) byId.set(String(row.id), row);
+            }
+        };
+
+        const { data: byOrgId, error: errOrg } = await supabase.from('people').select('*').eq('organization_id', companyId);
+        if (errOrg) console.error('Error fetching people by organization_id:', errOrg);
+        merge(byOrgId as Record<string, unknown>[] | null);
+
+        const name = opts?.companyName?.trim();
+        if (name) {
+            const { data: byName, error: errName } = await supabase.from('people').select('*').ilike('organization_name', name);
+            if (errName) console.error('Error fetching people by organization_name:', errName);
+            merge(byName as Record<string, unknown>[] | null);
         }
 
-        return people.map(person => mapDbPersonToAppPerson(person));
+        const domain = opts?.domain ? String(opts.domain).trim().toLowerCase() : null;
+        if (domain) {
+            const { data: byDom, error: errDom } = await supabase.from('people').select('*').eq('organization_domain', domain);
+            if (errDom) console.error('Error fetching people by organization_domain:', errDom);
+            merge(byDom as Record<string, unknown>[] | null);
+        }
+
+        const merged = Array.from(byId.values()).sort((a, b) => {
+            const ta = new Date(String((a as { created_at?: string }).created_at || 0)).getTime();
+            const tb = new Date(String((b as { created_at?: string }).created_at || 0)).getTime();
+            return tb - ta;
+        });
+
+        return merged.map((person) => mapDbPersonToAppPerson(person));
+    },
+
+    /** Point a saved person at this company (updates org fields in `people`). */
+    linkPersonToCompany: async (
+        personId: string,
+        company: {
+            id: string;
+            name: string;
+            primary_domain?: string | null;
+            website?: string | null;
+            website_url?: string | null;
+        },
+    ) => {
+        const supabase = createClient();
+        const domain =
+            normalizeOrganizationDomain(company.primary_domain) ||
+            normalizeOrganizationDomain(company.website) ||
+            normalizeOrganizationDomain(company.website_url);
+
+        const { error } = await supabase
+            .from('people')
+            .update({
+                organization_id: company.id,
+                organization_name: company.name.trim(),
+                ...(domain ? { organization_domain: domain } : {}),
+            })
+            .eq('id', personId);
+
+        if (error) {
+            console.error('linkPersonToCompany:', error);
+            throw error;
+        }
     },
 
     // ==================== PERSON COMMENTS FUNCTIONS ====================
@@ -1186,6 +1281,7 @@ function mapDbPersonToAppPerson(dbPerson: any, savedByName?: string, savedByProf
         subdepartments: dbPerson.subdepartments,
         employment_history: dbPerson.employment_history,
         organization: dbPerson.organization,
+        saved_from: dbPerson.saved_from,
         isSaved: true,
         saved_by: savedByName,
         saved_by_profile_url: savedByProfileUrl,

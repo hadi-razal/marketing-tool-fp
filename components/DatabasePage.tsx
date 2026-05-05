@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin, Calendar, Globe, ArrowRight, LayoutGrid, List, ArrowUpDown, ChevronDown, RefreshCw
+    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin, Calendar, Globe, LayoutGrid, ArrowUpDown, ChevronDown, RefreshCw, FileSpreadsheet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -16,6 +16,9 @@ import { ConfirmModal } from './ui/ConfirmModal';
 import { databaseService, SavedPerson } from '@/services/databaseService';
 import { zohoApi } from '@/lib/zoho';
 import { DatabaseShowDetailModal } from './DatabaseShowDetailModal';
+import { SpreadsheetImportModal, type SpreadsheetImportProgress } from './SpreadsheetImportModal';
+import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
+import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
 
 interface DatabasePageProps {
     notify: (msg: string, type?: string) => void;
@@ -27,7 +30,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const [companies, setCompanies] = useState<Company[]>([]);
     const [shows, setShows] = useState<any[]>([]);
     const [showsLoading, setShowsLoading] = useState(false);
-    const [showsView, setShowsView] = useState<'grid' | 'list' | 'calendar'>('grid');
+    const [showsView, setShowsView] = useState<'grid' | 'calendar'>('grid');
     const [showsSort, setShowsSort] = useState<'name' | 'date' | 'country'>('name');
     const [dbSearch, setDbSearch] = useState<string>('');
     const [loading, setLoading] = useState(false);
@@ -62,6 +65,8 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         id: string | null;
         name: string;
     }>({ isOpen: false, type: null, id: null, name: '' });
+
+    const [spreadsheetImport, setSpreadsheetImport] = useState<null | 'people' | 'companies' | 'shows'>(null);
 
     // Fetch data on mount
     useEffect(() => {
@@ -295,7 +300,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 throw new Error(data.error || 'Failed to unlock contact info');
             }
 
-            const unlockedLead = { ...data.lead, isSaved: true };
+            const unlockedLead = { ...lead, ...data.lead, isSaved: true, saved_from: lead.saved_from };
 
             // Save to database automatically
             await databaseService.savePerson(unlockedLead);
@@ -315,15 +320,101 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         }
     };
 
+    const handleSpreadsheetPeopleImport = async (
+        rows: SpreadsheetRow[],
+        meta?: { comment?: string },
+        onProgress?: (p: SpreadsheetImportProgress) => void,
+    ) => {
+        const { rowsToImportedPeople } = await import('@/lib/importSpreadsheet');
+        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
+        const list = rowsToImportedPeople(rows, 'db_import');
+        onProgress?.({ current: 0, total: list.length });
+        let ok = 0;
+        for (let i = 0; i < list.length; i++) {
+            const p = list[i];
+            try {
+                await databaseService.savePerson(p);
+                ok++;
+            } catch (e) {
+                console.error(e);
+            }
+            onProgress?.({ current: i + 1, total: list.length });
+        }
+        const savedPeople = await databaseService.getSavedPeople();
+        setPeople(savedPeople);
+        await logSpreadsheetImport(`Imported ${ok} of ${list.length} people into the database.`, meta?.comment);
+        toast.success(`Imported ${ok} of ${list.length} people${meta?.comment?.trim() ? ' · note saved' : ''}`);
+    };
+
+    const handleSpreadsheetCompaniesImport = async (
+        rows: SpreadsheetRow[],
+        meta?: { comment?: string },
+        onProgress?: (p: SpreadsheetImportProgress) => void,
+    ) => {
+        const { rowsToImportedCompanies } = await import('@/lib/importSpreadsheet');
+        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
+        const list = rowsToImportedCompanies(rows, 'db_import');
+        onProgress?.({ current: 0, total: list.length });
+        let ok = 0;
+        for (let i = 0; i < list.length; i++) {
+            const c = list[i];
+            try {
+                await databaseService.saveCompany(c);
+                ok++;
+            } catch (e) {
+                console.error(e);
+            }
+            onProgress?.({ current: i + 1, total: list.length });
+        }
+        const savedCompanies = await databaseService.getSavedCompanies();
+        setCompanies(savedCompanies);
+        await logSpreadsheetImport(`Imported ${ok} of ${list.length} companies into the database.`, meta?.comment);
+        toast.success(`Imported ${ok} of ${list.length} companies${meta?.comment?.trim() ? ' · note saved' : ''}`);
+    };
+
+    const handleSpreadsheetShowsImport = async (
+        rows: SpreadsheetRow[],
+        meta?: { comment?: string },
+        onProgress?: (p: SpreadsheetImportProgress) => void,
+    ) => {
+        const { rowsToShowZohoPayloads } = await import('@/lib/importSpreadsheet');
+        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
+        const payloads = rowsToShowZohoPayloads(rows);
+        if (payloads.length === 0) {
+            toast.error('No valid rows. Each row needs an event name (Event_Name, Event, Name, or Show).');
+            return;
+        }
+        onProgress?.({ current: 0, total: payloads.length });
+        let ok = 0;
+        for (let i = 0; i < payloads.length; i++) {
+            const payload = payloads[i];
+            try {
+                const res = await zohoApi.addRecord('Show_Details', payload);
+                if (res && res.code === 3000) ok++;
+            } catch (e) {
+                console.error(e);
+            }
+            onProgress?.({ current: i + 1, total: payloads.length });
+        }
+        await fetchShows();
+        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Zoho from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${payloads.length} shows in Zoho${meta?.comment?.trim() ? ' · note saved' : ''}`);
+    };
+
     return (
         <div className="flex flex-col lg:flex-row h-full gap-6">
             {selectedPerson && (
                 <LeadDetailModal
                     lead={selectedPerson}
+                    personSaveOrigin="manual_entry"
                     onClose={() => {
                         setSelectedPerson(null);
                     }}
                     onUnlock={handleUnlock}
+                    onPersonUpdated={(updated) => {
+                        setPeople((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                        setSelectedPerson(updated);
+                    }}
                 />
             )}
 
@@ -388,7 +479,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         </h1>
                         <p className="text-zinc-500 text-xs font-medium">
                             {activeView === 'shows'
-                                ? 'Trade shows and exhibitions in one place — switch views anytime.'
+                                ? 'Trade shows and exhibitions — grid or calendar.'
                                 : `Manage your ${activeView} database`}
                         </p>
                     </div>
@@ -424,14 +515,6 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setShowsView('list')}
-                                        className={`p-2 rounded-lg transition-all ${showsView === 'list' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-700'}`}
-                                        title="List view"
-                                    >
-                                        <List className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        type="button"
                                         onClick={() => setShowsView('calendar')}
                                         className={`p-2 rounded-lg transition-all ${showsView === 'calendar' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-700'}`}
                                         title="Calendar view"
@@ -446,6 +529,13 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                 >
                                     <RefreshCw className={`w-3.5 h-3.5 ${showsLoading ? 'animate-spin' : ''}`} />
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSpreadsheetImport('shows')}
+                                    className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border border-zinc-200 bg-white text-zinc-700 hover:text-zinc-950 hover:bg-orange-50 hover:border-orange-200 shadow-sm"
+                                >
+                                    <FileSpreadsheet className="w-3.5 h-3.5" /> Import
+                                </button>
                             </div>
                         ) : (
                             <div className="flex gap-3">
@@ -456,6 +546,14 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                     <Filter className="w-3.5 h-3.5" /> Filters
                                 </button>
                                 <button
+                                    type="button"
+                                    onClick={() => setSpreadsheetImport(activeView === 'people' ? 'people' : 'companies')}
+                                    className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border border-zinc-200 bg-white text-zinc-700 hover:text-zinc-950 hover:bg-orange-50 hover:border-orange-200 shadow-sm"
+                                >
+                                    <FileSpreadsheet className="w-3.5 h-3.5" /> Import
+                                </button>
+                                <button
+                                    type="button"
                                     onClick={() => activeView === 'people' ? setIsCreatePersonOpen(true) : setIsCreateCompanyOpen(true)}
                                     className="bg-zinc-950 hover:bg-zinc-800 text-white px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-zinc-950/15"
                                 >
@@ -707,27 +805,28 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                         openShowDetails(show);
                                                     }
                                                 }}
-                                                className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md"
+                                                className="flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm outline-none transition-colors duration-200 hover:border-zinc-300 hover:bg-zinc-50/30 focus-visible:ring-2 focus-visible:ring-orange-400/35 focus-visible:ring-offset-2"
                                             >
                                                 <div className="flex flex-1 flex-col p-5">
                                                     <div className="mb-4 flex items-start justify-between gap-2">
                                                         {dateShort ? (
-                                                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">
+                                                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
                                                                 <Calendar className="h-3 w-3 text-zinc-400" />
                                                                 {dateShort}
                                                             </span>
                                                         ) : (
-                                                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50 px-2.5 py-1 text-[11px] font-medium text-zinc-400">
+                                                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
+                                                                <Calendar className="h-3 w-3 text-zinc-300" />
                                                                 Date TBC
                                                             </span>
                                                         )}
                                                         {industry && (
-                                                            <span className="max-w-[45%] truncate rounded-md bg-zinc-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-600">
+                                                            <span className="max-w-[45%] truncate text-[9px] font-bold uppercase tracking-wider text-zinc-500">
                                                                 {industry}
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <h3 className="line-clamp-2 min-h-10 text-base font-semibold leading-snug text-zinc-950 transition-colors group-hover:text-zinc-600">
+                                                    <h3 className="line-clamp-2 min-h-10 text-base font-semibold leading-snug text-zinc-950">
                                                         {showName}
                                                     </h3>
                                                     {location && (
@@ -736,87 +835,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                             <span className="line-clamp-2">{location}</span>
                                                         </p>
                                                     )}
-                                                    <div className="mt-auto flex items-center justify-between border-t border-zinc-100 pt-4 text-xs font-semibold text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100">
-                                                        <span className="flex items-center gap-1">
-                                                            View details
-                                                            <ArrowRight className="h-3.5 w-3.5" />
-                                                        </span>
-                                                    </div>
                                                 </div>
-                                            </div>
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
-                        ) : showsView === 'list' ? (
-                            <div className="space-y-2.5 pb-20">
-                                {filteredShows.map((show: any, idx: number) => {
-                                    const showName = show.Event || show.Event_Name || show.Name || 'Unnamed Show';
-                                    const city = show.City || '';
-                                    const country = show.Country || '';
-                                    const industry = show.Industry || '';
-                                    const startDate = show.Starting_Date || '';
-                                    const organiser = show.Organiser || '';
-                                    const exhibitors = show.Last_edition_n_Exhibitors || '';
-                                    const location = [city, country].filter(Boolean).join(', ');
-
-                                    return (
-                                        <motion.div
-                                            key={show.ID || idx}
-                                            initial={{ opacity: 0, y: 6 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: Math.min(idx * 0.02, 0.2) }}
-                                        >
-                                            <div
-                                                className="group flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-4 transition-all duration-200 hover:border-zinc-300 hover:shadow-md cursor-pointer"
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={() => openShowDetails(show)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        openShowDetails(show);
-                                                    }
-                                                }}
-                                            >
-                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 text-zinc-400">
-                                                    <Calendar className="h-4 w-4" />
-                                                </div>
-
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="truncate text-sm font-semibold text-zinc-900 transition-colors group-hover:text-zinc-600">
-                                                        {showName}
-                                                    </h3>
-                                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
-                                                        {organiser && <span className="truncate max-w-[140px]">{organiser}</span>}
-                                                        {organiser && location && <span className="text-zinc-300">·</span>}
-                                                        {location && (
-                                                            <span className="flex min-w-0 max-w-[200px] items-center gap-1 truncate">
-                                                                <MapPin className="h-3 w-3 shrink-0 text-zinc-400" />
-                                                                {location}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {industry && (
-                                                    <span className="hidden sm:inline-flex shrink-0 items-center rounded-md border border-zinc-100 bg-zinc-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-600">
-                                                        {industry}
-                                                    </span>
-                                                )}
-
-                                                {exhibitors && (
-                                                    <div className="hidden shrink-0 flex-col items-center px-2 md:flex">
-                                                        <span className="text-sm font-bold text-zinc-950">{exhibitors}</span>
-                                                        <span className="text-[9px] uppercase text-zinc-500">exhibitors</span>
-                                                    </div>
-                                                )}
-
-                                                {startDate && (
-                                                    <div className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-600">
-                                                        <span className="whitespace-nowrap">{startDate}</span>
-                                                    </div>
-                                                )}
                                             </div>
                                         </motion.div>
                                     );
@@ -1072,6 +1091,11 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 onSave={async () => {
                     setIsCompanyModalOpen(false);
                 }}
+                onPersonRemoved={(personId) => setPeople((prev) => prev.filter((p) => p.id !== personId))}
+                onCompanyUpdated={(updated) => {
+                    setCompanies((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+                    setSelectedCompany(updated);
+                }}
             />
             <ConfirmModal
                 isOpen={confirmModal.isOpen}
@@ -1082,6 +1106,54 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 confirmText="Delete"
                 isDestructive
             />
+
+            {spreadsheetImport === 'people' && (
+                <SpreadsheetImportModal
+                    isOpen
+                    onClose={() => setSpreadsheetImport(null)}
+                    title="Import people (CSV / Excel)"
+                    columnHint={
+                        <>
+                            Use columns such as: <strong>Name</strong> (or First Name + Last Name), <strong>Email</strong>,{' '}
+                            <strong>Title</strong>, <strong>Company</strong>, <strong>LinkedIn</strong>, <strong>Phone</strong>,{' '}
+                            <strong>Location</strong>, <strong>Website</strong>.
+                        </>
+                    }
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.people}
+                    onImportRows={handleSpreadsheetPeopleImport}
+                />
+            )}
+            {spreadsheetImport === 'companies' && (
+                <SpreadsheetImportModal
+                    isOpen
+                    onClose={() => setSpreadsheetImport(null)}
+                    title="Import companies (CSV / Excel)"
+                    columnHint={
+                        <>
+                            Use columns such as: <strong>Company</strong> (or Company Name), <strong>Website</strong> / Domain,{' '}
+                            <strong>Industry</strong>, <strong>Location</strong>, <strong>Employees</strong>, <strong>Revenue</strong>,{' '}
+                            <strong>Founded</strong>, <strong>Description</strong>, <strong>LinkedIn</strong>.
+                        </>
+                    }
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.companies}
+                    onImportRows={handleSpreadsheetCompaniesImport}
+                />
+            )}
+            {spreadsheetImport === 'shows' && (
+                <SpreadsheetImportModal
+                    isOpen
+                    onClose={() => setSpreadsheetImport(null)}
+                    title="Import shows to Zoho (CSV / Excel)"
+                    columnHint={
+                        <>
+                            Required: <strong>Event_Name</strong> (or Event / Name / Show). Optional: Event_Type, Starting_Date
+                            (YYYY-MM-DD), Industry, Level, World_Area, Country, City, Frequency.
+                        </>
+                    }
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.showsZoho}
+                    onImportRows={handleSpreadsheetShowsImport}
+                />
+            )}
         </div >
     );
 };

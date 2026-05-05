@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Send, Trash2, ChevronDown, ChevronUp, MessageSquare, Loader2, CheckCircle2, ExternalLink, Sparkles, XCircle, Clock, Save } from 'lucide-react';
+import { X, Linkedin, Mail, Phone, Building2, MapPin, Check, Shield, Copy, Trash2, ChevronDown, ChevronUp, Loader2, CheckCircle2, ExternalLink, Sparkles, XCircle, Clock, Save, Reply, Circle, UserCheck, TrendingUp, Edit2, type LucideIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
 import { createClient } from '@/lib/supabase';
-import { getBrandColor } from '@/lib/utils';
+import { getBrandColor, isPersonSavedFromLinkedInSearch } from '@/lib/utils';
 import { toast } from 'sonner';
 
 // Extended interface to include all possible properties
@@ -26,6 +26,46 @@ interface LeadDetailModalProps {
     lead: ExtendedSavedPerson;
     onClose: () => void;
     onUnlock?: (lead: SavedPerson, type: 'email' | 'phone') => Promise<SavedPerson | null>;
+    /** When saving a *new* person from the database UI, default `saved_from` to manual. Search omits this (Apollo / LinkedIn). */
+    personSaveOrigin?: 'apollo_search' | 'manual_entry';
+    /** After editing a saved person, parent can refresh list / selection. */
+    onPersonUpdated?: (person: ExtendedSavedPerson) => void;
+}
+
+type SavedPersonEditForm = {
+    full_name: string;
+    title: string;
+    headline: string;
+    email: string;
+    phone: string;
+    organization_name: string;
+    website: string;
+    city: string;
+    state: string;
+    country: string;
+    location: string;
+    linkedin: string;
+    photo_url: string;
+};
+
+function leadToEditForm(lead: ExtendedSavedPerson): SavedPersonEditForm {
+    const full =
+        (lead.name || lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '').trim();
+    return {
+        full_name: full,
+        title: lead.title || '',
+        headline: lead.headline || '',
+        email: lead.email === 'N/A' ? '' : lead.email || '',
+        phone: lead.phone === 'N/A' || lead.phone === 'Available (Unlock)' ? '' : lead.phone || '',
+        organization_name: lead.company || lead.organization_name || '',
+        website: lead.website || lead.company_website || lead.organization_domain || '',
+        city: lead.city || '',
+        state: lead.state || '',
+        country: lead.country || '',
+        location: lead.location || lead.formatted_address || '',
+        linkedin: lead.linkedin || lead.linkedin_url || '',
+        photo_url: lead.photo_url || lead.image || '',
+    };
 }
 
 // Helper for date formatting
@@ -74,6 +114,7 @@ const Avatar: React.FC<AvatarProps> = ({ src, alt, name, className }) => {
 
     if (hasValidSrc) {
         return (
+            // eslint-disable-next-line @next/next/no-img-element -- small avatar URLs from external APIs
             <img
                 src={src}
                 alt={alt}
@@ -90,21 +131,43 @@ const Avatar: React.FC<AvatarProps> = ({ src, alt, name, className }) => {
     );
 };
 
-export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose, onUnlock }) => {
-    const [localLead, setLocalLead] = useState<ExtendedSavedPerson>(lead);
-    const [activeTab, setActiveTab] = useState<'overview' | 'comments' | 'actions'>('overview');
+type CommentDeleteConfirm =
+    | null
+    | { kind: 'comment'; commentId: string }
+    | { kind: 'reply'; commentId: string; replyId: string };
 
-    // Redirect to overview if lead is not saved and user is on actions tab
-    useEffect(() => {
-        if (activeTab === 'actions' && !localLead.isSaved) {
-            setActiveTab('overview');
-        }
-    }, [activeTab, localLead.isSaved]);
+const PIPELINE_STATUS_OPTIONS: ReadonlyArray<{
+    id: string;
+    desc: string;
+    icon: LucideIcon;
+    iconColor: string;
+}> = [
+    { id: 'New', desc: 'Not started', icon: Circle, iconColor: 'text-zinc-500' },
+    { id: 'Need to Contact', desc: 'Priority outreach', icon: Phone, iconColor: 'text-blue-500' },
+    { id: 'Contacted', desc: 'Reached once', icon: UserCheck, iconColor: 'text-purple-500' },
+    { id: 'In Progress', desc: 'Active outreach', icon: TrendingUp, iconColor: 'text-orange-500' },
+    { id: 'Good Lead', desc: 'High potential', icon: Sparkles, iconColor: 'text-emerald-500' },
+    { id: 'Need a Follow Up', desc: 'Schedule follow-up', icon: Clock, iconColor: 'text-amber-500' },
+    { id: 'Not Interested', desc: 'Closed / unqualified', icon: XCircle, iconColor: 'text-red-500' },
+];
+
+export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
+    lead,
+    onClose,
+    onUnlock,
+    personSaveOrigin,
+    onPersonUpdated,
+}) => {
+    const [localLead, setLocalLead] = useState<ExtendedSavedPerson>(lead);
+    const [activeTab, setActiveTab] = useState<'overview' | 'comments'>('overview');
     const [isUnlockingEmail, setIsUnlockingEmail] = useState(false);
     const [isUnlockingPhone, setIsUnlockingPhone] = useState(false);
     const [contactStatus, setContactStatus] = useState<string>(lead?.contact_status || 'New');
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [editingSavedPerson, setEditingSavedPerson] = useState(false);
+    const [savedPersonEditForm, setSavedPersonEditForm] = useState<SavedPersonEditForm | null>(null);
+    const [isUpdatingSavedPerson, setIsUpdatingSavedPerson] = useState(false);
 
     // Comment state
     const [localComments, setLocalComments] = useState<Comment[]>([]);
@@ -113,25 +176,22 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<{ id: string; userName: string; text: string; userProfileUrl?: string } | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+    const [commentDeleteConfirm, setCommentDeleteConfirm] = useState<CommentDeleteConfirm>(null);
+    const [isCommentDeleteLoading, setIsCommentDeleteLoading] = useState(false);
+    const [pipelineMenuOpen, setPipelineMenuOpen] = useState(false);
+    const pipelineMenuRef = useRef<HTMLDivElement>(null);
     const commentsEndRef = useRef<HTMLDivElement>(null);
-
-    // Confirmation Modal State
-    const [confirmModal, setConfirmModal] = useState<{
-        isOpen: boolean;
-        type: 'comment' | 'reply' | null;
-        id: string | null;
-        replyId?: string | null;
-    }>({
-        isOpen: false,
-        type: null,
-        id: null,
-        replyId: null
-    });
 
     const brandColor = useMemo(() => getBrandColor(localLead?.name || 'Lead'), [localLead?.name]);
 
+    useEffect(() => {
+        setEditingSavedPerson(false);
+        setSavedPersonEditForm(null);
+    }, [lead?.id]);
+
     // Update local lead when prop changes, and fetch from Supabase if saved
     useEffect(() => {
+        if (editingSavedPerson) return;
         const fetchLeadData = async () => {
             // If lead is saved, fetch fresh data from Supabase with timeout
             if (lead?.isSaved && lead?.id) {
@@ -141,10 +201,10 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         setTimeout(() => reject(new Error('Timeout')), 5000)
                     );
 
-                    const savedPerson = await Promise.race([
+                    const savedPerson = (await Promise.race([
                         databaseService.getPersonById(lead.id),
-                        timeoutPromise
-                    ]) as any;
+                        timeoutPromise,
+                    ])) as SavedPerson | null;
 
                     if (savedPerson) {
                         setLocalLead(savedPerson);
@@ -162,7 +222,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         };
 
         fetchLeadData();
-    }, [lead]);
+    }, [lead, editingSavedPerson]);
 
     // Fetch current user
     useEffect(() => {
@@ -186,6 +246,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         setLocalComments([]);
         setReplyingTo(null);
         setExpandedComments(new Set());
+        setCommentDeleteConfirm(null);
 
         const fetchComments = async () => {
             if (localLead?.id && localLead.isSaved) {
@@ -201,7 +262,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         };
 
         fetchComments();
-    }, [localLead?.id, localLead?.isSaved]);
+    }, [localLead?.id, localLead?.isSaved, localLead?.comments]);
 
     // Scroll to bottom when comments tab is active
     useEffect(() => {
@@ -212,8 +273,35 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         }
     }, [activeTab, localComments.length]);
 
+    useEffect(() => {
+        if (activeTab !== 'comments') setCommentDeleteConfirm(null);
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (!pipelineMenuOpen) return;
+        const onPointerDown = (e: PointerEvent) => {
+            if (pipelineMenuRef.current?.contains(e.target as Node)) return;
+            setPipelineMenuOpen(false);
+        };
+        document.addEventListener('pointerdown', onPointerDown, true);
+        return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    }, [pipelineMenuOpen]);
+
+    useEffect(() => {
+        if (!pipelineMenuOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setPipelineMenuOpen(false);
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [pipelineMenuOpen]);
+
     const handleStatusUpdate = useCallback(async (newStatus: string) => {
         if (!localLead?.id) return;
+        if ((contactStatus || 'New') === newStatus) {
+            setPipelineMenuOpen(false);
+            return;
+        }
 
         setIsUpdatingStatus(true);
         try {
@@ -221,25 +309,32 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             setContactStatus(newStatus);
             setLocalLead(prev => prev ? { ...prev, contact_status: newStatus } : prev);
             toast.success(`Status updated to ${newStatus}`);
+            setPipelineMenuOpen(false);
         } catch (error) {
             console.error('Failed to update status:', error);
             toast.error('Failed to update status. Please try again.');
         } finally {
             setIsUpdatingStatus(false);
         }
-    }, [localLead?.id]);
-
-    if (!localLead) return null;
+    }, [localLead?.id, contactStatus]);
 
     const isEmailLocked = useMemo(() => {
         return !localLead.email ||
+            localLead.email === 'N/A' ||
+            localLead.email === 'Available (Unlock)' ||
             localLead.email === 'email_not_unlocked@domain.com' ||
             localLead.email.includes('email_not_unlocked');
     }, [localLead.email]);
 
-    const isPhoneLocked = useMemo(() => {
-        return !localLead.phone || localLead.phone === 'N/A';
+    const hasDisplayablePhone = useMemo(() => {
+        const p = localLead.phone;
+        return Boolean(p && p !== 'N/A' && p !== 'Available (Unlock)');
     }, [localLead.phone]);
+
+    const canUnlockPhone = useMemo(
+        () => Boolean(onUnlock && localLead.phone === 'Available (Unlock)'),
+        [onUnlock, localLead.phone]
+    );
 
     const handleUnlockClick = useCallback(async (type: 'email' | 'phone') => {
         if (!onUnlock) return;
@@ -272,7 +367,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
 
         try {
             // Check if we need to fetch full data
-            const needsFullData = (localLead as any).last_name_obfuscated ||
+            const needsFullData = (localLead as ExtendedSavedPerson).last_name_obfuscated ||
                 localLead.email === 'Available (Unlock)' ||
                 localLead.phone === 'Available (Unlock)' ||
                 (!localLead.email || localLead.email === 'N/A') ||
@@ -298,11 +393,14 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                 }
             }
 
-            // Save to database
-            await databaseService.savePerson(fullPersonData);
+            const existingSavedFrom = (fullPersonData as ExtendedSavedPerson).saved_from?.trim();
+            const resolvedSavedFrom =
+                existingSavedFrom ||
+                (personSaveOrigin === 'manual_entry' ? 'manual' : 'linkedin');
 
-            // Update local state
-            setLocalLead({ ...fullPersonData, isSaved: true });
+            await databaseService.savePerson({ ...fullPersonData, saved_from: resolvedSavedFrom });
+
+            setLocalLead({ ...fullPersonData, isSaved: true, saved_from: resolvedSavedFrom });
 
             toast.success('Person saved to database');
         } catch (error) {
@@ -315,7 +413,69 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         } finally {
             setIsSaving(false);
         }
-    }, [localLead, onUnlock]);
+    }, [localLead, onUnlock, personSaveOrigin]);
+
+    const handleStartEditSavedPerson = useCallback(() => {
+        setSavedPersonEditForm(leadToEditForm(localLead));
+        setEditingSavedPerson(true);
+    }, [localLead]);
+
+    const handleCancelSavedPersonEdit = useCallback(() => {
+        setEditingSavedPerson(false);
+        setSavedPersonEditForm(null);
+    }, []);
+
+    const handleSubmitSavedPersonEdit = useCallback(async () => {
+        if (!savedPersonEditForm || !localLead.id) return;
+        setIsUpdatingSavedPerson(true);
+        try {
+            const fullName = savedPersonEditForm.full_name.trim();
+            const parts = fullName.split(/\s+/);
+            const payload = {
+                ...localLead,
+                name: fullName,
+                full_name: fullName,
+                first_name: parts[0] || localLead.first_name,
+                last_name: parts.slice(1).join(' ') || localLead.last_name || '',
+                title: savedPersonEditForm.title.trim(),
+                headline: savedPersonEditForm.headline.trim(),
+                email: savedPersonEditForm.email.trim() || 'N/A',
+                phone: savedPersonEditForm.phone.trim() || 'N/A',
+                company: savedPersonEditForm.organization_name.trim(),
+                organization_name: savedPersonEditForm.organization_name.trim(),
+                website: savedPersonEditForm.website.trim(),
+                company_website: savedPersonEditForm.website.trim(),
+                organization_domain: savedPersonEditForm.website.trim(),
+                city: savedPersonEditForm.city.trim(),
+                state: savedPersonEditForm.state.trim(),
+                country: savedPersonEditForm.country.trim(),
+                location: savedPersonEditForm.location.trim(),
+                formatted_address: savedPersonEditForm.location.trim(),
+                linkedin: savedPersonEditForm.linkedin.trim(),
+                linkedin_url: savedPersonEditForm.linkedin.trim(),
+                photo_url: savedPersonEditForm.photo_url.trim(),
+                image: savedPersonEditForm.photo_url.trim(),
+                saved_from: localLead.saved_from,
+                contact_status: contactStatus || localLead.contact_status,
+            };
+            await databaseService.savePerson(payload);
+            const refreshed = await databaseService.getPersonById(localLead.id);
+            const next = refreshed
+                ? ({ ...refreshed, isSaved: true } as ExtendedSavedPerson)
+                : ({ ...localLead, ...payload, isSaved: true } as ExtendedSavedPerson);
+            setLocalLead(next);
+            setContactStatus(next.contact_status || 'New');
+            onPersonUpdated?.(next);
+            setEditingSavedPerson(false);
+            setSavedPersonEditForm(null);
+            toast.success('Person updated');
+        } catch (e) {
+            console.error(e);
+            toast.error('Could not update person');
+        } finally {
+            setIsUpdatingSavedPerson(false);
+        }
+    }, [localLead, savedPersonEditForm, contactStatus, onPersonUpdated]);
 
     const getSocialLink = useCallback((url: string | null | undefined): string | null => {
         if (!url) return null;
@@ -337,6 +497,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         if (!newComment.trim() || !localLead?.id) return;
 
         setIsPostingComment(true);
+        const wasReply = !!replyingTo;
         try {
             let updatedComments: Comment[];
             if (replyingTo) {
@@ -351,7 +512,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             }
             setLocalComments(updatedComments);
             setNewComment('');
-            toast.success(replyingTo ? 'Reply posted' : 'Comment posted');
+            toast.success(wasReply ? 'Reply posted' : 'Comment posted');
         } catch (error) {
             console.error('Failed to post comment/reply:', error);
             toast.error('Failed to post. Please try again.');
@@ -360,41 +521,38 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
         }
     }, [newComment, replyingTo, localLead?.id]);
 
-    const handleDeleteCommentClick = useCallback((commentId: string) => {
-        setConfirmModal({
-            isOpen: true,
-            type: 'comment',
-            id: commentId
-        });
-    }, []);
-
-    const handleDeleteReplyClick = useCallback((commentId: string, replyId: string) => {
-        setConfirmModal({
-            isOpen: true,
-            type: 'reply',
-            id: commentId,
-            replyId: replyId
-        });
-    }, []);
-
-    const confirmDelete = useCallback(async () => {
-        if (!confirmModal.id || !confirmModal.type || !localLead?.id) return;
-
+    const handleConfirmCommentDelete = useCallback(async () => {
+        if (!commentDeleteConfirm || !localLead?.id) return;
+        setIsCommentDeleteLoading(true);
         try {
-            if (confirmModal.type === 'comment') {
-                const updatedComments = await databaseService.deletePersonComment(localLead.id, confirmModal.id);
+            if (commentDeleteConfirm.kind === 'comment') {
+                const updatedComments = await databaseService.deletePersonComment(
+                    localLead.id,
+                    commentDeleteConfirm.commentId
+                );
                 setLocalComments(updatedComments);
                 toast.success('Comment deleted');
-            } else if (confirmModal.type === 'reply' && confirmModal.replyId) {
-                const updatedComments = await databaseService.deletePersonReply(localLead.id, confirmModal.id, confirmModal.replyId);
+            } else {
+                const updatedComments = await databaseService.deletePersonReply(
+                    localLead.id,
+                    commentDeleteConfirm.commentId,
+                    commentDeleteConfirm.replyId
+                );
                 setLocalComments(updatedComments);
                 toast.success('Reply deleted');
             }
+            setCommentDeleteConfirm(null);
         } catch (error) {
-            console.error('Failed to delete item:', error);
-            toast.error('Failed to delete. Please try again.');
+            console.error('Failed to delete comment or reply:', error);
+            toast.error(
+                commentDeleteConfirm.kind === 'comment'
+                    ? 'Failed to delete comment. Please try again.'
+                    : 'Failed to delete reply. Please try again.'
+            );
+        } finally {
+            setIsCommentDeleteLoading(false);
         }
-    }, [confirmModal, localLead?.id]);
+    }, [commentDeleteConfirm, localLead?.id]);
 
     const toggleReplies = useCallback((commentId: string) => {
         setExpandedComments(prev => {
@@ -406,16 +564,6 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
             }
             return next;
         });
-    }, []);
-
-    const getPositionColor = useCallback((status: string): string => {
-        switch (status) {
-            case 'Need a Follow Up': return 'bg-yellow-50 text-yellow-600 border-yellow-200';
-            case 'Qualified': return 'bg-blue-50 text-blue-600 border-blue-200';
-            case 'In Progress': return 'bg-orange-50 text-orange-600 border-orange-200';
-            case 'Contacted': return 'bg-purple-50 text-purple-600 border-purple-200';
-            default: return 'bg-zinc-100 text-zinc-600 border-zinc-200';
-        }
     }, []);
 
     // Get social media links with proper type handling
@@ -431,6 +579,19 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
     const hasSocialLinks = useMemo(() => {
         return Boolean(socialLinks.linkedin || socialLinks.twitter || socialLinks.facebook || socialLinks.github);
     }, [socialLinks]);
+
+    const currentPipelineOption = useMemo(() => {
+        const id = contactStatus || 'New';
+        return PIPELINE_STATUS_OPTIONS.find((o) => o.id === id) ?? PIPELINE_STATUS_OPTIONS[0];
+    }, [contactStatus]);
+
+    useEffect(() => {
+        setPipelineMenuOpen(false);
+    }, [lead?.id]);
+
+    if (!localLead) return null;
+
+    const PipelineTriggerIcon = currentPipelineOption.icon;
 
     return (
         <AnimatePresence>
@@ -448,23 +609,109 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                 onClick={(e) => e.stopPropagation()}
                 className="fixed inset-0 m-auto w-full max-w-4xl h-[90vh] bg-white border border-zinc-200 shadow-2xl shadow-zinc-950/20 rounded-3xl z-150 overflow-hidden flex flex-col"
             >
+                <div className="relative flex min-h-0 flex-1 flex-col">
                 {/* Hero Header */}
                 <div
-                    className="relative h-64 border-b border-zinc-200 shrink-0 transition-colors duration-700"
+                    className="relative h-64 shrink-0 overflow-visible border-b border-zinc-200 transition-colors duration-700"
                     style={{ background: `linear-gradient(135deg, #ffffff 0%, #fafafa 40%, ${brandColor}15 100%)` }}
                 >
                     {/* Close Button */}
                     <button
                         onClick={onClose}
-                        className="absolute top-6 right-6 p-2 bg-zinc-100 hover:bg-orange-50 rounded-full text-zinc-500 hover:text-zinc-950 transition-colors border border-zinc-200 backdrop-blur-md z-20"
+                        className="absolute top-6 right-6 z-20 rounded-full border border-zinc-200 bg-zinc-100 p-2 text-zinc-500 backdrop-blur-md transition-colors hover:bg-orange-50 hover:text-zinc-950"
                         aria-label="Close modal"
                     >
                         <X className="w-5 h-5" />
                     </button>
 
+                    {localLead.isSaved && (
+                        <div
+                            ref={pipelineMenuRef}
+                            className="absolute right-6 top-20 z-30 flex flex-col items-end"
+                        >
+                            <button
+                                type="button"
+                                id="pipeline-menu-trigger"
+                                aria-haspopup="listbox"
+                                aria-expanded={pipelineMenuOpen}
+                                aria-controls="pipeline-status-listbox"
+                                aria-label={`Pipeline stage: ${contactStatus || 'New'}. Change stage.`}
+                                onClick={() => setPipelineMenuOpen((open) => !open)}
+                                disabled={isUpdatingStatus}
+                                className="inline-flex min-w-42 max-w-56 items-center gap-2.5 rounded-lg border border-zinc-200/90 bg-white/95 py-2 pl-3 pr-2.5 text-left shadow-md ring-1 ring-zinc-950/6 backdrop-blur-sm transition-all hover:border-orange-200 hover:bg-white hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <span className={currentPipelineOption.iconColor}>
+                                    <PipelineTriggerIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                                        Stage
+                                    </span>
+                                    <span className="block truncate text-sm font-bold leading-tight text-zinc-900">
+                                        {contactStatus || 'New'}
+                                    </span>
+                                </span>
+                                <ChevronDown
+                                    className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 ${pipelineMenuOpen ? 'rotate-180' : ''}`}
+                                    aria-hidden
+                                />
+                            </button>
+
+                            <AnimatePresence>
+                                {pipelineMenuOpen && (
+                                    <motion.div
+                                        id="pipeline-status-listbox"
+                                        role="listbox"
+                                        aria-labelledby="pipeline-menu-trigger"
+                                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                                        className="absolute right-0 top-[calc(100%+0.375rem)] z-50 w-[min(calc(100vw-2rem),19rem)] origin-top-right overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-2xl ring-1 ring-zinc-950/10"
+                                    >
+                                        <div className="border-b border-zinc-100 bg-linear-to-b from-zinc-50 to-white px-3 py-2">
+                                            <p className="text-xs font-semibold text-zinc-800">Pipeline stage</p>
+                                            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
+                                                Updates database filters and how your team sees this contact.
+                                            </p>
+                                        </div>
+                                        <ul className="max-h-[min(48vh,18rem)] overflow-y-auto py-1 custom-scrollbar">
+                                            {PIPELINE_STATUS_OPTIONS.map(({ id, desc, icon: Icon, iconColor }) => {
+                                                const selected = (contactStatus || 'New') === id;
+                                                return (
+                                                    <li key={id} role="presentation">
+                                                        <button
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={selected}
+                                                            onClick={() => void handleStatusUpdate(id)}
+                                                            disabled={isUpdatingStatus}
+                                                            className={`flex w-full items-start gap-3 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${selected ? 'bg-orange-50/90' : 'hover:bg-zinc-50'}`}
+                                                        >
+                                                            <span className={`mt-0.5 shrink-0 ${iconColor}`}>
+                                                                <Icon className="h-4 w-4" strokeWidth={2} />
+                                                            </span>
+                                                            <span className="min-w-0 flex-1">
+                                                                <span className="block text-sm font-bold text-zinc-950">{id}</span>
+                                                                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">{desc}</span>
+                                                            </span>
+                                                            {selected && (
+                                                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" aria-hidden />
+                                                            )}
+                                                        </button>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    )}
+
                     {/* Content Container */}
-                    <div className="absolute bottom-0 left-0 w-full p-8 flex items-end gap-8 bg-gradient-to-t from-white to-transparent">
-                        <div className="w-32 h-32 rounded-2xl bg-white p-1 border-4 border-white shadow-xl flex items-center justify-center overflow-hidden shrink-0 relative z-10">
+                    <div className="absolute bottom-0 left-0 w-full p-6 sm:p-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:gap-8 bg-linear-to-t from-white to-transparent">
+                        <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-white p-1 border-4 border-white shadow-xl flex items-center justify-center overflow-hidden shrink-0 relative z-10">
                             <Avatar
                                 src={localLead.photo_url || localLead.image}
                                 name={localLead.name || ''}
@@ -477,12 +724,21 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 </div>
                             )}
                         </div>
-                        <div className="mb-2 flex-1">
-                            <div className="flex items-center gap-4 mb-2">
-                                <h2 className="text-4xl font-bold text-zinc-950 tracking-tight">{localLead.name || 'Unknown'}</h2>
+                        <div className="mb-0 lg:mb-2 flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                                <h2 className="text-2xl sm:text-4xl font-bold text-zinc-950 tracking-tight wrap-break-word">{localLead.name || 'Unknown'}</h2>
                                 {localLead.isSaved && (
-                                    <span className="bg-green-500/10 border border-green-500/20 text-green-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5">
+                                    <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-bold text-green-600">
                                         <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                                    </span>
+                                )}
+                                {localLead.isSaved && isPersonSavedFromLinkedInSearch(localLead.saved_from) && (
+                                    <span
+                                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#0a66c2]/25 bg-[#0a66c2]/10 px-2.5 py-1 text-xs font-bold text-[#0a66c2]"
+                                        title="Saved from LinkedIn / Apollo search"
+                                    >
+                                        <Linkedin className="h-3.5 w-3.5" />
+                                        Saved from LinkedIn
                                     </span>
                                 )}
                             </div>
@@ -503,6 +759,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                     <span className="flex items-center gap-1.5 text-zinc-500">
                                         {localLead.saved_by_profile_url ? (
                                             <div className="w-4 h-4 rounded-full overflow-hidden border border-zinc-200">
+                                                {/* eslint-disable-next-line @next/next/no-img-element -- external profile URL */}
                                                 <img src={localLead.saved_by_profile_url} alt={localLead.saved_by} className="w-full h-full object-cover" />
                                             </div>
                                         ) : (
@@ -515,12 +772,33 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         </div>
 
                         {/* Quick Actions */}
-                        <div className="flex gap-2 mb-2">
+                        <div className="flex w-full flex-wrap gap-2 lg:mb-2 lg:w-auto lg:shrink-0 lg:justify-end">
+                            {localLead.isSaved && !editingSavedPerson && (
+                                <button
+                                    type="button"
+                                    onClick={handleStartEditSavedPerson}
+                                    disabled={isUpdatingSavedPerson}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-bold text-zinc-800 shadow-sm transition-all hover:border-orange-200 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <Edit2 className="h-4 w-4" />
+                                    Edit
+                                </button>
+                            )}
+                            {localLead.isSaved && editingSavedPerson && (
+                                <button
+                                    type="button"
+                                    onClick={handleCancelSavedPersonEdit}
+                                    disabled={isUpdatingSavedPerson}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm font-bold text-zinc-700 transition-all hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    Cancel edit
+                                </button>
+                            )}
                             {!localLead.isSaved && (
                                 <button
                                     onClick={handleSave}
                                     disabled={isSaving}
-                                    className="px-4 py-2 bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm rounded-xl hover:shadow-lg shadow-zinc-950/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-4 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm rounded-xl hover:shadow-lg shadow-zinc-950/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isSaving ? (
                                         <>
@@ -530,7 +808,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                     ) : (
                                         <>
                                             <Save className="w-4 h-4" />
-                                            <span>Get Details & Save</span>
+                                            <span className="hidden min-[400px]:inline">Get Details & Save</span>
+                                            <span className="min-[400px]:hidden">Save</span>
                                         </>
                                     )}
                                 </button>
@@ -554,6 +833,31 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 >
                                     <Mail className="w-5 h-5" />
                                 </a>
+                            )}
+                            {hasDisplayablePhone && localLead.phone && (
+                                <a
+                                    href={`tel:${localLead.phone.replace(/\s/g, '')}`}
+                                    className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-500 hover:text-zinc-950 hover:bg-orange-50 transition-all"
+                                    aria-label="Call phone"
+                                >
+                                    <Phone className="w-5 h-5" />
+                                </a>
+                            )}
+                            {canUnlockPhone && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUnlockClick('phone')}
+                                    disabled={isUnlockingPhone}
+                                    className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm font-bold text-zinc-700 transition-all hover:border-orange-200 hover:bg-orange-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                    aria-label="Unlock phone number"
+                                >
+                                    {isUnlockingPhone ? (
+                                        <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+                                    ) : (
+                                        <Phone className="h-5 w-5 shrink-0" />
+                                    )}
+                                    <span className="hidden sm:inline">Unlock phone</span>
+                                </button>
                             )}
                         </div>
                     </div>
@@ -587,18 +891,6 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full" />
                             )}
                         </button>
-                        {localLead.isSaved && (
-                            <button
-                                onClick={() => setActiveTab('actions')}
-                                className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'actions' ? 'text-zinc-950' : 'text-zinc-500 hover:text-zinc-950'}`}
-                                aria-label="Actions tab"
-                            >
-                                Actions
-                                {activeTab === 'actions' && (
-                                    <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full" />
-                                )}
-                            </button>
-                        )}
                     </div>
                 </div>
 
@@ -614,6 +906,177 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 transition={{ duration: 0.2 }}
                                 className="flex-1 overflow-y-auto p-8 custom-scrollbar"
                             >
+                                <div className="space-y-10">
+                                {localLead.isSaved && editingSavedPerson && savedPersonEditForm && (
+                                    <section className="rounded-2xl border border-orange-200/80 bg-orange-50/40 p-6 shadow-inner shadow-zinc-950/5">
+                                        <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-zinc-600">
+                                            Edit saved contact
+                                        </h3>
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Full name</span>
+                                                <input
+                                                    value={savedPersonEditForm.full_name}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, full_name: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Title</span>
+                                                <input
+                                                    value={savedPersonEditForm.title}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, title: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Headline</span>
+                                                <input
+                                                    value={savedPersonEditForm.headline}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, headline: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Email</span>
+                                                <input
+                                                    type="email"
+                                                    value={savedPersonEditForm.email}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, email: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Phone</span>
+                                                <input
+                                                    value={savedPersonEditForm.phone}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, phone: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Company</span>
+                                                <input
+                                                    value={savedPersonEditForm.organization_name}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) =>
+                                                            f ? { ...f, organization_name: e.target.value } : f,
+                                                        )
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Company website / domain</span>
+                                                <input
+                                                    value={savedPersonEditForm.website}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, website: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">City</span>
+                                                <input
+                                                    value={savedPersonEditForm.city}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, city: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">State / region</span>
+                                                <input
+                                                    value={savedPersonEditForm.state}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, state: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Country</span>
+                                                <input
+                                                    value={savedPersonEditForm.country}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, country: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Location (full line)</span>
+                                                <input
+                                                    value={savedPersonEditForm.location}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, location: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">LinkedIn URL</span>
+                                                <input
+                                                    value={savedPersonEditForm.linkedin}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, linkedin: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                            <label className="block md:col-span-2">
+                                                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Photo URL</span>
+                                                <input
+                                                    value={savedPersonEditForm.photo_url}
+                                                    onChange={(e) =>
+                                                        setSavedPersonEditForm((f) => (f ? { ...f, photo_url: e.target.value } : f))
+                                                    }
+                                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                                />
+                                            </label>
+                                        </div>
+                                        <div className="mt-5 flex flex-wrap justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={handleCancelSavedPersonEdit}
+                                                disabled={isUpdatingSavedPerson}
+                                                className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleSubmitSavedPersonEdit()}
+                                                disabled={isUpdatingSavedPerson}
+                                                className="inline-flex items-center gap-2 rounded-xl bg-zinc-950 px-5 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                {isUpdatingSavedPerson ? (
+                                                    <>
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        Saving…
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Save className="h-4 w-4" />
+                                                        Save changes
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </section>
+                                )}
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                                     {/* Main Info Column */}
                                     <div className="lg:col-span-2 space-y-10">
@@ -779,20 +1242,49 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                             )}
 
                                             {/* Phone Section */}
-                                            {!isPhoneLocked && localLead.phone ? (
+                                            {hasDisplayablePhone && localLead.phone ? (
                                                 <div className="group flex items-center justify-between p-2 -mx-2 hover:bg-orange-50 rounded-lg transition-colors">
-                                                    <div className="flex items-center gap-3 min-w-0">
+                                                    <a
+                                                        href={`tel:${localLead.phone.replace(/\s/g, '')}`}
+                                                        className="flex min-w-0 flex-1 items-center gap-3"
+                                                    >
                                                         <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center border border-zinc-200">
                                                             <Phone className="w-4 h-4 text-zinc-500" />
                                                         </div>
-                                                        <span className="text-sm text-zinc-700 font-medium">{localLead.phone}</span>
-                                                    </div>
+                                                        <span className="text-sm text-zinc-700 font-medium truncate">{localLead.phone}</span>
+                                                    </a>
                                                     <button
+                                                        type="button"
                                                         onClick={() => copyToClipboard(localLead.phone || '')}
                                                         className="text-zinc-400 hover:text-zinc-950 opacity-0 group-hover:opacity-100 transition-all p-2"
                                                         aria-label="Copy phone"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            ) : canUnlockPhone ? (
+                                                <div className="bg-zinc-100 border border-zinc-200 rounded-xl p-4 flex flex-col gap-3">
+                                                    <div className="flex items-center gap-2 opacity-50">
+                                                        <Phone className="w-4 h-4 text-zinc-500" />
+                                                        <span className="text-xs text-zinc-400 italic">Phone locked</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleUnlockClick('phone')}
+                                                        disabled={isUnlockingPhone}
+                                                        className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-orange-500/20"
+                                                    >
+                                                        {isUnlockingPhone ? (
+                                                            <>
+                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                                Unlocking phone…
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Shield className="w-3.5 h-3.5" />
+                                                                Access phone
+                                                            </>
+                                                        )}
                                                     </button>
                                                 </div>
                                             ) : (
@@ -806,82 +1298,6 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                         </div>
                                     </div>
                                 </div>
-                            </motion.div>
-                        ) : activeTab === 'actions' ? (
-                            <motion.div
-                                key="actions"
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20 }}
-                                transition={{ duration: 0.2 }}
-                                className="flex-1 overflow-y-auto p-8 custom-scrollbar pt-10"
-                            >
-                                <div className="max-w-3xl space-y-8">
-                                    <div className="bg-white border border-zinc-200 rounded-xl p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
-                                        <div className="flex flex-col gap-8">
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <h4 className="text-xl font-bold text-zinc-950 mb-1.5 tracking-tight">Contact Status</h4>
-                                                    <p className="text-[15px] text-zinc-500">Update the progression status of this contact.</p>
-                                                </div>
-                                                <div className="px-4 py-1.5 rounded-full bg-zinc-100/80 text-zinc-700 text-sm font-bold border border-zinc-200/50">
-                                                    {contactStatus || 'New'}
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                {Object.entries({
-                                                    'Need to Contact': {
-                                                        icon: Phone,
-                                                        iconColor: 'text-blue-500',
-                                                        desc: 'Priority for outreach'
-                                                    },
-                                                    'Good Lead': {
-                                                        icon: Sparkles,
-                                                        iconColor: 'text-emerald-500',
-                                                        desc: 'High potential prospect'
-                                                    },
-                                                    'Not Interested': {
-                                                        icon: XCircle,
-                                                        iconColor: 'text-red-500',
-                                                        desc: 'Closed / Unqualified'
-                                                    },
-                                                    'Need a Follow Up': {
-                                                        icon: Clock,
-                                                        iconColor: 'text-amber-500',
-                                                        desc: 'Requires follow-up action'
-                                                    }
-                                                }).map(([status, config]) => {
-                                                    const Icon = config.icon;
-                                                    const isSelected = contactStatus === status;
-
-                                                    return (
-                                                        <button
-                                                            key={status}
-                                                            onClick={() => handleStatusUpdate(status)}
-                                                            disabled={isUpdatingStatus}
-                                                            className={`flex flex-col items-center justify-center p-5 rounded-xl border transition-all duration-200 gap-2.5 ${isSelected
-                                                                ? `bg-orange-50/30 border-orange-200 ring-1 ring-inset ring-orange-200 shadow-sm`
-                                                                : 'bg-white border-zinc-200/80 hover:bg-zinc-50 hover:border-zinc-300'
-                                                                }`}
-                                                        >
-                                                            <div className={`${config.iconColor}`}>
-                                                                <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={1.5} />
-                                                            </div>
-                                                            <div className="text-center space-y-0.5">
-                                                                <div className={`font-bold text-[14px] leading-tight ${isSelected ? 'text-zinc-950' : 'text-zinc-800'}`}>
-                                                                    {status}
-                                                                </div>
-                                                                <div className={`text-[12px] leading-tight ${isSelected ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                                                                    {config.desc}
-                                                                </div>
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </motion.div>
                         ) : (
@@ -891,127 +1307,119 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
                                 transition={{ duration: 0.2 }}
-                                className="flex-1 flex flex-col min-h-0"
+                                className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
                             >
-                                {/* Comments List */}
-                                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                                    <div className="max-w-3xl mx-auto space-y-8">
+                                <div className="min-h-0 flex-1 overflow-y-auto p-8 custom-scrollbar">
+                                    <div className="mx-auto max-w-2xl space-y-6">
                                         {localComments.length > 0 ? (
                                             <>
                                                 {localComments.map((comment) => (
-                                                    <div key={comment.id} className="group relative">
-                                                        <div className="pl-4 border-l-2 border-zinc-200 hover:border-orange-200 transition-colors">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-700 shadow-inner overflow-hidden">
-                                                                        {comment.userProfileUrl ? (
-                                                                            <img src={comment.userProfileUrl} alt={comment.userName} className="w-full h-full object-cover" />
-                                                                        ) : (
-                                                                            comment.userName.substring(0, 2).toUpperCase()
-                                                                        )}
-                                                                    </div>
-                                                                    <div>
-                                                                        <span className="block text-sm font-bold text-zinc-950 leading-none mb-1">{comment.userName}</span>
-                                                                        <span className="text-[10px] text-zinc-500 font-medium">
-                                                                            {formatCommentDate(comment.createdAt)}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => setReplyingTo({ id: comment.id, userName: comment.userName, text: comment.text, userProfileUrl: comment.userProfileUrl })}
-                                                                        className="text-xs text-zinc-500 hover:text-zinc-950 transition-colors opacity-0 group-hover:opacity-100"
-                                                                        aria-label="Reply to comment"
-                                                                    >
-                                                                        Reply
-                                                                    </button>
-                                                                    {(currentUserId === comment.uid) && (
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleDeleteCommentClick(comment.id);
-                                                                            }}
-                                                                            className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
-                                                                            title="Delete comment"
-                                                                            aria-label="Delete comment"
-                                                                        >
-                                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <p className="text-sm text-zinc-700 leading-relaxed pl-11">
-                                                                {comment.text}
-                                                            </p>
-                                                        </div>
-
-                                                        {/* Replies Section */}
-                                                        {comment.replies && comment.replies.length > 0 && (
-                                                            <div className="mt-2 ml-11">
-                                                                {/* Toggle Button */}
-                                                                <button
-                                                                    onClick={() => toggleReplies(comment.id)}
-                                                                    className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors mb-2"
-                                                                    aria-label={expandedComments.has(comment.id) ? 'Hide replies' : 'Show replies'}
-                                                                >
-                                                                    <div className="w-6 h-px bg-zinc-200"></div>
-                                                                    {expandedComments.has(comment.id) ? (
+                                                    <article key={comment.id} className="border-b border-zinc-100 pb-6 last:border-0 last:pb-0">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div className="flex min-w-0 gap-2.5">
+                                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-[10px] font-bold text-zinc-600">
+                                                                    {comment.userProfileUrl ? (
                                                                         <>
-                                                                            <ChevronUp className="w-3 h-3" />
-                                                                            Hide {comment.replies.length} replies
+                                                                            {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded avatar URL */}
+                                                                            <img src={comment.userProfileUrl} alt="" className="h-full w-full object-cover" />
                                                                         </>
                                                                     ) : (
-                                                                        <>
-                                                                            <ChevronDown className="w-3 h-3" />
-                                                                            View {comment.replies.length} replies
-                                                                        </>
+                                                                        comment.userName.substring(0, 2).toUpperCase()
                                                                     )}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <span className="text-sm font-medium text-zinc-950">{comment.userName}</span>
+                                                                    <span className="ml-2 text-xs text-zinc-400">{formatCommentDate(comment.createdAt)}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex shrink-0 items-center gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setReplyingTo({
+                                                                            id: comment.id,
+                                                                            userName: comment.userName,
+                                                                            text: comment.text,
+                                                                            userProfileUrl: comment.userProfileUrl,
+                                                                        })
+                                                                    }
+                                                                    className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 transition-colors hover:text-orange-600"
+                                                                >
+                                                                    <Reply className="h-3 w-3" />
+                                                                    Reply
+                                                                </button>
+                                                                {currentUserId === comment.uid && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setCommentDeleteConfirm({ kind: 'comment', commentId: comment.id });
+                                                                        }}
+                                                                        className="p-1 text-zinc-300 transition-colors hover:text-red-500"
+                                                                        title="Delete"
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <p className="mt-2 pl-[42px] text-sm leading-relaxed whitespace-pre-wrap text-zinc-700">
+                                                            {comment.text}
+                                                        </p>
+
+                                                        {comment.replies && comment.replies.length > 0 && (
+                                                            <div className="mt-4 pl-[42px]">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleReplies(comment.id)}
+                                                                    className="mb-2 flex items-center gap-1 text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-700"
+                                                                >
+                                                                    {expandedComments.has(comment.id) ? (
+                                                                        <ChevronUp className="h-3.5 w-3.5" />
+                                                                    ) : (
+                                                                        <ChevronDown className="h-3.5 w-3.5" />
+                                                                    )}
+                                                                    {comment.replies.length}{' '}
+                                                                    {comment.replies.length === 1 ? 'reply' : 'replies'}
                                                                 </button>
 
-                                                                {/* Replies List */}
-                                                                <AnimatePresence>
+                                                                <AnimatePresence initial={false}>
                                                                     {expandedComments.has(comment.id) && (
                                                                         <motion.div
                                                                             initial={{ opacity: 0, height: 0 }}
                                                                             animate={{ opacity: 1, height: 'auto' }}
                                                                             exit={{ opacity: 0, height: 0 }}
-                                                                            className="space-y-4 overflow-hidden"
+                                                                            transition={{ duration: 0.15 }}
+                                                                            className="space-y-3 overflow-hidden border-l border-zinc-200 pl-3"
                                                                         >
                                                                             {comment.replies.map((reply) => (
-                                                                                <div key={reply.id} className="relative pl-4 border-l-2 border-zinc-200 hover:border-orange-200 transition-colors group/reply">
-                                                                                    <div className="flex justify-between items-start mb-2">
-                                                                                        <div className="flex items-center gap-3">
-                                                                                            <div className="w-6 h-6 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-700 shadow-inner overflow-hidden">
-                                                                                                {reply.userProfileUrl ? (
-                                                                                                    <img src={reply.userProfileUrl} alt={reply.userName} className="w-full h-full object-cover" />
-                                                                                                ) : (
-                                                                                                    reply.userName.substring(0, 2).toUpperCase()
-                                                                                                )}
-                                                                                            </div>
-                                                                                            <div>
-                                                                                                <span className="block text-xs font-bold text-zinc-950 leading-none mb-1">{reply.userName}</span>
-                                                                                                <span className="text-[10px] text-zinc-500 font-medium">
-                                                                                                    {formatCommentDate(reply.createdAt)}
-                                                                                                </span>
-                                                                                            </div>
+                                                                                <div key={reply.id}>
+                                                                                    <div className="flex items-start justify-between gap-2">
+                                                                                        <div className="min-w-0">
+                                                                                            <span className="text-xs font-medium text-zinc-900">{reply.userName}</span>
+                                                                                            <span className="ml-2 text-[11px] text-zinc-400">
+                                                                                                {formatCommentDate(reply.createdAt)}
+                                                                                            </span>
                                                                                         </div>
-
-                                                                                        {(currentUserId === reply.uid) && (
+                                                                                        {currentUserId === reply.uid && (
                                                                                             <button
+                                                                                                type="button"
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
-                                                                                                    handleDeleteReplyClick(comment.id, reply.id);
+                                                                                                    setCommentDeleteConfirm({
+                                                                                                        kind: 'reply',
+                                                                                                        commentId: comment.id,
+                                                                                                        replyId: reply.id,
+                                                                                                    });
                                                                                                 }}
-                                                                                                className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
-                                                                                                title="Delete reply"
-                                                                                                aria-label="Delete reply"
+                                                                                                className="p-0.5 text-zinc-300 hover:text-red-500"
+                                                                                                title="Delete"
                                                                                             >
-                                                                                                <Trash2 className="w-3 h-3" />
+                                                                                                <Trash2 className="h-3 w-3" />
                                                                                             </button>
                                                                                         )}
                                                                                     </div>
-                                                                                    <p className="text-sm text-zinc-700 leading-relaxed pl-9">
+                                                                                    <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-zinc-600">
                                                                                         {reply.text}
                                                                                     </p>
                                                                                 </div>
@@ -1021,63 +1429,44 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                                 </AnimatePresence>
                                                             </div>
                                                         )}
-                                                    </div>
+                                                    </article>
                                                 ))}
                                                 <div ref={commentsEndRef} />
                                             </>
                                         ) : (
-                                            <div className="text-center py-12">
-                                                <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-3">
-                                                    <MessageSquare className="w-5 h-5 text-orange-500" />
-                                                </div>
-                                                <p className="text-sm text-zinc-500">No comments yet. Start the conversation!</p>
-                                            </div>
+                                            <p className="py-8 text-center text-sm text-zinc-400">
+                                                {localLead.isSaved ? 'No comments yet.' : 'Save this person to add comments.'}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* Fixed Input Area */}
                                 {localLead.isSaved && (
-                                    <div className="p-4 border-t border-zinc-200 bg-white z-10">
-                                        <div className="max-w-3xl mx-auto flex flex-col gap-3">
+                                    <div className="shrink-0 border-t border-zinc-100 bg-white px-8 py-4">
+                                        <div className="mx-auto flex max-w-2xl flex-col gap-2">
                                             {replyingTo && (
-                                                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-xl p-2 px-3 mb-1">
-                                                    <div className="flex items-center gap-3 overflow-hidden">
-                                                        <div className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 overflow-hidden">
-                                                            {replyingTo.userProfileUrl ? (
-                                                                <img src={replyingTo.userProfileUrl} alt={replyingTo.userName} className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                <span className="text-[10px] font-bold text-zinc-400">{replyingTo.userName.substring(0, 2).toUpperCase()}</span>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-[10px] font-bold text-zinc-400">Replying to {replyingTo.userName}</span>
-                                                            <span className="text-[10px] text-zinc-600 truncate max-w-[300px]">{replyingTo.text}</span>
-                                                        </div>
-                                                    </div>
+                                                <div className="flex items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+                                                    <span className="min-w-0 truncate">
+                                                        Replying to <span className="font-medium text-zinc-900">{replyingTo.userName}</span>
+                                                    </span>
                                                     <button
+                                                        type="button"
                                                         onClick={() => setReplyingTo(null)}
-                                                        className="p-1 rounded-lg hover:bg-orange-50 text-zinc-500 hover:text-zinc-950 transition-colors"
+                                                        className="shrink-0 text-zinc-400 hover:text-zinc-800"
                                                         aria-label="Cancel reply"
                                                     >
-                                                        <X className="w-3 h-3" />
+                                                        <X className="h-3.5 w-3.5" />
                                                     </button>
                                                 </div>
                                             )}
 
-                                            <div className="flex items-end gap-2 bg-zinc-50 border border-zinc-200 rounded-xl p-2 transition-all">
+                                            <div className="flex gap-2">
                                                 <textarea
-                                                    placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : "Add a note..."}
+                                                    placeholder={replyingTo ? `Reply to ${replyingTo.userName}…` : 'Add a comment…'}
                                                     value={newComment}
                                                     onChange={(e) => setNewComment(e.target.value)}
-                                                    className="flex-1 bg-transparent border-none focus:ring-0 p-2 text-sm text-zinc-950 placeholder:text-zinc-400 resize-none min-h-[24px] max-h-[120px] leading-relaxed custom-scrollbar"
-                                                    rows={1}
-                                                    style={{ minHeight: '24px' }}
-                                                    onInput={(e) => {
-                                                        const target = e.target as HTMLTextAreaElement;
-                                                        target.style.height = 'auto';
-                                                        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-                                                    }}
+                                                    className="min-h-[44px] flex-1 resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 placeholder:text-zinc-400 focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400/30"
+                                                    rows={2}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' && !e.shiftKey) {
                                                             e.preventDefault();
@@ -1086,16 +1475,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                                                     }}
                                                 />
                                                 <button
+                                                    type="button"
                                                     onClick={handlePostComment}
                                                     disabled={!newComment.trim() || isPostingComment}
-                                                    className="shrink-0 bg-zinc-950 hover:bg-zinc-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-zinc-950/10 h-[36px]"
+                                                    className="shrink-0 self-end rounded-lg bg-zinc-950 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-zinc-800 disabled:opacity-40"
                                                 >
-                                                    {isPostingComment ? (
-                                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                                    ) : (
-                                                        <Send className="w-3 h-3" />
-                                                    )}
-                                                    Post
+                                                    {isPostingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post'}
                                                 </button>
                                             </div>
                                         </div>
@@ -1105,42 +1490,65 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, onClose,
                         )}
                     </AnimatePresence>
                 </div>
-            </motion.div>
 
-            {/* Confirmation Modal */}
-            {confirmModal.isOpen && (
-                <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-zinc-950/45 backdrop-blur-sm">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-white border border-zinc-200 shadow-zinc-950/20 rounded-xl p-6 max-w-sm w-full shadow-2xl"
-                    >
-                        <h3 className="text-lg font-bold text-zinc-950 mb-2">Delete {confirmModal.type}?</h3>
-                        <p className="text-zinc-600 text-sm mb-6">
-                            Are you sure you want to delete this {confirmModal.type}? This action cannot be undone.
-                        </p>
-                        <div className="flex gap-3 justify-end">
-                            <button
-                                onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-                                className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 transition-colors"
+                <AnimatePresence>
+                    {commentDeleteConfirm && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-200 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-[2px]"
+                            role="presentation"
+                            onClick={() => !isCommentDeleteLoading && setCommentDeleteConfirm(null)}
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.96 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.96 }}
+                                transition={{ duration: 0.15 }}
+                                role="alertdialog"
+                                aria-modal="true"
+                                aria-labelledby="lead-delete-comment-title"
+                                className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
+                                onClick={(e) => e.stopPropagation()}
                             >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    confirmDelete();
-                                    setConfirmModal({ ...confirmModal, isOpen: false });
-                                }}
-                                className="px-4 py-2 rounded-lg text-sm font-bold bg-red-500 hover:bg-red-600 text-white transition-colors shadow-lg shadow-red-500/20"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </motion.div>
+                                <h2 id="lead-delete-comment-title" className="text-lg font-bold text-zinc-950">
+                                    {commentDeleteConfirm.kind === 'reply' ? 'Delete this reply?' : 'Delete this comment?'}
+                                </h2>
+                                <p className="mt-2 text-sm text-zinc-600">
+                                    This cannot be undone. {commentDeleteConfirm.kind === 'reply' ? 'The reply will be removed.' : 'The comment and its replies will be removed.'}
+                                </p>
+                                <div className="mt-6 flex flex-wrap justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCommentDeleteConfirm(null)}
+                                        disabled={isCommentDeleteLoading}
+                                        className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleConfirmCommentDelete()}
+                                        disabled={isCommentDeleteLoading}
+                                        className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {isCommentDeleteLoading ? (
+                                            <span className="inline-flex items-center gap-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Deleting…
+                                            </span>
+                                        ) : (
+                                            'Delete'
+                                        )}
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 </div>
-            )}
+            </motion.div>
         </AnimatePresence>
     );
 };

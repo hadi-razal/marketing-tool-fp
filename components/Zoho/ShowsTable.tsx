@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { zohoApi } from '@/lib/zoho';
-import { RefreshCw, Trash2, Edit2, Plus, Search, Filter } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Plus, Search, Filter, FileSpreadsheet } from 'lucide-react';
 import { FilterPopover } from './FilterPopover';
 import { ShowFormModal } from './ShowFormModal';
 import { ShowDetailsModal } from './ShowDetailsModal';
@@ -8,6 +8,10 @@ import { Button } from '../ui/Button';
 import { SoftInput } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
+import { SpreadsheetImportModal, type SpreadsheetImportProgress } from '@/components/SpreadsheetImportModal';
+import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
+import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
 
 export const ShowsTable = () => {
     const [data, setData] = useState<any[]>([]);
@@ -24,6 +28,7 @@ export const ShowsTable = () => {
     const LIMIT = 100;
 
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
 
     // Filters
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -245,6 +250,35 @@ export const ShowsTable = () => {
         setIsModalOpen(true);
     };
 
+    const handleShowsSpreadsheetImport = async (
+        rows: SpreadsheetRow[],
+        meta?: { comment?: string },
+        onProgress?: (p: SpreadsheetImportProgress) => void,
+    ) => {
+        const { rowsToShowZohoPayloads } = await import('@/lib/importSpreadsheet');
+        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
+        const payloads = rowsToShowZohoPayloads(rows);
+        if (payloads.length === 0) {
+            toast.error('No valid rows. Include Event Name (Event_Name, Event, Name, or Show).');
+            return;
+        }
+        onProgress?.({ current: 0, total: payloads.length });
+        let ok = 0;
+        for (let i = 0; i < payloads.length; i++) {
+            const payload = payloads[i];
+            try {
+                const res = await zohoApi.addRecord('Show_Details', payload);
+                if (res && res.code === 3000) ok++;
+            } catch (e) {
+                console.error(e);
+            }
+            onProgress?.({ current: i + 1, total: payloads.length });
+        }
+        await fetchData(true, debouncedSearch);
+        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Zoho from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${payloads.length} shows in Zoho${meta?.comment?.trim() ? ' · note saved' : ''}`);
+    };
+
     const handleRowClick = (item: any) => {
         console.log('Show details from Zoho (row click):', item);
         setSelectedItem(item);
@@ -253,6 +287,22 @@ export const ShowsTable = () => {
 
     return (
         <div className="h-full flex flex-col gap-6">
+            {importOpen && (
+                <SpreadsheetImportModal
+                    isOpen
+                    onClose={() => setImportOpen(false)}
+                    title="Import shows (CSV / Excel)"
+                    columnHint={
+                        <>
+                            Required: <strong>Event_Name</strong> (or Event / Name / Show). Optional: Event_Type, Starting_Date,
+                            Industry, Level, World_Area, Country, City, Frequency.
+                        </>
+                    }
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.showsZoho}
+                    onImportRows={handleShowsSpreadsheetImport}
+                />
+            )}
+
             <ShowFormModal
                 key={selectedItem?.ID || 'new'} // Force re-render when item changes
                 isOpen={isModalOpen}
@@ -334,6 +384,15 @@ export const ShowsTable = () => {
                         className="glass-button h-11 w-11 p-0 flex items-center justify-center border-white/10 hover:border-white/20 text-zinc-400 hover:text-white"
                     >
                         {!loading && <RefreshCw className="w-4 h-4" />}
+                    </Button>
+
+                    <Button
+                        variant="secondary"
+                        onClick={() => setImportOpen(true)}
+                        leftIcon={<FileSpreadsheet className="w-4 h-4" />}
+                        className="h-11 px-5 border-white/10 text-zinc-200 hover:text-white"
+                    >
+                        Import
                     </Button>
 
                     {/* Add Button */}

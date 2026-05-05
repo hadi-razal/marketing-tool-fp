@@ -24,3 +24,19 @@ export function getBrandColor(name: string) {
     }
     return PREMIUM_COLORS[Math.abs(hash) % PREMIUM_COLORS.length];
 }
+
+/** `people.saved_from`: show LinkedIn-style badge for Apollo / LinkedIn search saves */
+export function isPersonSavedFromLinkedInSearch(savedFrom?: string | null): boolean {
+    if (savedFrom == null || savedFrom === '') return false;
+    const v = String(savedFrom).trim().toLowerCase();
+    return v === 'linkedin' || v === 'apollo' || v.includes('linkedin');
+}
+
+/** Host-only domain for matching `people.organization_domain` (lowercase, no path, no `www.`). */
+export function normalizeOrganizationDomain(input?: string | null): string | null {
+    if (input == null || String(input).trim() === '') return null;
+    let s = String(input).trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0]?.split('?')[0] ?? '';
+    if (!s) return null;
+    if (s.startsWith('www.')) s = s.slice(4);
+    return s || null;
+}

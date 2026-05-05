@@ -1,11 +1,41 @@
 import { NextResponse } from 'next/server';
 
+const APOLLO_ORG_SEARCH_URL = 'https://api.apollo.io/api/v1/mixed_companies/search';
+
+function cleanDomain(input: string): string {
+    return input
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .replace(/^www\./i, '')
+        .trim()
+        .toLowerCase();
+}
+
+function parseKeywordTags(keywords: string): string[] | undefined {
+    if (!keywords.trim()) return undefined;
+    const tags = keywords
+        .split(/[,;]/)
+        .map((k) => k.trim())
+        .filter(Boolean);
+    return tags.length ? tags : undefined;
+}
+
+async function readApolloErrorMessage(response: Response): Promise<string> {
+    const text = await response.text();
+    try {
+        const data = JSON.parse(text) as { error?: string; message?: string };
+        return data.error || data.message || text || `Apollo request failed (${response.status})`;
+    } catch {
+        return text?.trim() || `Apollo request failed (${response.status})`;
+    }
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
         const { company, website, location, keywords, quantity, page } = body;
 
-        const apiKey = process.env.APOLLO_API_KEY;
+        const apiKey = process.env.APOLLO_API_KEY?.trim();
 
         if (!apiKey) {
             return NextResponse.json(
@@ -14,43 +44,63 @@ export async function POST(request: Request) {
             );
         }
 
-        // Apollo API typically supports per_page up to 25-50, not 1000
-        // For "No Limit" mode, use 25 per page and paginate
-        const perPage = quantity && quantity > 50 ? 25 : (quantity || 10);
+        const rawQty = typeof quantity === 'number' && quantity > 0 ? quantity : 10;
+        const perPage = Math.min(Math.max(1, rawQty), 100);
 
-        const payload: any = {
-            q_organization_name: company || undefined,
-            q_organization_domains: website ? [website] : undefined,
-            organization_locations: location ? [location] : undefined,
-            q_keywords: keywords || undefined,
+        const companyTrimmed = typeof company === 'string' ? company.trim() : '';
+        const websiteTrimmed = typeof website === 'string' ? website.trim() : '';
+        const locationTrimmed = typeof location === 'string' ? location.trim() : '';
+        const keywordsTrimmed = typeof keywords === 'string' ? keywords.trim() : '';
+
+        const payload: Record<string, unknown> = {
+            page: typeof page === 'number' && page > 0 ? page : 1,
             per_page: perPage,
-            page: page || 1,
         };
 
-        console.log('Apollo Company Search Payload:', JSON.stringify(payload, null, 2));
+        if (companyTrimmed) {
+            payload.q_organization_name = companyTrimmed;
+        }
+        if (websiteTrimmed) {
+            const domain = cleanDomain(websiteTrimmed);
+            if (domain) {
+                payload.q_organization_domains_list = [domain];
+            }
+        }
+        if (locationTrimmed) {
+            payload.organization_locations = [locationTrimmed];
+        }
+        const keywordTags = keywordsTrimmed ? parseKeywordTags(keywordsTrimmed) : undefined;
+        if (keywordTags?.length) {
+            payload.q_organization_keyword_tags = keywordTags;
+        }
 
-        const response = await fetch('https://api.apollo.io/api/v1/organizations/search', {
+        const response = await fetch(APOLLO_ORG_SEARCH_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-cache',
-                'X-Api-Key': apiKey
+                'x-api-key': apiKey,
             },
             body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Apollo API Error:', errorData);
-            return NextResponse.json(
-                { error: errorData.message || 'Failed to fetch data from Apollo' },
-                { status: response.status }
-            );
+            const errorMessage = await readApolloErrorMessage(response);
+            console.error('Apollo Company API Error:', response.status, errorMessage);
+
+            let message = errorMessage;
+            if (response.status === 403) {
+                message =
+                    'Access denied: check that your Apollo API key has Organization Search access and sufficient credits.';
+            }
+
+            return NextResponse.json({ error: message }, { status: response.status });
         }
 
         const data = await response.json();
+        const organizations = Array.isArray(data.organizations) ? data.organizations : [];
 
-        const companies = data.organizations.map((org: any) => ({
+        const companies = organizations.map((org: Record<string, unknown>) => ({
             id: org.id,
             name: org.name,
             website_url: org.website_url,
@@ -63,7 +113,7 @@ export async function POST(request: Request) {
             industries: org.industries,
             keywords: org.keywords,
             phone: org.phone,
-            sanitized_phone: org.primary_phone?.sanitized_number,
+            sanitized_phone: (org.primary_phone as { sanitized_number?: string } | undefined)?.sanitized_number,
             street_address: org.street_address,
             city: org.city,
             state: org.state,
@@ -81,7 +131,6 @@ export async function POST(request: Request) {
             publicly_traded_symbol: org.publicly_traded_symbol,
             publicly_traded_exchange: org.publicly_traded_exchange,
 
-            // Keep existing mappings for frontend compatibility if needed, or update frontend to use new keys
             website: org.website_url || org.primary_domain,
             logo: org.logo_url,
             location: org.raw_address || `${org.city}, ${org.country}`,
@@ -95,14 +144,10 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             companies,
-            pagination: data.pagination
+            pagination: data.pagination,
         });
-
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Apollo Company Search Error:', error);
-        return NextResponse.json(
-            { error: 'Internal Server Error' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

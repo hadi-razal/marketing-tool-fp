@@ -1,11 +1,42 @@
 import { NextResponse } from 'next/server';
 
+const APOLLO_PEOPLE_URL = 'https://api.apollo.io/api/v1/mixed_people/api_search';
+
+function cleanDomain(input: string): string {
+    return input
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .replace(/^www\./i, '')
+        .trim()
+        .toLowerCase();
+}
+
+/** Apollo expects multiple titles as separate array entries, not one CSV string. */
+function parsePersonTitles(title: string | undefined): string[] | undefined {
+    if (!title?.trim()) return undefined;
+    const parts = title
+        .split(/[,;]/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+    return parts.length ? parts : undefined;
+}
+
+async function readApolloErrorMessage(response: Response): Promise<string> {
+    const text = await response.text();
+    try {
+        const data = JSON.parse(text) as { error?: string; message?: string };
+        return data.error || data.message || text || `Apollo request failed (${response.status})`;
+    } catch {
+        return text?.trim() || `Apollo request failed (${response.status})`;
+    }
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
         const { company, website, title, location, keywords, quantity, page } = body;
 
-        const apiKey = process.env.APOLLO_API_KEY;
+        const apiKey = process.env.APOLLO_API_KEY?.trim();
 
         if (!apiKey) {
             console.error('Apollo API Key missing');
@@ -15,119 +46,139 @@ export async function POST(request: Request) {
             );
         }
 
-        console.log('Apollo Search Request:', { company, website, title, location, keywords, quantity, page });
+        const rawQty = typeof quantity === 'number' && quantity > 0 ? quantity : 10;
+        const perPage = Math.min(Math.max(1, rawQty), 100);
 
-        // Apollo API typically supports per_page up to 25-50, not 1000
-        // For "No Limit" mode, use 25 per page and paginate
-        const perPage = quantity && quantity > 50 ? 25 : (quantity || 10);
-
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             per_page: perPage,
-            page: page || 1,
+            page: typeof page === 'number' && page > 0 ? page : 1,
             include_similar_titles: true,
         };
 
-        // Organization filters
-        if (company) {
-            payload.q_organization_name = company;
+        const companyTrimmed = typeof company === 'string' ? company.trim() : '';
+        const websiteTrimmed = typeof website === 'string' ? website.trim() : '';
+        const locationTrimmed = typeof location === 'string' ? location.trim() : '';
+        const keywordsTrimmed = typeof keywords === 'string' ? keywords.trim() : '';
+
+        if (companyTrimmed) {
+            payload.q_organization_name = companyTrimmed;
         }
-        if (website) {
-            const cleanDomain = website.replace(/^https?:\/\//, '').split('/')[0];
-            payload.q_organization_domains_list = [cleanDomain];
+        if (websiteTrimmed) {
+            const domain = cleanDomain(websiteTrimmed);
+            if (domain) {
+                payload.q_organization_domains_list = [domain];
+            }
         }
 
-        // Person filters
-        if (title) {
-            payload.person_titles = [title];
-        }
-        if (location) {
-            payload.person_locations = [location];
-        }
-        if (keywords) {
-            payload.q_keywords = keywords;
+        const personTitles = parsePersonTitles(typeof title === 'string' ? title : undefined);
+        if (personTitles?.length) {
+            payload.person_titles = personTitles;
         }
 
-        console.log('Apollo Search Payload:', JSON.stringify(payload, null, 2));
+        if (locationTrimmed) {
+            if (companyTrimmed || websiteTrimmed) {
+                payload.organization_locations = [locationTrimmed];
+            } else {
+                payload.person_locations = [locationTrimmed];
+            }
+        }
 
-        const response = await fetch('https://api.apollo.io/api/v1/mixed_people/api_search', {
+        if (keywordsTrimmed) {
+            payload.q_keywords = keywordsTrimmed;
+        }
+
+        const response = await fetch(APOLLO_PEOPLE_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-cache',
-                'X-Api-Key': apiKey
+                'x-api-key': apiKey,
             },
             body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Apollo API Error:', errorData);
+            const errorMessage = await readApolloErrorMessage(response);
+            console.error('Apollo API Error:', response.status, errorMessage);
 
-            let errorMessage = errorData.message || 'Failed to fetch data from Apollo';
+            let message = errorMessage;
             if (response.status === 403) {
-                errorMessage = 'Access Denied: Your Apollo API key does not have permission to use the Search API. Please check your plan.';
+                message =
+                    'Access denied: this Apollo API key may not have access to People API Search (master key required) or your plan does not include it.';
             } else if (response.status === 422) {
-                errorMessage = 'Invalid Search Criteria: ' + errorMessage;
+                message = `Invalid search criteria: ${errorMessage}`;
             }
 
-            return NextResponse.json(
-                { error: errorMessage },
-                { status: response.status }
-            );
+            return NextResponse.json({ error: message }, { status: response.status });
         }
 
         const data = await response.json();
-        console.log('Apollo API Raw Response:', JSON.stringify(data, null, 2));
-        console.log('Apollo API Response Success. Count:', data.people?.length);
 
-        // Transform Apollo data to our app's format
-        const leads = (data.people || []).map((person: any) => ({
-            id: person.id,
-            name: `${person.first_name || ''} ${person.last_name || ''}`.trim() || 'Unknown',
-            first_name: person.first_name,
-            last_name: person.last_name,
-            title: person.title,
-            headline: person.headline,
-            company: person.organization?.name || company || 'Unknown',
-            company_id: person.organization?.id || person.organization_id,
-            website: person.organization?.primary_domain || person.organization?.website_url || website || '',
-            company_logo: person.organization?.logo_url,
-            company_industry: person.organization?.industry,
-            company_size: person.organization?.estimated_num_employees,
-            location: [person.city, person.state, person.country].filter(Boolean).join(', ') || location || '',
-            city: person.city,
-            state: person.state,
-            country: person.country,
-            email: person.email || (person.has_email ? 'Available (Unlock)' : 'N/A'),
-            email_status: person.email_status,
-            phone: person.phone_numbers?.[0]?.sanitized_number || person.sanitized_phone || (person.has_direct_phone ? 'Available (Unlock)' : 'N/A'),
-            linkedin: person.linkedin_url,
-            linkedin_url: person.linkedin_url,
-            twitter: person.twitter_url,
-            twitter_url: person.twitter_url,
-            facebook: person.facebook_url,
-            facebook_url: person.facebook_url,
-            github: person.github_url,
-            github_url: person.github_url,
-            image: person.photo_url,
-            seniority: person.seniority,
-            departments: person.departments,
-            functions: person.functions,
-            status: person.email_status === 'verified' ? 'Verified' : (person.email ? 'Likely Valid' : 'Unverified'),
-            score: person.email_status === 'verified' ? 95 : (person.email ? 75 : 50),
-            photo_url: person.photo_url,
-        }));
+        const leads = (data.people || []).map((person: Record<string, unknown>) => {
+            const org = person.organization as Record<string, unknown> | undefined;
+            return {
+                id: person.id,
+                name:
+                    `${(person.first_name as string) || ''} ${(person.last_name as string) || ''}`.trim() ||
+                    'Unknown',
+                first_name: person.first_name,
+                last_name: person.last_name,
+                title: person.title,
+                headline: person.headline,
+                company: (org?.name as string) || companyTrimmed || 'Unknown',
+                company_id: org?.id || person.organization_id,
+                website:
+                    (org?.primary_domain as string) ||
+                    (org?.website_url as string) ||
+                    websiteTrimmed ||
+                    '',
+                company_logo: org?.logo_url,
+                company_industry: org?.industry,
+                company_size: org?.estimated_num_employees,
+                location:
+                    [person.city, person.state, person.country].filter(Boolean).join(', ') ||
+                    locationTrimmed ||
+                    '',
+                city: person.city,
+                state: person.state,
+                country: person.country,
+                email:
+                    person.email ||
+                    (person.has_email ? 'Available (Unlock)' : 'N/A'),
+                email_status: person.email_status,
+                phone:
+                    (person.phone_numbers as { sanitized_number?: string }[])?.[0]?.sanitized_number ||
+                    person.sanitized_phone ||
+                    (person.has_direct_phone ? 'Available (Unlock)' : 'N/A'),
+                linkedin: person.linkedin_url,
+                linkedin_url: person.linkedin_url,
+                twitter: person.twitter_url,
+                twitter_url: person.twitter_url,
+                facebook: person.facebook_url,
+                facebook_url: person.facebook_url,
+                github: person.github_url,
+                github_url: person.github_url,
+                image: person.photo_url,
+                seniority: person.seniority,
+                departments: person.departments,
+                functions: person.functions,
+                status:
+                    person.email_status === 'verified'
+                        ? 'Verified'
+                        : person.email
+                          ? 'Likely Valid'
+                          : 'Unverified',
+                score: person.email_status === 'verified' ? 95 : person.email ? 75 : 50,
+                photo_url: person.photo_url,
+            };
+        });
 
         return NextResponse.json({
             leads,
-            pagination: data.pagination
+            pagination: data.pagination,
         });
-
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Apollo Search Error:', error);
-        return NextResponse.json(
-            { error: 'Internal Server Error' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { zohoApi } from '@/lib/zoho';
-import { RefreshCw, Plus, Search, Filter, Building2, Globe2, MapPin, Layers3 } from 'lucide-react';
+import { RefreshCw, Plus, Search, Filter, Building2, Globe2, MapPin, Layers3, FileSpreadsheet } from 'lucide-react';
 import { ExhibitorFormModal } from './ExhibitorFormModal';
 import { ExhibitorDetailsModal } from './ExhibitorDetailsModal';
 import { FilterPopover } from './FilterPopover';
 import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
+import { toast } from 'sonner';
+import { SpreadsheetImportModal, type SpreadsheetImportProgress } from '@/components/SpreadsheetImportModal';
+import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
+import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -23,6 +27,7 @@ export const ExhibitorTable = () => {
     const [page, setPage] = useState(0);
     const LIMIT = 200;
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
 
 
     // Debounce search manually since hook might not exist
@@ -109,6 +114,40 @@ export const ExhibitorTable = () => {
     const handleAdd = () => {
         setSelectedItem(null);
         setIsModalOpen(true);
+    };
+
+    const handleExhibitorSpreadsheetImport = async (
+        rows: SpreadsheetRow[],
+        meta?: { comment?: string },
+        onProgress?: (p: SpreadsheetImportProgress) => void,
+    ) => {
+        const { rowsToExhibitorZohoPayloads } = await import('@/lib/importSpreadsheet');
+        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
+        const payloads = rowsToExhibitorZohoPayloads(rows);
+        if (payloads.length === 0) {
+            toast.error('No valid rows. Each row needs a Company name.');
+            return;
+        }
+        onProgress?.({ current: 0, total: payloads.length });
+        let ok = 0;
+        for (let i = 0; i < payloads.length; i++) {
+            const payload = payloads[i];
+            try {
+                try {
+                    const res = await zohoApi.addRecord('Exhibitor', payload);
+                    if (res && res.code === 3000) ok++;
+                } catch {
+                    const res = await zohoApi.addRecord('Exhibitor_List', payload);
+                    if (res && res.code === 3000) ok++;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            onProgress?.({ current: i + 1, total: payloads.length });
+        }
+        await fetchData(true, debouncedSearch);
+        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} exhibitors in Zoho from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${payloads.length} exhibitors in Zoho${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -285,6 +324,22 @@ export const ExhibitorTable = () => {
 
     return (
         <div className="h-full flex flex-col gap-6">
+            {importOpen && (
+                <SpreadsheetImportModal
+                    isOpen
+                    onClose={() => setImportOpen(false)}
+                    title="Import exhibitors (CSV / Excel)"
+                    columnHint={
+                        <>
+                            Required: <strong>Company</strong>. Optional: Website, Company_Type, City, Country, World_Area,
+                            Contact_Details, Company_Linkedin, FP_Level, Events.
+                        </>
+                    }
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.exhibitorsZoho}
+                    onImportRows={handleExhibitorSpreadsheetImport}
+                />
+            )}
+
             <ExhibitorFormModal
                 key={selectedItem?.ID || 'new'} // Force re-render when item changes
                 isOpen={isModalOpen}
@@ -380,6 +435,15 @@ export const ExhibitorTable = () => {
                         className="h-11 w-11 p-0 flex items-center justify-center text-zinc-700"
                     >
                         {!loading && <RefreshCw className="w-4 h-4" />}
+                    </Button>
+
+                    <Button
+                        variant="secondary"
+                        onClick={() => setImportOpen(true)}
+                        leftIcon={<FileSpreadsheet className="w-4 h-4" />}
+                        className="h-11 px-5"
+                    >
+                        Import
                     </Button>
 
                     {/* Add Button */}

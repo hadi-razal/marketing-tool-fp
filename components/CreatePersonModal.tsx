@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, User, Briefcase, Building2, Mail, Phone, MapPin, Loader2, Globe, Linkedin, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { databaseService, SavedCompany } from '@/services/databaseService';
 
 interface PersonFormData {
     full_name: string;
@@ -25,6 +26,7 @@ interface PersonFormData {
     image?: string;
     id?: string;
     created_at?: string;
+    saved_from?: string;
 }
 
 interface CreatePersonModalProps {
@@ -35,6 +37,9 @@ interface CreatePersonModalProps {
 
 export const CreatePersonModal: React.FC<CreatePersonModalProps> = ({ isOpen, onClose, onSubmit }) => {
     const [loading, setLoading] = useState(false);
+    const [savedCompanies, setSavedCompanies] = useState<SavedCompany[]>([]);
+    const [loadingCompanies, setLoadingCompanies] = useState(false);
+    const [showCompanySuggestions, setShowCompanySuggestions] = useState(false);
     const [formData, setFormData] = useState({
         full_name: '',
         first_name: '',
@@ -53,6 +58,44 @@ export const CreatePersonModal: React.FC<CreatePersonModalProps> = ({ isOpen, on
         company_industry: '',
         photo_url: ''
     });
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const loadSavedCompanies = async () => {
+            setLoadingCompanies(true);
+            try {
+                const companies = await databaseService.getSavedCompanies();
+                setSavedCompanies(companies);
+            } catch (error) {
+                console.error('Error loading saved companies for person form:', error);
+                setSavedCompanies([]);
+            } finally {
+                setLoadingCompanies(false);
+            }
+        };
+
+        loadSavedCompanies();
+    }, [isOpen]);
+
+    const filteredCompanies = useMemo(() => {
+        const query = formData.organization_name.trim().toLowerCase();
+        if (!query) return savedCompanies.slice(0, 8);
+
+        return savedCompanies
+            .filter(company => company.name?.toLowerCase().includes(query))
+            .slice(0, 8);
+    }, [savedCompanies, formData.organization_name]);
+
+    const handleSelectCompany = (company: SavedCompany) => {
+        setFormData(prev => ({
+            ...prev,
+            organization_name: company.name || prev.organization_name,
+            company_industry: company.industry || prev.company_industry,
+            company_website: company.website_url || (company.primary_domain ? `https://${company.primary_domain}` : prev.company_website),
+        }));
+        setShowCompanySuggestions(false);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -89,7 +132,8 @@ export const CreatePersonModal: React.FC<CreatePersonModalProps> = ({ isOpen, on
             photo_url: formData.photo_url,
             image: formData.photo_url, // Alias
             id: `person_${Date.now()}`,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            saved_from: 'manual',
         };
         
         onSubmit(personData);
@@ -196,11 +240,45 @@ export const CreatePersonModal: React.FC<CreatePersonModalProps> = ({ isOpen, on
                                                     required
                                                     type="text"
                                                     value={formData.organization_name}
-                                                    onChange={e => setFormData({ ...formData, organization_name: e.target.value })}
+                                                onFocus={() => setShowCompanySuggestions(true)}
+                                                onBlur={() => setTimeout(() => setShowCompanySuggestions(false), 120)}
+                                                onChange={e => {
+                                                    setFormData({ ...formData, organization_name: e.target.value });
+                                                    setShowCompanySuggestions(true);
+                                                }}
                                                     className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-10 py-2.5 text-sm text-white focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none transition-all placeholder:text-zinc-600"
                                                     placeholder="Acme Inc."
                                                 />
                                             </div>
+                                        {showCompanySuggestions && (
+                                            <div className="mt-1 rounded-xl border border-white/10 bg-zinc-900/95 p-1.5 shadow-xl">
+                                                {loadingCompanies ? (
+                                                    <p className="px-2 py-1.5 text-xs text-zinc-500">Loading saved companies...</p>
+                                                ) : filteredCompanies.length > 0 ? (
+                                                    <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
+                                                        {filteredCompanies.map((company) => (
+                                                            <button
+                                                                key={company.id}
+                                                                type="button"
+                                                                onClick={() => handleSelectCompany(company)}
+                                                                className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+                                                            >
+                                                                <span className="block truncate font-medium">{company.name}</span>
+                                                                {(company.city || company.country) && (
+                                                                    <span className="block truncate text-[10px] text-zinc-500">
+                                                                        {[company.city, company.country].filter(Boolean).join(', ')}
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="px-2 py-1.5 text-xs text-zinc-500">
+                                                        No saved company found. You can type a new company manually.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                         </div>
                                         <div>
                                             <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Company Industry *</label>

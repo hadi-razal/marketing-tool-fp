@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\hadhi\\\\Desktop\\\\Programming\\\\Fairplatz IT\\\\fp-marketing-tool\\\\app\\\\\\(main\\)\\\\shows\\\\[id]\")",
+      "Bash(Out-Null)",
+      "Bash(Write-Host \"done\")"
+    ]
+  }
+}

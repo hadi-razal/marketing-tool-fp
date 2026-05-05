@@ -1,40 +1,48 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { zohoApi } from '@/lib/zoho';
-import { RefreshCw, Trash2, Edit2, Plus, Search, Filter, FileSpreadsheet } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+    RefreshCw,
+    Plus,
+    Search,
+    Filter,
+    FileSpreadsheet,
+    MapPin,
+    Calendar,
+    Layers,
+    ArrowRight,
+    CalendarDays,
+    Globe2,
+} from 'lucide-react';
 import { FilterPopover } from './FilterPopover';
 import { ShowFormModal } from './ShowFormModal';
-import { ShowDetailsModal } from './ShowDetailsModal';
 import { Button } from '../ui/Button';
-import { SoftInput } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
-import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { SpreadsheetImportModal, type SpreadsheetImportProgress } from '@/components/SpreadsheetImportModal';
 import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
 import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
+import { createClient } from '@/lib/supabase';
 
 export const ShowsTable = () => {
+    const router = useRouter();
+    const supabase = useMemo(() => createClient(), []);
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [fetchError, setFetchError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any>(null);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
-    // Pagination
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(0);
     const LIMIT = 100;
 
-    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
 
-    // Filters
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [availableCountries, setAvailableCountries] = useState<string[]>([]);
 
-    // Import all countries
     useEffect(() => {
         import('@/lib/countries').then(({ COUNTRIES }) => {
             setAvailableCountries(COUNTRIES);
@@ -42,72 +50,78 @@ export const ShowsTable = () => {
     }, []);
     const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
 
-    // Countries are loaded from the shared COUNTRIES constant via useEffect above
+    const normalizeShow = (row: any) => {
+        const id = row?.id ?? row?.ID ?? row?.show_id ?? row?.showId;
+        const eventName = row?.name ?? row?.event_name ?? row?.Event_Name ?? row?.event ?? row?.Event ?? row?.Name ?? '';
+        const eventType = row?.event_type ?? row?.Event_Type ?? row?.type ?? row?.Type ?? '';
+        const city = row?.city ?? row?.City ?? '';
+        const country = row?.country ?? row?.Country ?? '';
+
+        return {
+            ...row,
+            ID: String(id ?? ''),
+            Event_Name: eventName,
+            Event_Type: eventType,
+            City: city,
+            Country: country,
+            __source: 'supabase',
+        };
+    };
 
     const fetchData = useCallback(async (reset = false, searchTerm = '') => {
         setLoading(true);
-        setError('');
+        setFetchError('');
         try {
             const from = reset ? 0 : page * LIMIT;
+            const { data: rows, error: fetchErr } = await supabase
+                .from('shows')
+                .select('*')
+                .order('id', { ascending: false })
+                .range(from, from + LIMIT - 1);
 
-            // Construct criteria
-            let criteriaParts = [];
+            if (fetchErr) throw fetchErr;
 
-            // Search
-            if (searchTerm) {
-                criteriaParts.push(`(Event.contains("${searchTerm}"))`);
+            let normalized = (rows || []).map(normalizeShow);
+
+            const trimmedSearch = searchTerm.trim().toLowerCase();
+            if (trimmedSearch) {
+                normalized = normalized.filter((item) =>
+                    String(item.Event_Name || '').toLowerCase().includes(trimmedSearch),
+                );
             }
 
-            // Filters
             if (selectedCountries.length > 0) {
-                const countryCriteria = selectedCountries.map(c => `Country == "${c}"`).join(' || ');
-                criteriaParts.push(`(${countryCriteria})`);
+                const selectedLower = selectedCountries.map((c) => c.toLowerCase());
+                normalized = normalized.filter((item) =>
+                    selectedLower.includes(String(item.Country || '').toLowerCase()),
+                );
             }
 
-            const criteria = criteriaParts.length > 0 ? criteriaParts.join(' && ') : undefined;
-
-            console.log('Shows Fetch Criteria:', criteria);
-            console.log('Selected Countries:', selectedCountries);
-
-            const res = await zohoApi.getRecords('Show_List', criteria, from, LIMIT);
-            console.log('Shows Response:', res);
-
-            if (res.code === 3000) {
-                if (reset) {
-                    setData(res.data);
-                    setPage(1);
-                } else {
-                    setData(prev => {
-                        const newItems = res.data;
-                        const uniqueItems = new Map(prev.map(item => [item.ID, item]));
-                        newItems.forEach((item: any) => uniqueItems.set(item.ID, item));
-                        return Array.from(uniqueItems.values());
-                    });
-                    setPage(prev => prev + 1);
-                }
-                setHasMore(res.data.length === LIMIT);
-            } else if (res.code === 3001 || res.message?.includes('No data') || res.message?.includes('Not Found')) {
-                if (reset) setData([]);
-                setHasMore(false);
-                setError(''); // Clear error, show empty state instead
+            if (reset) {
+                setData(normalized);
+                setPage(1);
             } else {
-                // For other errors, just show empty results
-                if (reset) setData([]);
-                setHasMore(false);
-                setError('');
+                setData((prev) => {
+                    const uniqueItems = new Map(prev.map((item) => [item.ID, item]));
+                    normalized.forEach((item: any) => uniqueItems.set(item.ID, item));
+                    return Array.from(uniqueItems.values());
+                });
+                setPage((prev) => prev + 1);
             }
+
+            setHasMore((rows || []).length === LIMIT);
         } catch (err: any) {
             console.error(err);
-            // Don't show error, just show empty results
+            const message = err?.message || 'Failed to load shows from Supabase';
+            setFetchError(message);
+            if (reset) toast.error(message);
             if (reset) setData([]);
             setHasMore(false);
-            setError('');
         } finally {
             setLoading(false);
         }
-    }, [page, selectedCountries]);
+    }, [page, selectedCountries, supabase]);
 
-    // Manual debounce
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(search);
@@ -116,7 +130,7 @@ export const ShowsTable = () => {
     }, [search]);
 
     useEffect(() => {
-        setPage(0); // Reset page when filters or search change
+        setPage(0);
         fetchData(true, debouncedSearch);
     }, [debouncedSearch, selectedCountries]);
 
@@ -134,115 +148,28 @@ export const ShowsTable = () => {
         }
     };
 
-
-
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure?')) return;
         try {
-            await zohoApi.deleteRecord('Show_List', id);
-            setData(prev => prev.filter(item => item.ID !== id));
+            const primaryDelete = await supabase.from('shows').delete().eq('id', id);
+            if (primaryDelete.error) {
+                const fallbackDelete = await supabase.from('shows').delete().eq('ID', id);
+                if (fallbackDelete.error) throw fallbackDelete.error;
+            }
+            setData((prev) => prev.filter((item) => item.ID !== id));
+            toast.success('Show deleted');
         } catch (err: any) {
-            alert(err.message);
+            toast.error(err?.message || 'Failed to delete show');
         }
     };
 
     const handleEdit = (item: any) => {
-        // Close details modal first
-        setIsDetailsOpen(false);
-        // Set the selected item and open modal
-        // The key prop on ShowFormModal will ensure it re-renders with new data
         setSelectedItem(item);
         setIsModalOpen(true);
     };
 
     const handleUpdateSuccess = async () => {
-        // Store the ID before refreshing - ensure we have it
-        const updatedId = selectedItem?.ID;
-        
-        if (!updatedId) {
-            // If no ID, just refresh the table
-            await fetchData(true, debouncedSearch);
-            return;
-        }
-        
-        // Wait a bit more to ensure Zoho has fully processed the update
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Refresh the table data after successful update
         await fetchData(true, debouncedSearch);
-        
-        // Wait a bit more for the table data to be set
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        // Refresh the selected item data and reopen details modal
-        try {
-            // Try Show_List first, then Event_and_Exhibitor_Admin_Only_Report as fallback
-            let res;
-            let attempts = 0;
-            const maxAttempts = 3;
-            
-            while (attempts < maxAttempts) {
-                try {
-                    res = await zohoApi.getRecordById('Show_List', updatedId);
-                    if (res.code === 3000 && res.data) {
-                        break; // Success, exit loop
-                    }
-                } catch (err) {
-                    // Try fallback
-                    try {
-                        res = await zohoApi.getRecordById('Event_and_Exhibitor_Admin_Only_Report', updatedId);
-                        if (res.code === 3000 && res.data) {
-                            break; // Success, exit loop
-                        }
-                    } catch (err2) {
-                        // Both failed, wait and retry
-                        attempts++;
-                        if (attempts < maxAttempts) {
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                            continue;
-                        }
-                    }
-                }
-                
-                if (res && res.code === 3000 && res.data) {
-                    break; // Success
-                }
-                
-                attempts++;
-                if (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-            }
-            
-            if (res && res.code === 3000 && res.data) {
-                const fetchedData = Array.isArray(res.data) ? res.data[0] : res.data;
-                setSelectedItem(fetchedData); // Replace entirely with fresh data
-                // Reopen details modal to show updated data
-                setIsDetailsOpen(true);
-            } else {
-                // If API fetch failed, try to find in refreshed table data
-                // Use state setter to access latest data
-                setData(prev => {
-                    const item = prev.find(item => item.ID === updatedId);
-                    if (item) {
-                        setSelectedItem(item);
-                        setIsDetailsOpen(true);
-                    }
-                    return prev;
-                });
-            }
-        } catch (err) {
-            // Fallback: find in table data using state setter
-            await new Promise(resolve => setTimeout(resolve, 300));
-            setData(prev => {
-                const item = prev.find(item => item.ID === updatedId);
-                if (item) {
-                    setSelectedItem(item);
-                    setIsDetailsOpen(true);
-                }
-                return prev;
-            });
-        }
     };
 
     const handleAdd = () => {
@@ -264,25 +191,51 @@ export const ShowsTable = () => {
         }
         onProgress?.({ current: 0, total: payloads.length });
         let ok = 0;
+
         for (let i = 0; i < payloads.length; i++) {
             const payload = payloads[i];
             try {
-                const res = await zohoApi.addRecord('Show_Details', payload);
-                if (res && res.code === 3000) ok++;
+                const row = {
+                    id: crypto.randomUUID(),
+                    name: payload.Event_Name || payload.Event || payload.Name || '',
+                    event_type: payload.Event_Type || '',
+                    starting_date: payload.Starting_Date || null,
+                    industry: payload.Industry || '',
+                    level: payload.Level || '',
+                    world_area: payload.World_Area || '',
+                    country: payload.Country || '',
+                    city: payload.City || '',
+                    frequency: payload.Frequency || '',
+                };
+                const { error: insertError } = await supabase.from('shows').insert(row);
+                if (!insertError) ok++;
             } catch (e) {
                 console.error(e);
             }
             onProgress?.({ current: i + 1, total: payloads.length });
         }
         await fetchData(true, debouncedSearch);
-        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Zoho from spreadsheet.`, meta?.comment);
-        toast.success(`Created ${ok} of ${payloads.length} shows in Zoho${meta?.comment?.trim() ? ' · note saved' : ''}`);
+        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
 
     const handleRowClick = (item: any) => {
-        console.log('Show details from Zoho (row click):', item);
-        setSelectedItem(item);
-        setIsDetailsOpen(true);
+        router.push(`/shows/${item.ID}`);
+    };
+
+    const formatCardDate = (raw: string) => {
+        if (!raw) return 'Date TBC';
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime())
+            ? raw
+            : parsed.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    const initialsFromName = (name: string) => {
+        const parts = name.trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return '?';
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     };
 
     return (
@@ -304,64 +257,54 @@ export const ShowsTable = () => {
             )}
 
             <ShowFormModal
-                key={selectedItem?.ID || 'new'} // Force re-render when item changes
+                key={selectedItem?.ID || 'new'}
                 isOpen={isModalOpen}
                 onClose={() => {
                     setIsModalOpen(false);
-                    // Small delay before clearing to ensure modal closes properly
-                    setTimeout(() => {
-                        if (!isDetailsOpen) {
-                            setSelectedItem(null);
-                        }
-                    }, 100);
+                    setTimeout(() => setSelectedItem(null), 100);
                 }}
                 onSuccess={handleUpdateSuccess}
                 initialData={selectedItem}
             />
 
-
-
-            <ShowDetailsModal
-                isOpen={isDetailsOpen}
-                onClose={() => setIsDetailsOpen(false)}
-                data={selectedItem}
-                onEdit={(item) => {
-                    setIsDetailsOpen(false);
-                    handleEdit(item);
-                }}
-                onDelete={handleDelete}
-            />
-
-            {/* Controls Toolbar */}
-            <div className="relative z-30 flex flex-col lg:flex-row gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl backdrop-blur-xl shadow-xl">
-                {/* Search */}
-                <div className="relative flex-1 group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-purple-500/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <div className="relative flex items-center">
-                        <Search className="absolute left-4 w-4 h-4 text-zinc-400 group-hover:text-orange-400 transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="Search shows..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-zinc-600 hover:border-white/20"
-                        />
-                    </div>
+            {/* Page header */}
+            <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-orange-600">Fairplatz CRM</p>
+                    <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Shows</h1>
+                    <p className="mt-1 max-w-xl text-sm text-zinc-500">
+                        Trade shows and exhibitions — browse, filter, and open details.
+                    </p>
                 </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2.5 shadow-sm shadow-zinc-950/5">
+                    <CalendarDays className="h-4 w-4 text-orange-500" />
+                    <span className="text-sm font-semibold text-zinc-950 tabular-nums">{loading ? '…' : data.length}</span>
+                    <span className="text-xs font-medium text-zinc-500">{data.length === 1 ? 'show' : 'shows'}</span>
+                </div>
+            </header>
 
-                {/* Actions Group */}
-                <div className="flex items-center gap-3">
-                    {/* Filter */}
+            {/* Toolbar — light, matches main app */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-950/5 lg:flex-row lg:items-center">
+                <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                    <input
+                        type="text"
+                        placeholder="Search by show name..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-3 pl-10 pr-4 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                    />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
                     <div className="relative">
                         <Button
                             variant="secondary"
                             onClick={() => setIsFilterOpen(!isFilterOpen)}
-                            className={`glass-button h-11 px-5 border-white/10 hover:border-white/20 ${selectedCountries.length > 0 ? 'border-orange-500/50 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20' : 'text-zinc-400 hover:text-white'}`}
-                            leftIcon={<Filter className="w-4 h-4" />}
+                            className={`h-11 rounded-xl border px-4 ${selectedCountries.length > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
+                            leftIcon={<Filter className="h-4 w-4" />}
                         >
-                            Filters {selectedCountries.length > 0 && `(${selectedCountries.length})`}
+                            Filters {selectedCountries.length > 0 ? `(${selectedCountries.length})` : ''}
                         </Button>
-
                         <FilterPopover
                             isOpen={isFilterOpen}
                             onClose={() => setIsFilterOpen(false)}
@@ -373,104 +316,171 @@ export const ShowsTable = () => {
                             onClear={handleClearFilters}
                         />
                     </div>
-
-                    <div className="w-px h-8 bg-white/10 mx-1 hidden md:block" />
-
-                    {/* Refresh */}
                     <Button
                         variant="secondary"
                         onClick={() => fetchData(true, debouncedSearch)}
                         isLoading={loading}
-                        className="glass-button h-11 w-11 p-0 flex items-center justify-center border-white/10 hover:border-white/20 text-zinc-400 hover:text-white"
+                        className="h-11 w-11 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
                     >
-                        {!loading && <RefreshCw className="w-4 h-4" />}
+                        {!loading && <RefreshCw className="h-4 w-4" />}
                     </Button>
-
                     <Button
                         variant="secondary"
                         onClick={() => setImportOpen(true)}
-                        leftIcon={<FileSpreadsheet className="w-4 h-4" />}
-                        className="h-11 px-5 border-white/10 text-zinc-200 hover:text-white"
+                        leftIcon={<FileSpreadsheet className="h-4 w-4" />}
+                        className="h-11 rounded-xl border border-zinc-200 bg-white px-4 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
                     >
                         Import
                     </Button>
-
-                    {/* Add Button */}
                     <Button
                         onClick={handleAdd}
-                        leftIcon={<Plus className="w-4 h-4" />}
-                        className="h-11 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white border-0 shadow-lg shadow-orange-500/20 px-6 font-medium"
+                        leftIcon={<Plus className="h-4 w-4" />}
+                        className="h-11 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-5 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
                     >
                         Add Show
                     </Button>
                 </div>
             </div>
 
-
-            <div className="flex-1 glass-panel rounded-2xl overflow-hidden flex flex-col border border-white/5 bg-black/40">
-                <div className="overflow-x-auto custom-scrollbar flex-1">
-                    <table className="w-full text-left text-sm text-zinc-400">
-                        <thead className="bg-zinc-900/80 text-zinc-400 uppercase text-[10px] font-bold sticky top-0 z-10 backdrop-blur-md border-b border-white/5 tracking-wider">
-                            <tr>
-                                <th className="px-6 py-3">Name</th>
-                                <th className="px-6 py-3 hidden md:table-cell">Event Type</th>
-                                <th className="px-6 py-3 hidden lg:table-cell">City</th>
-                                <th className="px-6 py-3 hidden xl:table-cell">Country</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {loading && data.length === 0 ? (
-                                Array.from({ length: 10 }).map((_, i) => (
-                                    <tr key={i}>
-                                        <td className="px-6 py-4"><Skeleton className="h-5 w-40" /></td>
-                                        <td className="px-6 py-4 hidden md:table-cell"><Skeleton className="h-5 w-24" /></td>
-                                        <td className="px-6 py-4 hidden lg:table-cell"><Skeleton className="h-5 w-20" /></td>
-                                        <td className="px-6 py-4 hidden xl:table-cell"><Skeleton className="h-5 w-20" /></td>
-                                    </tr>
-                                ))
-                            ) : data.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="px-6 py-8">
-                                        <div className="flex flex-col items-center justify-start text-zinc-500 gap-4">
-                                            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
-                                                <Search className="w-8 h-8 opacity-40" />
-                                            </div>
-                                            <p className="text-lg font-medium">No records found</p>
-                                            <p className="text-sm opacity-60">Try adjusting your search terms</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : (
-                                data.map((item, i) => (
-                                    <tr
-                                        key={item.ID}
-                                        onClick={() => handleRowClick(item)}
-                                        className="hover:bg-white/[0.02] transition-colors group cursor-pointer border-b border-white/[0.02] last:border-0"
-                                    >
-                                        <td className="px-6 py-3 font-medium text-zinc-200 text-sm">{item.Event || item.Event_Name || item.Name}</td>
-                                        <td className="px-6 py-3 hidden md:table-cell text-sm text-zinc-400">{item.Event_Type}</td>
-                                        <td className="px-6 py-3 hidden lg:table-cell text-sm text-zinc-400">{item.City}</td>
-                                        <td className="px-6 py-3 hidden xl:table-cell text-sm text-zinc-400">{item.Country}</td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-
-                    {loading && data.length > 0 && (
-                        <div className="p-4 space-y-2">
-                            <Skeleton className="h-12 w-full" />
+            {/* Card grid */}
+            <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-xl shadow-zinc-950/5">
+                <div className="h-full overflow-y-auto custom-scrollbar p-4 md:p-6">
+                    {loading && data.length === 0 ? (
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50/80">
+                                    <Skeleton className="h-28 w-full rounded-none" />
+                                    <div className="space-y-3 p-5">
+                                        <Skeleton className="h-6 w-4/5" />
+                                        <Skeleton className="h-4 w-1/2" />
+                                        <Skeleton className="h-4 w-2/3" />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    )}
-
-                    {hasMore && !loading && data.length > 0 && (
-                        <div className="p-4 flex justify-center border-t border-white/5">
-                            <Button variant="secondary" onClick={loadMore} className="glass-button w-full md:w-auto">
-                                Load More Records
+                    ) : data.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-orange-50 ring-1 ring-orange-100">
+                                <CalendarDays className="h-9 w-9 text-orange-500" />
+                            </div>
+                            <div>
+                                <p className="text-lg font-semibold text-zinc-900">No shows yet</p>
+                                <p className="mt-1 max-w-md text-sm text-zinc-500">
+                                    {fetchError ? fetchError : 'Add a show or import a spreadsheet to populate this list.'}
+                                </p>
+                            </div>
+                            <Button onClick={handleAdd} leftIcon={<Plus className="h-4 w-4" />} className="mt-2 rounded-xl">
+                                Add your first show
                             </Button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                            {data.map((item) => {
+                                const name = item.name || item.Event_Name || item.Name || 'Untitled show';
+                                const eventType = item.Event_Type || item.event_type || '';
+                                const industry = item.industry || item.Industry || '';
+                                const level = item.level || item.Level || '';
+                                const worldArea = item.world_area || item.World_Area || '';
+                                const city = item.City || '';
+                                const country = item.Country || '';
+                                const date = item.starting_date || item.Starting_Date || '';
+                                const location = [city, country].filter(Boolean).join(', ');
+                                const initials = initialsFromName(name);
+
+                                return (
+                                    <button
+                                        key={item.ID}
+                                        type="button"
+                                        onClick={() => handleRowClick(item)}
+                                        className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left shadow-sm shadow-zinc-950/5 outline-none transition-all duration-300 cursor-pointer hover:-translate-y-1.5 hover:border-orange-200 hover:shadow-2xl hover:shadow-orange-950/15 focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2"
+                                    >
+                                        {/* Visual header */}
+                                        <div className="relative h-36 overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
+                                            {/* Layered glows */}
+                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_70%_at_90%_10%,rgba(251,146,60,0.5),transparent)]" />
+                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_10%_100%,rgba(251,146,60,0.2),transparent)]" />
+                                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                                            {/* Subtle grid pattern */}
+                                            <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+                                                style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)' }}
+                                            />
+                                            {/* World area top label */}
+                                            {worldArea && (
+                                                <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-white/70 backdrop-blur-sm ring-1 ring-white/10">
+                                                    <Globe2 className="h-2.5 w-2.5" />
+                                                    {worldArea}
+                                                </div>
+                                            )}
+                                            <div className="relative flex h-full items-end justify-between px-4 pb-4">
+                                                {/* Initials avatar */}
+                                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-base font-bold tracking-tight text-zinc-900 shadow-2xl ring-2 ring-white/25 transition-transform duration-300 group-hover:scale-105">
+                                                    {initials}
+                                                </div>
+                                                {eventType ? (
+                                                    <span className="rounded-full bg-orange-500/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-orange-100 ring-1 ring-orange-400/30 backdrop-blur-sm">
+                                                        {eventType}
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-1 flex-col p-5">
+                                            <h3 className="line-clamp-2 text-base font-bold leading-snug tracking-tight text-zinc-950 transition-colors group-hover:text-orange-700">
+                                                {name}
+                                            </h3>
+
+                                            <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                                {industry ? (
+                                                    <span className="inline-flex items-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                                        {industry}
+                                                    </span>
+                                                ) : null}
+                                                {level ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-lg border border-orange-100 bg-orange-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-700">
+                                                        <Layers className="h-2.5 w-2.5" />
+                                                        {level}
+                                                    </span>
+                                                ) : null}
+                                            </div>
+
+                                            <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
+                                                <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                                    <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                    <span className="line-clamp-1 font-medium text-zinc-700">{location || 'Location TBC'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                                    <Calendar className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                    <span className="font-medium text-zinc-700">{formatCardDate(date)}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-auto flex items-center justify-end border-t border-zinc-100 pt-4">
+                                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 transition-all duration-200 group-hover:gap-2 group-hover:text-orange-500">
+                                                    View details
+                                                    <ArrowRight className="h-3.5 w-3.5" />
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
+
+                {loading && data.length > 0 && (
+                    <div className="border-t border-zinc-100 px-4 py-3 md:px-6">
+                        <Skeleton className="h-10 w-full rounded-xl" />
+                    </div>
+                )}
+
+                {hasMore && !loading && data.length > 0 && (
+                    <div className="border-t border-zinc-100 p-4 md:p-6">
+                        <Button variant="secondary" onClick={loadMore} className="w-full rounded-xl border-zinc-200 md:w-auto md:min-w-[200px]">
+                            Load more
+                        </Button>
+                    </div>
+                )}
             </div>
         </div>
     );

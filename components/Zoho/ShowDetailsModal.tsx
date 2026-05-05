@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Globe, MapPin, Calendar, Hash, ExternalLink, Trash2, Edit2, Link as LinkIcon, FileText, Layers, Users, Clock, User, Info, X, Building2, Download, Search } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { zohoApi, getZohoConfig } from '@/lib/zoho';
-import { Skeleton } from '../ui/Skeleton';
+import {
+    Calendar, ExternalLink, Globe, Hash, MapPin, Trash2, Edit2,
+    Building2, Tag, RefreshCw, Users, Layers, X,
+} from 'lucide-react';
 
 interface ShowDetailsModalProps {
     isOpen: boolean;
@@ -14,633 +14,243 @@ interface ShowDetailsModalProps {
     onDelete: (id: string) => void;
 }
 
-const Section = ({ title, children, delay = 0 }: { title: string, children: React.ReactNode, delay?: number }) => (
-    <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay, duration: 0.4 }}
-        className="space-y-4"
+const getValue = (data: any, keys: string[]) => {
+    for (const key of keys) {
+        const value = data?.[key];
+        if (value !== undefined && value !== null && value !== '') return value;
+    }
+    return '';
+};
+
+const InfoBlock = ({
+    label,
+    value,
+    icon,
+    fullWidth = false,
+}: {
+    label: string;
+    value: string;
+    icon?: React.ReactNode;
+    fullWidth?: boolean;
+}) => (
+    <div
+        className={`flex flex-col gap-1.5 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4 transition-colors hover:border-orange-100 hover:bg-orange-50/40 ${fullWidth ? 'md:col-span-2' : ''}`}
     >
-        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500/50"></span>
-            {title}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {children}
-        </div>
-    </motion.div>
+        <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+            {icon}
+            {label}
+        </dt>
+        <dd className="text-sm font-medium leading-relaxed text-zinc-800">{value}</dd>
+    </div>
 );
 
-const DetailItem = ({ label, value, icon: Icon, isLink = false, fullWidth = false, onDownload }: any) => {
-    if (!value) return null;
-
-    let displayValue = value;
-    let href = value;
-    let isFileUrl = false;
-
-    // Handle Zoho object structure (e.g., { url: "..." })
-    if (typeof value === 'object' && value !== null) {
-        if ('url' in value) {
-            displayValue = value.url;
-            href = value.url;
-        } else {
-            // Fallback for other objects to avoid crash
-            return null;
-        }
-    }
-
-    // Check if it's a file download URL
-    if (typeof displayValue === 'string' && displayValue.includes('/download?filepath=')) {
-        isFileUrl = true;
-    }
-
-    const handleDownload = async () => {
-        if (onDownload && value) {
-            await onDownload(value);
-        }
-    };
-
-    return (
-        <div className={`group relative overflow-hidden bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 ${fullWidth ? 'md:col-span-2 lg:col-span-3' : ''}`}>
-            <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-            <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-2 text-zinc-500 text-xs font-bold uppercase tracking-wider">
-                    {Icon && <Icon className="w-3.5 h-3.5 text-zinc-600 group-hover:text-orange-500/70 transition-colors" />}
-                    {label}
-                </div>
-                <div className="text-zinc-100 font-medium break-words text-sm leading-relaxed flex items-center gap-2">
-                    {isLink ? (
-                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5 transition-colors">
-                            {displayValue} <ExternalLink className="w-3 h-3 opacity-70" />
-                        </a>
-                    ) : isFileUrl ? (
-                        <>
-                            <span className="text-zinc-400 text-xs truncate flex-1">{displayValue}</span>
-                            <button
-                                onClick={handleDownload}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 hover:text-orange-300 rounded-lg transition-colors text-xs font-medium border border-orange-500/30"
-                            >
-                                <Download className="w-3.5 h-3.5" />
-                                Download
-                            </button>
-                        </>
-                    ) : (
-                        displayValue
-                    )}
-                </div>
-            </div>
-        </div>
-    );
+const initialsFromName = (name: string) => {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
 export const ShowDetailsModal: React.FC<ShowDetailsModalProps> = ({ isOpen, onClose, data, onEdit, onDelete }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'exhibitors'>('overview');
-    const [exhibitors, setExhibitors] = useState<any[]>([]);
-    const [loadingExhibitors, setLoadingExhibitors] = useState(false);
-    const [isNoteExpanded, setIsNoteExpanded] = useState(false);
-    const [exhibitorSearch, setExhibitorSearch] = useState('');
-
-    // Log show details when modal opens or data changes
-    useEffect(() => {
-        if (isOpen && data) {
-            console.log('Show details from Zoho (modal):', data);
-        }
-    }, [isOpen, data]);
-
-    // Reset tab when data changes
-    useEffect(() => {
-        if (isOpen) {
-            setActiveTab('overview');
-            setExhibitors([]);
-            setIsNoteExpanded(false);
-            setExhibitorSearch('');
-        }
-    }, [isOpen, data?.ID]);
-
-    // Fetch exhibitors when tab changes
-    useEffect(() => {
-        if (activeTab === 'exhibitors' && exhibitors.length === 0 && data) {
-            const fetchExhibitors = async () => {
-                setLoadingExhibitors(true);
-                try {
-                    if (!data.ID) {
-                        setExhibitors([]);
-                        return;
-                    }
-
-                    // Try different criteria formats - Show.ID is NUMBER type, so don't use quotes
-                    const criteriaOptions = [
-                        `(Show.ID == ${data.ID})`,           // Number comparison without quotes
-                        `(Show.ID == "${data.ID}")`,         // With quotes (might work)
-                        `(Show == ${data.ID})`,              // Direct Show comparison
-                        `(Show == "${data.ID}")`,            // Direct Show with quotes
-                    ];
-                    
-                    let allExhibitors: any[] = [];
-                    let criteria: string | undefined = undefined;
-                    let foundWorkingCriteria = false;
-                    
-                    // Try each criteria format
-                    for (const testCriteria of criteriaOptions) {
-                        try {
-                            const testRes = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', testCriteria, 0, 10);
-                            
-                            if (testRes.code === 3000) {
-                                criteria = testCriteria;
-                                foundWorkingCriteria = true;
-                                break;
-                            } else if (testRes.code === 3001) {
-                                // No records but criteria is valid
-                                criteria = testCriteria;
-                                foundWorkingCriteria = true;
-                                break;
-                            }
-                        } catch (err) {
-                            continue;
-                        }
-                    }
-                    
-                    // If no criteria worked, fetch all and filter client-side
-                    if (!foundWorkingCriteria) {
-                        criteria = undefined;
-                    }
-                    
-                    // Fetch all matching exhibitors in batches
-                    let from = 0;
-                    const limit = 200;
-                    let hasMore = true;
-                    
-                    // Fetch in batches until we have all matching records
-                    while (hasMore) {
-                        const res = await zohoApi.getRecords('Event_and_Exhibitor_Admin_Only_Report', criteria, from, limit);
-                        
-                        if (res.code === 3000 && res.data && Array.isArray(res.data)) {
-                            let batchData = res.data;
-                            
-                            // Always filter client-side to ensure we only get exhibitors from this Show
-                            // Match by Show.ID (must match exactly - this is from Show, not Event Participation)
-                            batchData = res.data.filter((item: any) => {
-                                const itemShowId = item.Show?.ID || item.Show?.id || item.Show_ID;
-                                const currentShowId = data.ID;
-                                
-                                // Convert both to strings for comparison to handle type mismatches
-                                const itemShowIdStr = String(itemShowId);
-                                const currentShowIdStr = String(currentShowId);
-                                
-                                return itemShowIdStr === currentShowIdStr;
-                            });
-                            
-                            allExhibitors = [...allExhibitors, ...batchData];
-                            hasMore = res.data.length === limit;
-                            from += limit;
-                        } else {
-                            hasMore = false;
-                        }
-                    }
-                    
-                    // Final filter to ensure all exhibitors match this Show.ID
-                    const finalFiltered = allExhibitors.filter((item: any) => {
-                        const itemShowId = String(item.Show?.ID || item.Show?.id || item.Show_ID || '');
-                        const currentShowId = String(data.ID || '');
-                        return itemShowId === currentShowId;
-                    });
-                    
-                    setExhibitors(finalFiltered);
-                } catch (err) {
-                    setExhibitors([]);
-                } finally {
-                    setLoadingExhibitors(false);
-                }
-            };
-            fetchExhibitors();
-        }
-    }, [activeTab, data]);
-
     if (!data) return null;
 
-    // Helper to download file from Zoho
-    const handleFileDownload = async (fileUrl: string) => {
-        try {
-            // Get Zoho config for owner/app name only (auth is server-side)
-            const config = getZohoConfig();
-            
-            // Extract filepath from URL if it's a query parameter
-            let downloadUrl = fileUrl;
-            let filename = 'floorplan.pdf';
+    const id = String(getValue(data, ['id', 'ID']));
+    const eventName = getValue(data, ['event_name', 'Event_Name', 'event', 'Event', 'name', 'Name']);
+    const eventType = getValue(data, ['event_type', 'Event_Type', 'type', 'Type']);
+    const startingDate = getValue(data, ['starting_date', 'Starting_Date', 'date', 'Date']);
+    const industry = getValue(data, ['industry', 'Industry']);
+    const level = getValue(data, ['level', 'Level']);
+    const worldArea = getValue(data, ['world_area', 'World_Area']);
+    const country = getValue(data, ['country', 'Country']);
+    const city = getValue(data, ['city', 'City']);
+    const frequency = getValue(data, ['frequency', 'Frequency']);
+    const organiser = getValue(data, ['organiser', 'Organiser']);
+    const tags = getValue(data, ['tags', 'Tags']);
+    const note = getValue(data, ['note', 'Note', 'Note1']);
+    const exhibitorList = getValue(data, ['exhibitor_list', 'Exhibitor_List', 'Last_edition_n_Exhibitors']);
+    const exhibitorListLink = getValue(data, ['exhibitor_list_link', 'Exhibitor_List_Link']);
+    const floorplanLink = getValue(data, ['floorplan_link', 'Floorplan_Link']);
 
-            // If it's a relative URL, construct the full URL
-            if (fileUrl.startsWith('/api/v2/')) {
-                downloadUrl = `https://creator.zoho.com${fileUrl}`;
-            } else if (!fileUrl.startsWith('http')) {
-                // If it's just a path, construct full URL
-                downloadUrl = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/report/Show_List/${data.ID}/Floorplan/download?filepath=${fileUrl}`;
-            }
+    const location = [city, country, worldArea].filter(Boolean).join(', ');
+    const initials = initialsFromName(String(eventName || '?'));
 
-            // Extract filename from filepath parameter
-            try {
-                const urlObj = new URL(downloadUrl);
-                const filepath = urlObj.searchParams.get('filepath');
-                if (filepath) {
-                    filename = filepath.split('/').pop() || filepath.split('\\').pop() || 'floorplan.pdf';
-                }
-            } catch (e) {
-                // If URL parsing fails, use default filename
-            }
-
-            // Use server-side proxy for authentication
-            const response = await fetch('/api/zoho/proxy-v2', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: downloadUrl,
-                    method: 'GET',
-                    headers: {},
-                    body: undefined
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Download failed: ${response.status} ${response.statusText}`);
-            }
-
-            // Get the blob and trigger download
-            const blob = await response.blob();
-            const downloadLink = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadLink;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(downloadLink);
-            document.body.removeChild(a);
-        } catch (error: any) {
-            console.error('Download error:', error);
-            alert(`Download failed: ${error.message}`);
-        }
-    };
-
-    // Helper to format date
     const formatDate = (dateStr: string) => {
-        if (!dateStr) return null;
-        return new Date(dateStr).toLocaleString(undefined, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        if (!dateStr) return '';
+        const parsed = new Date(dateStr);
+        if (Number.isNaN(parsed.getTime())) return dateStr;
+        return parsed.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     };
+
+    const hasDetails = !!(industry || level || organiser || exhibitorList || tags);
+    const hasLinks = !!(exhibitorListLink || floorplanLink);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Show Details" maxWidth="max-w-5xl">
-            <div className="relative">
-                {/* Hero Header */}
-                <div className="relative glass-panel border-b border-white/5 p-6 overflow-hidden rounded-t-2xl">
-                    <div className="absolute top-0 right-0 w-1/3 h-1/2 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent opacity-50" />
-                    <div className="absolute -top-12 -right-12 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
+        <Modal isOpen={isOpen} onClose={onClose} hideHeader maxWidth="max-w-2xl">
+            {/* ── Hero ── */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
+                {/* Ambient glows */}
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_65%_65%_at_85%_10%,rgba(251,146,60,0.45),transparent)]" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_40%_40%_at_5%_90%,rgba(251,146,60,0.18),transparent)]" />
+                {/* Subtle grid */}
+                <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+                    style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px)' }}
+                />
 
-                    <div className="relative z-10 flex flex-col md:flex-row gap-6 items-start">
-                        {data.Event_logo && (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="w-24 h-24 bg-white rounded-xl p-3 shrink-0 flex items-center justify-center overflow-hidden shadow-2xl shadow-black/50 border border-white/10"
-                            >
-                                <img src={data.Event_logo} alt={data.Event || data.Name} className="max-w-full max-h-full object-contain" />
-                            </motion.div>
-                        )}
-                        <div className="flex-1 space-y-3">
-                            <div>
-                                <motion.h2
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight"
-                                >
-                                    {data.Event || data.Event_Name || data.Name}
-                                </motion.h2>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    {data.Level && (
-                                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-400 border border-blue-500/20 shadow-lg shadow-blue-500/5">
-                                            {data.Level}
-                                        </span>
-                                    )}
-                                    <span className="text-zinc-400 text-xs font-medium flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                                        <Hash className="w-3 h-3" /> {data.ID}
+                {/* Close button */}
+                <button
+                    onClick={onClose}
+                    className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/60 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
+                    aria-label="Close"
+                >
+                    <X className="h-4 w-4" />
+                </button>
+
+                <div className="relative px-6 pb-7 pt-6">
+                    <div className="flex items-start gap-4">
+                        {/* Avatar */}
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-bold tracking-tight text-zinc-900 shadow-2xl ring-2 ring-white/20">
+                            {initials}
+                        </div>
+
+                        <div className="min-w-0 flex-1 pt-0.5">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                                {id && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/50 ring-1 ring-white/10">
+                                        <Hash className="h-2.5 w-2.5" />
+                                        {id}
                                     </span>
-                                </div>
+                                )}
+                                {eventType && (
+                                    <span className="inline-flex items-center rounded-full bg-orange-500/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-orange-200 ring-1 ring-orange-400/25">
+                                        {eventType}
+                                    </span>
+                                )}
                             </div>
+                            <h2 className="text-2xl font-bold leading-tight tracking-tight text-white drop-shadow-sm">
+                                {String(eventName) || 'Untitled Show'}
+                            </h2>
+                        </div>
+                    </div>
 
-                            {data.Note1 && (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.2 }}
-                                    className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-xl text-yellow-200/80 text-sm leading-relaxed backdrop-blur-sm"
+                    {/* Quick-stat strip */}
+                    {(startingDate || location || frequency) && (
+                        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-4">
+                            {startingDate && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <Calendar className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                                    <span className="font-medium text-white/85">{formatDate(String(startingDate))}</span>
+                                </div>
+                            )}
+                            {location && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                                    <span className="font-medium text-white/85">{location}</span>
+                                </div>
+                            )}
+                            {frequency && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <RefreshCw className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                                    <span className="font-medium text-white/85">{String(frequency)}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Body ── */}
+            <div className="space-y-5 p-6">
+
+                {/* Details grid */}
+                {hasDetails && (
+                    <dl className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {industry && (
+                            <InfoBlock label="Industry" value={String(industry)} icon={<Building2 className="h-2.5 w-2.5" />} />
+                        )}
+                        {level && (
+                            <InfoBlock label="Level" value={String(level)} icon={<Layers className="h-2.5 w-2.5" />} />
+                        )}
+                        {exhibitorList && (
+                            <InfoBlock label="Exhibitors" value={String(exhibitorList)} icon={<Users className="h-2.5 w-2.5" />} />
+                        )}
+                        {organiser && (
+                            <InfoBlock label="Organiser" value={String(organiser)} fullWidth />
+                        )}
+                        {tags && (
+                            <InfoBlock label="Tags" value={String(tags)} icon={<Tag className="h-2.5 w-2.5" />} fullWidth />
+                        )}
+                    </dl>
+                )}
+
+                {/* Links */}
+                {hasLinks && (
+                    <div className="space-y-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Links</p>
+                        <div className="space-y-2">
+                            {exhibitorListLink && (
+                                <a
+                                    href={String(exhibitorListLink)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between rounded-xl border border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50/50 px-4 py-3 text-sm font-semibold text-orange-700 transition-all hover:border-orange-200 hover:shadow-sm"
                                 >
-                                    <p className={isNoteExpanded ? '' : 'line-clamp-2'}>
-                                        {data.Note1}
-                                    </p>
-                                    {data.Note1.length > 150 && (
-                                        <button
-                                            onClick={() => setIsNoteExpanded(!isNoteExpanded)}
-                                            className="mt-2 text-xs font-medium text-yellow-300 hover:text-yellow-200 transition-colors"
-                                        >
-                                            {isNoteExpanded ? 'Read less' : 'Read more'}
-                                        </button>
-                                    )}
-                                </motion.div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-
-
-                {/* Tab Navigation */}
-                <div className="px-8 border-b border-white/5 bg-black/20 sticky top-0 z-30 backdrop-blur-xl">
-                    <div className="flex gap-8">
-                        <button
-                            onClick={() => {
-                                setActiveTab('overview');
-                            }}
-                            className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview'
-                                ? 'text-orange-500 border-orange-500'
-                                : 'text-zinc-400 border-transparent hover:text-white'
-                                }`}
-                        >
-                            Overview
-                        </button>
-                        <button
-                            onClick={() => {
-                                setActiveTab('exhibitors');
-                            }}
-                            className={`py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'exhibitors'
-                                ? 'text-orange-500 border-orange-500'
-                                : 'text-zinc-400 border-transparent hover:text-white'
-                                }`}
-                        >
-                            Exhibitors
-                            {exhibitors.length > 0 && (
-                                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-orange-500/10 text-orange-400 text-xs border border-orange-500/20">
-                                    {exhibitors.length}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Content Scroll Area */}
-                <div className="p-8 space-y-10 max-h-[60vh] overflow-y-auto custom-scrollbar bg-black/40 min-h-[400px]">
-                    {activeTab === 'overview' && (
-                        <div className="space-y-3" key="overview-content">
-                            {data.Starting_Date && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Starting Date</span>
-                                    <span className="text-sm text-zinc-200">{formatDate(data.Starting_Date)}</span>
-                                </div>
-                            )}
-                            {data.Industry && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Industry</span>
-                                    <span className="text-sm text-zinc-200">{data.Industry}</span>
-                                </div>
-                            )}
-                            {data.Website && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Website</span>
-                                    <a href={data.Website} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
-                                        {typeof data.Website === 'object' && 'url' in data.Website ? data.Website.url : data.Website}
-                                        <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                </div>
-                            )}
-                            {data.Organiser && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Organiser</span>
-                                    <span className="text-sm text-zinc-200">{data.Organiser}</span>
-                                </div>
-                            )}
-                            {data.Frequency && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Frequency</span>
-                                    <span className="text-sm text-zinc-200">{data.Frequency}</span>
-                                </div>
-                            )}
-                            {(data.City || data.Country || data.World_Area) && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Location</span>
-                                    <span className="text-sm text-zinc-200">
-                                        {[data.City, data.Country, data.World_Area].filter(Boolean).join(', ')}
+                                    <span className="flex items-center gap-2.5">
+                                        <Globe className="h-4 w-4 shrink-0" />
+                                        Exhibitor List
                                     </span>
-                                </div>
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                                </a>
                             )}
-                            {data.Exhibition_Size && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Size</span>
-                                    <span className="text-sm text-zinc-200">{data.Exhibition_Size}</span>
-                                </div>
-                            )}
-                            {data.Last_edition_n_Exhibitors && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Exhibitors</span>
-                                    <span className="text-sm text-zinc-200">{data.Last_edition_n_Exhibitors}</span>
-                                </div>
-                            )}
-                            {data.Exhibitor_List_Link && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Exhibitor List</span>
-                                    <a href={typeof data.Exhibitor_List_Link === 'object' && 'url' in data.Exhibitor_List_Link ? data.Exhibitor_List_Link.url : data.Exhibitor_List_Link} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
-                                        View Link
-                                        <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                </div>
-                            )}
-                            {data.Floorplan_Link && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Floorplan</span>
-                                    <a href={typeof data.Floorplan_Link === 'object' && 'url' in data.Floorplan_Link ? data.Floorplan_Link.url : data.Floorplan_Link} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1.5">
-                                        View Link
-                                        <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                </div>
-                            )}
-                            {data.Floorplan && (
-                                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                                    <span className="text-xs font-medium text-zinc-500 w-24 shrink-0">Floorplan File</span>
-                                    <button
-                                        onClick={() => handleFileDownload(typeof data.Floorplan === 'object' && 'url' in data.Floorplan ? data.Floorplan.url : data.Floorplan)}
-                                        className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1.5"
-                                    >
-                                        <Download className="w-3 h-3" />
-                                        Download
-                                    </button>
-                                </div>
+                            {floorplanLink && (
+                                <a
+                                    href={String(floorplanLink)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between rounded-xl border border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50/50 px-4 py-3 text-sm font-semibold text-orange-700 transition-all hover:border-orange-200 hover:shadow-sm"
+                                >
+                                    <span className="flex items-center gap-2.5">
+                                        <Globe className="h-4 w-4 shrink-0" />
+                                        Floorplan
+                                    </span>
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                                </a>
                             )}
                         </div>
-                    )}
-                    {activeTab === 'exhibitors' && (
-                        <div className="space-y-4" key="exhibitors-content">
-                            {/* Search Input */}
-                            {exhibitors.length > 0 && !loadingExhibitors && (
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                                    <input
-                                        type="text"
-                                        value={exhibitorSearch}
-                                        onChange={(e) => setExhibitorSearch(e.target.value)}
-                                        placeholder="Search exhibitors by company name, booth, or country..."
-                                        className="w-full bg-zinc-900/50 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all placeholder:text-zinc-600"
-                                    />
-                                </div>
-                            )}
-                            {loadingExhibitors ? (
-                                <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-4">
-                                    <motion.div
-                                        animate={{ rotate: 360 }}
-                                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                                        className="w-16 h-16 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center"
-                                    >
-                                        <Clock className="w-8 h-8 text-orange-500" />
-                                    </motion.div>
-                                    <div className="text-center space-y-2">
-                                        <p className="text-lg font-medium text-white">Fetching exhibitors from database...</p>
-                                        <p className="text-sm opacity-60">Please wait while we load the data</p>
-                                    </div>
-                                    <div className="flex gap-2 mt-4">
-                                        {Array.from({ length: 3 }).map((_, i) => (
-                                            <motion.div
-                                                key={i}
-                                                className="w-2 h-2 rounded-full bg-orange-500/50"
-                                                animate={{
-                                                    scale: [1, 1.2, 1],
-                                                    opacity: [0.5, 1, 0.5],
-                                                }}
-                                                transition={{
-                                                    duration: 1.5,
-                                                    repeat: Infinity,
-                                                    delay: i * 0.2,
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : exhibitors.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
-                                    <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
-                                        <Users className="w-8 h-8 opacity-40" />
-                                    </div>
-                                    <p className="text-lg font-medium">No exhibitors found</p>
-                                    <p className="text-sm opacity-60">There are no exhibitors linked to this event.</p>
-                                </div>
-                            ) : (() => {
-                                // Filter exhibitors based on search
-                                const getValue = (val: any) => {
-                                    if (!val) return '';
-                                    if (typeof val === 'object') return val.display_value || val.value || '';
-                                    return String(val);
-                                };
+                    </div>
+                )}
 
-                                const filteredExhibitors = exhibitors.filter((item: any) => {
-                                    if (!exhibitorSearch.trim()) return true;
-                                    
-                                    const searchLower = exhibitorSearch.toLowerCase().trim();
-                                    const companyName = getValue(item.Company).toLowerCase();
-                                    const booth = getValue(item.Booth_No).toLowerCase();
-                                    const country = getValue(item.Country).toLowerCase();
-                                    
-                                    return companyName.includes(searchLower) || 
-                                           booth.includes(searchLower) || 
-                                           country.includes(searchLower);
-                                });
+                {/* Note */}
+                {note && (
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-600/70">Note</p>
+                        <p className="text-sm leading-relaxed text-zinc-700">{String(note)}</p>
+                    </div>
+                )}
 
-                                if (filteredExhibitors.length === 0) {
-                                    return (
-                                        <div className="flex flex-col items-center justify-center py-12 text-zinc-500 gap-3">
-                                            <Search className="w-8 h-8 opacity-40" />
-                                            <p className="text-sm font-medium">No exhibitors found</p>
-                                            <p className="text-xs opacity-60">
-                                                {exhibitorSearch.trim() ? 'Try adjusting your search terms' : 'There are no exhibitors linked to this event.'}
-                                            </p>
-                                        </div>
-                                    );
-                                }
-
-                                return (
-                                    <div className="grid grid-cols-1 gap-3">
-                                        {filteredExhibitors.map((item: any) => {
-                                            // Helper to safely get display value from any field
-                                            const getDisplayValue = (val: any) => {
-                                                if (!val) return null;
-                                                if (typeof val === 'object') return val.display_value || val.value || JSON.stringify(val);
-                                                return val;
-                                            };
-
-                                            const companyName = getDisplayValue(item.Company);
-                                            const booth = getDisplayValue(item.Booth_No);
-                                            const year = getDisplayValue(item.Attended_year1);
-                                            const size = getDisplayValue(item.last_edition_booth_sqm);
-                                            const country = getDisplayValue(item.Country);
-                                            const websiteUrl = item.Website?.url || item.Website;
-
-                                        return (
-                                            <div key={item.ID} className="group p-4 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-orange-500/20 rounded-xl transition-all duration-300 flex items-center justify-between">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800 text-zinc-400 border border-white/10">
-                                                        <Building2 className="w-4 h-4" />
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="text-white font-medium group-hover:text-orange-400 transition-colors">
-                                                            {companyName || 'Unknown Company'}
-                                                        </h4>
-                                                        <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
-                                                            {booth && <span className="flex items-center gap-1">Booth: {booth}</span>}
-                                                            <span className="flex items-center gap-1">Year: {year || 'Not available'}</span>
-                                                            {size && <span className="flex items-center gap-1">Size: {size} sqm</span>}
-                                                            {country && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {country}</span>}
-                                                            {websiteUrl && (
-                                                                <a href={websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-orange-400 transition-colors" onClick={(e) => e.stopPropagation()}>
-                                                                    <Globe className="w-3 h-3" /> Website
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            );
-                        })()}
-                        </div>
-                    )}
-                </div>
-
-                {/* Actions Footer */}
-                <div className="p-6 border-t border-white/5 bg-zinc-900/90 backdrop-blur-xl flex gap-4 sticky bottom-0 z-20 rounded-b-2xl">
+                {/* Actions */}
+                <div className="flex gap-3 border-t border-zinc-100 pt-5">
                     <Button
                         onClick={() => onEdit(data)}
                         variant="secondary"
-                        className="flex-1 h-12 text-base font-medium glass-button"
-                        leftIcon={<Edit2 className="w-4 h-4" />}
+                        className="flex-1 h-11 rounded-xl border-zinc-200 font-semibold text-zinc-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                        leftIcon={<Edit2 className="h-4 w-4" />}
                     >
                         Edit Record
                     </Button>
                     <Button
                         onClick={() => {
                             if (confirm('Are you sure you want to delete this record?')) {
-                                onDelete(data.ID);
+                                onDelete(id);
                                 onClose();
                             }
                         }}
-                        className="flex-1 h-12 text-base font-medium bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 hover:border-red-500/30"
-                        leftIcon={<Trash2 className="w-4 h-4" />}
-                        disabled
+                        className="h-11 rounded-xl border border-red-100 bg-red-50 px-5 font-semibold text-red-600 hover:bg-red-100 hover:text-red-700"
+                        leftIcon={<Trash2 className="h-4 w-4" />}
                     >
                         Delete
                     </Button>
                 </div>
             </div>
-        </Modal >
+        </Modal>
     );
 };

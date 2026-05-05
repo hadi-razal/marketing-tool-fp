@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin, Calendar, Globe, LayoutGrid, ArrowUpDown, ChevronDown, RefreshCw, FileSpreadsheet
+    FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin, Calendar, Globe, LayoutGrid, ArrowUpDown, ChevronDown, RefreshCw, FileSpreadsheet, ImagePlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ import { LeadDetailModal } from './LeadDetailModal';
 import { CompanyCardSkeleton } from './CompanyCardSkeleton';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { databaseService, SavedPerson } from '@/services/databaseService';
-import { zohoApi } from '@/lib/zoho';
+import { createClient } from '@/lib/supabase';
 import { DatabaseShowDetailModal } from './DatabaseShowDetailModal';
 import { SpreadsheetImportModal, type SpreadsheetImportProgress } from './SpreadsheetImportModal';
 import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
@@ -25,10 +25,12 @@ interface DatabasePageProps {
 }
 
 export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
+    const supabase = createClient();
     const [activeView, setActiveView] = useState<'people' | 'companies' | 'shows'>('people');
     const [people, setPeople] = useState<SavedPerson[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
     const [shows, setShows] = useState<any[]>([]);
+    const [showLocalImages, setShowLocalImages] = useState<Record<string, string>>({});
     const [showsLoading, setShowsLoading] = useState(false);
     const [showsView, setShowsView] = useState<'grid' | 'calendar'>('grid');
     const [showsSort, setShowsSort] = useState<'name' | 'date' | 'country'>('name');
@@ -68,6 +70,18 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
     const [spreadsheetImport, setSpreadsheetImport] = useState<null | 'people' | 'companies' | 'shows'>(null);
 
+    useEffect(() => {
+        return () => {
+            Object.values(showLocalImages).forEach((url) => {
+                try {
+                    URL.revokeObjectURL(url);
+                } catch {
+                    // ignore local URL cleanup errors
+                }
+            });
+        };
+    }, [showLocalImages]);
+
     // Fetch data on mount
     useEffect(() => {
         const fetchData = async () => {
@@ -93,66 +107,75 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const fetchShows = useCallback(async () => {
         setShowsLoading(true);
         try {
-            const allShows: any[] = [];
-            let from = 0;
-            const limit = 200;
-            let hasMore = true;
-
-            while (hasMore) {
-                const res = await zohoApi.getRecords('Show_List', undefined, from, limit);
-                if (res.code === 3000 && res.data && res.data.length > 0) {
-                    allShows.push(...res.data);
-                    from += limit;
-                    if (res.data.length < limit) {
-                        hasMore = false;
-                    }
-                } else {
-                    hasMore = false;
-                }
-            }
-            setShows(allShows);
+            const { data, error } = await supabase
+                .from('shows')
+                .select('*')
+                .order('id', { ascending: false });
+            if (error) throw error;
+            const normalized = (data || []).map((row: any) => ({
+                ...row,
+                id: row.id ?? row.ID,
+                name: row.name ?? row.Event_Name ?? row.Event ?? row.Name ?? '',
+                event_type: row.event_type ?? row.Event_Type ?? '',
+                starting_date: row.starting_date ?? row.Starting_Date ?? null,
+                industry: row.industry ?? row.Industry ?? '',
+                level: row.level ?? row.Level ?? '',
+                world_area: row.world_area ?? row.World_Area ?? '',
+                country: row.country ?? row.Country ?? '',
+                city: row.city ?? row.City ?? '',
+                frequency: row.frequency ?? row.Frequency ?? '',
+                exhibitor_list: row.exhibitor_list ?? row.Exhibitor_List ?? null,
+                exhibitor_list_link: row.exhibitor_list_link ?? row.Exhibitor_List_Link ?? null,
+                floorplan_file: row.floorplan_file ?? row.Floorplan ?? null,
+                floorplan_link: row.floorplan_link ?? row.Floorplan_Link ?? null,
+                organiser: row.organiser ?? row.Organiser ?? '',
+                note: row.note ?? row.Note ?? row.Note1 ?? '',
+                tags: row.tags ?? row.Tags ?? '',
+            }));
+            setShows(normalized);
         } catch (error) {
             console.error('Failed to fetch shows:', error);
             setShows([]);
+            notify('Failed to load shows from Supabase', 'error');
         } finally {
             setShowsLoading(false);
         }
-    }, []);
+    }, [supabase, notify]);
 
     useEffect(() => {
-        if (activeView === 'shows' && shows.length === 0) {
+        if (activeView === 'shows') {
             fetchShows();
         }
-    }, [activeView, shows.length, fetchShows]);
+    }, [activeView, fetchShows]);
 
     const filteredShows = useMemo(() => {
         let result = shows;
         if (dbSearch) {
             const q = dbSearch.toLowerCase();
             result = result.filter((s: any) =>
-                (s.Event || s.Event_Name || s.Name || '').toLowerCase().includes(q) ||
-                (s.City || '').toLowerCase().includes(q) ||
-                (s.Country || '').toLowerCase().includes(q) ||
-                (s.Industry || '').toLowerCase().includes(q)
+                (s.name || '').toLowerCase().includes(q) ||
+                (s.city || '').toLowerCase().includes(q) ||
+                (s.country || '').toLowerCase().includes(q) ||
+                (s.industry || '').toLowerCase().includes(q)
             );
         }
         if (filters.showCountry) {
-            result = result.filter((s: any) => s.Country === filters.showCountry);
+            result = result.filter((s: any) => s.country === filters.showCountry);
         }
         if (filters.showWorldArea) {
-            result = result.filter((s: any) => s.World_Area === filters.showWorldArea);
+            result = result.filter((s: any) => s.world_area === filters.showWorldArea);
         }
         if (filters.showExhibitorsOnly) {
-            result = result.filter((s: any) => Boolean(s.Exhibitor_List_Link) || Boolean(s.Exhibitor_List) || Boolean(s.Last_edition_n_Exhibitors));
+            result = result.filter((s: any) => Boolean(s.exhibitor_list_link) || Boolean(s.exhibitor_list));
         }
         if (filters.showFloorplanOnly) {
-            result = result.filter((s: any) => Boolean(s.Floorplan_Link) || Boolean(s.Floorplan) || Boolean(s.Has_Floorplan));
+            result = result.filter((s: any) => Boolean(s.floorplan_link) || Boolean(s.floorplan_file));
         }
 
         return [...result].sort((a: any, b: any) => {
-            if (showsSort === 'name') return (a.Event || a.Event_Name || a.Name || '').localeCompare(b.Event || b.Event_Name || b.Name || '');
-            if (showsSort === 'date') return (a.Starting_Date || '').localeCompare(b.Starting_Date || '');
-            if (showsSort === 'country') return (a.Country || '').localeCompare(b.Country || '');
+            if (showsSort === 'name') return (a.name || '').localeCompare(b.name || '');
+            if (showsSort === 'date') return (a.starting_date || '').localeCompare(b.starting_date || '');
+            if (showsSort === 'country') return (a.country || '').localeCompare(b.country || '');
             return 0;
         });
     }, [shows, dbSearch, showsSort, filters]);
@@ -267,18 +290,34 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         setIsShowDetailsOpen(true);
     };
 
+    const setLocalShowImage = (showId: string, file: File | null) => {
+        if (!file) return;
+        const objectUrl = URL.createObjectURL(file);
+        setShowLocalImages((prev) => {
+            const existing = prev[showId];
+            if (existing) {
+                try {
+                    URL.revokeObjectURL(existing);
+                } catch {
+                    // ignore
+                }
+            }
+            return { ...prev, [showId]: objectUrl };
+        });
+    };
+
     const uniqueIndustries = useMemo(() => {
         const industries = new Set(companies.map(c => c.industry).filter(Boolean));
         return Array.from(industries).sort();
     }, [companies]);
 
     const uniqueCountries = useMemo(() => {
-        const countries = new Set(shows.map((s: any) => s.Country).filter(Boolean));
+        const countries = new Set(shows.map((s: any) => s.country).filter(Boolean));
         return Array.from(countries).sort();
     }, [shows]);
 
     const uniqueWorldAreas = useMemo(() => {
-        const areas = new Set(shows.map((s: any) => s.World_Area).filter(Boolean));
+        const areas = new Set(shows.map((s: any) => s.world_area).filter(Boolean));
         return Array.from(areas).sort();
     }, [shows]);
 
@@ -386,19 +425,38 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         }
         onProgress?.({ current: 0, total: payloads.length });
         let ok = 0;
+        const { data: maxIdRows } = await supabase
+            .from('shows')
+            .select('id')
+            .order('id', { ascending: false })
+            .limit(1);
+        let nextId = Number(maxIdRows?.[0]?.id || 0);
         for (let i = 0; i < payloads.length; i++) {
             const payload = payloads[i];
             try {
-                const res = await zohoApi.addRecord('Show_Details', payload);
-                if (res && res.code === 3000) ok++;
+                nextId += 1;
+                const row = {
+                    id: nextId,
+                    name: payload.Event_Name || payload.Event || payload.Name || '',
+                    event_type: payload.Event_Type || '',
+                    starting_date: payload.Starting_Date || null,
+                    industry: payload.Industry || '',
+                    level: payload.Level || '',
+                    world_area: payload.World_Area || '',
+                    country: payload.Country || '',
+                    city: payload.City || '',
+                    frequency: payload.Frequency || '',
+                };
+                const { error } = await supabase.from('shows').insert(row);
+                if (!error) ok++;
             } catch (e) {
                 console.error(e);
             }
             onProgress?.({ current: i + 1, total: payloads.length });
         }
         await fetchShows();
-        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Zoho from spreadsheet.`, meta?.comment);
-        toast.success(`Created ${ok} of ${payloads.length} shows in Zoho${meta?.comment?.trim() ? ' · note saved' : ''}`);
+        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
 
     return (
@@ -767,12 +825,17 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         ) : showsView === 'grid' ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 pb-20">
                                 {filteredShows.map((show: any, idx: number) => {
-                                    const showName = show.Event || show.Event_Name || show.Name || 'Unnamed Show';
-                                    const city = show.City || '';
-                                    const country = show.Country || '';
-                                    const industry = show.Industry || '';
-                                    const startDate = show.Starting_Date || '';
+                                    const showId = String(show.id ?? idx);
+                                    const showName = show.name || 'Unnamed Show';
+                                    const city = show.city || '';
+                                    const country = show.country || '';
+                                    const industry = show.industry || '';
+                                    const eventType = show.event_type || '';
+                                    const organiser = show.organiser || '';
+                                    const note = show.note || '';
+                                    const startDate = show.starting_date || '';
                                     const location = [city, country].filter(Boolean).join(', ');
+                                    const coverImage = showLocalImages[showId];
                                     let dateShort = '';
                                     if (startDate) {
                                         try {
@@ -789,7 +852,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
                                     return (
                                         <motion.div
-                                            key={show.ID || idx}
+                                            key={show.id || idx}
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: Math.min(idx * 0.04, 0.3) }}
@@ -805,10 +868,41 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                         openShowDetails(show);
                                                     }
                                                 }}
-                                                className="flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm outline-none transition-colors duration-200 hover:border-zinc-300 hover:bg-zinc-50/30 focus-visible:ring-2 focus-visible:ring-orange-400/35 focus-visible:ring-offset-2"
+                                                className="flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm outline-none transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-lg hover:shadow-zinc-950/8 focus-visible:ring-2 focus-visible:ring-orange-400/35 focus-visible:ring-offset-2"
                                             >
+                                                <div className="relative h-36 w-full overflow-hidden border-b border-zinc-200 bg-linear-to-br from-zinc-100 via-zinc-50 to-orange-50">
+                                                    {coverImage ? (
+                                                        <img
+                                                            src={coverImage}
+                                                            alt={showName}
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-full items-center justify-center px-6 text-center text-[11px] font-semibold text-zinc-400">
+                                                            Add a local image preview for this show
+                                                        </div>
+                                                    )}
+                                                    <label
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="absolute right-3 top-3 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-1.5 text-[10px] font-bold text-zinc-700 shadow-sm transition-colors hover:bg-white"
+                                                    >
+                                                        <ImagePlus className="h-3.5 w-3.5" />
+                                                        Image
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            className="hidden"
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                const file = e.target.files?.[0] || null;
+                                                                setLocalShowImage(showId, file);
+                                                                e.currentTarget.value = '';
+                                                            }}
+                                                        />
+                                                    </label>
+                                                </div>
                                                 <div className="flex flex-1 flex-col p-5">
-                                                    <div className="mb-4 flex items-start justify-between gap-2">
+                                                    <div className="mb-3 flex items-start justify-between gap-2">
                                                         {dateShort ? (
                                                             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
                                                                 <Calendar className="h-3 w-3 text-zinc-400" />
@@ -820,19 +914,36 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                                 Date TBC
                                                             </span>
                                                         )}
-                                                        {industry && (
-                                                            <span className="max-w-[45%] truncate text-[9px] font-bold uppercase tracking-wider text-zinc-500">
-                                                                {industry}
-                                                            </span>
-                                                        )}
                                                     </div>
                                                     <h3 className="line-clamp-2 min-h-10 text-base font-semibold leading-snug text-zinc-950">
                                                         {showName}
                                                     </h3>
+                                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                                        {industry && (
+                                                            <span className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
+                                                                {industry}
+                                                            </span>
+                                                        )}
+                                                        {eventType && (
+                                                            <span className="inline-flex rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                                                                {eventType}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {location && (
                                                         <p className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500">
                                                             <MapPin className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
                                                             <span className="line-clamp-2">{location}</span>
+                                                        </p>
+                                                    )}
+                                                    {organiser && (
+                                                        <p className="mt-2 text-xs text-zinc-500">
+                                                            Organizer: <span className="font-medium text-zinc-700">{organiser}</span>
+                                                        </p>
+                                                    )}
+                                                    {note && (
+                                                        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-500">
+                                                            {note}
                                                         </p>
                                                     )}
                                                 </div>
@@ -846,7 +957,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                 {(() => {
                                     const months: Record<string, any[]> = {};
                                     filteredShows.forEach((show: any) => {
-                                        const raw = show.Starting_Date || '';
+                                        const raw = show.starting_date || '';
                                         let key = 'No Date';
                                         if (raw) {
                                             try {
@@ -896,8 +1007,8 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
                                     return sortedMonthEntries.map(([month, items]) => {
                                         const sortedItems = [...items].sort((a: any, b: any) => {
-                                            const ta = a.Starting_Date ? new Date(a.Starting_Date).getTime() : 0;
-                                            const tb = b.Starting_Date ? new Date(b.Starting_Date).getTime() : 0;
+                                            const ta = a.starting_date ? new Date(a.starting_date).getTime() : 0;
+                                            const tb = b.starting_date ? new Date(b.starting_date).getTime() : 0;
                                             return ta - tb;
                                         });
                                         const isThisMonth = month === currentMonthKey;
@@ -939,11 +1050,11 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                                     <div className="relative space-y-2">
                                                         <div className="pointer-events-none absolute left-[22px] top-2 bottom-2 w-px bg-zinc-100 sm:left-[26px]" />
                                                         {sortedItems.map((show: any, i: number) => {
-                                                            const showName = show.Event || show.Event_Name || show.Name || 'Unnamed Show';
-                                                            const city = show.City || '';
-                                                            const country = show.Country || '';
-                                                            const industry = show.Industry || '';
-                                                            const startDate = show.Starting_Date || '';
+                                                            const showName = show.name || 'Unnamed Show';
+                                                            const city = show.city || '';
+                                                            const country = show.country || '';
+                                                            const industry = show.industry || '';
+                                                            const startDate = show.starting_date || '';
                                                             const location = [city, country].filter(Boolean).join(', ');
                                                             let dayNum = '';
                                                             let weekDay = '';
@@ -959,7 +1070,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
                                                             return (
                                                                 <div
-                                                                    key={show.ID || i}
+                                                                    key={show.id || i}
                                                                     className="group relative flex gap-3 pl-0 sm:gap-4"
                                                                 >
                                                                     <div className="relative z-10 flex w-12 shrink-0 flex-col items-center sm:w-14">
@@ -1143,7 +1254,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 <SpreadsheetImportModal
                     isOpen
                     onClose={() => setSpreadsheetImport(null)}
-                    title="Import shows to Zoho (CSV / Excel)"
+                    title="Import shows (CSV / Excel)"
                     columnHint={
                         <>
                             Required: <strong>Event_Name</strong> (or Event / Name / Show). Optional: Event_Type, Starting_Date

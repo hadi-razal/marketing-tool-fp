@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Database, LayoutDashboard, CloudLightning, LogOut, Settings, X, Menu, CheckSquare, BarChart2, Sparkles } from 'lucide-react';
+import { Search, Database, LayoutDashboard, LogOut, Settings, X, Menu, CheckSquare, BarChart2, Sparkles, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/Button';
 import Link from 'next/link';
@@ -42,12 +42,12 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
     }, []);
 
     const navItems = [
+        { id: 'shows', icon: Calendar, label: 'Shows', href: '/shows' },
         { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
         { id: 'search', icon: Search, label: 'Search', href: '/search' },
         { id: 'database', icon: Database, label: 'Database', href: '/database' },
         { id: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/tasks' },
         // { id: 'ai', icon: Sparkles, label: 'Fairplatz AI', href: '/ai' }, // Removed
-        { id: 'zoho', icon: CloudLightning, label: 'Zoho (Legacy)', href: '/zoho' },
     ];
 
     const bottomItems = [

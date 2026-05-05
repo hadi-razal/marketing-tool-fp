@@ -3,7 +3,7 @@ import { Save, Calendar, Globe, MapPin, Layers, Hash } from 'lucide-react';
 import { SoftInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { zohoApi } from '@/lib/zoho';
+import { createClient } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { INDUSTRIES } from '@/lib/industries';
 
@@ -15,6 +15,7 @@ interface ShowFormModalProps {
 }
 
 export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, onSuccess, initialData }) => {
+    const supabase = createClient();
     const [formData, setFormData] = useState({
         Event_Name: '',
         Event_Type: '',
@@ -28,7 +29,6 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
     });
     const [loading, setLoading] = useState(false);
 
-    // Helper to extract value from Zoho field (handles objects, arrays, etc.)
     const extractValue = (val: any): string => {
         if (!val) return '';
         if (typeof val === 'string') return val;
@@ -57,43 +57,8 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
         }
     };
 
-    // Helper to format date for Zoho API
-    // Zoho Creator expects dates in dd-MMM-yyyy format (e.g., "01-Jan-2024")
-    // Based on the field properties showing format "dd-MMM-yyyy"
-    const formatDateForZoho = (dateStr: string): string | undefined => {
-        if (!dateStr || dateStr.trim() === '') return undefined;
-        
-        try {
-            let date: Date;
-            
-            // If already in YYYY-MM-DD format (from date input), parse it
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-                const [year, month, day] = dateStr.split('-').map(Number);
-                // Create date using local timezone to avoid shifts
-                date = new Date(year, month - 1, day);
-            } else {
-                // Try to parse other formats
-                date = new Date(dateStr);
-            }
-            
-            if (isNaN(date.getTime())) return undefined;
-            
-            // Format as dd-MMM-yyyy (e.g., "01-Jan-2024")
-            const day = String(date.getDate()).padStart(2, '0');
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[date.getMonth()];
-            const year = date.getFullYear();
-            
-            return `${day}-${month}-${year}`;
-        } catch {
-            return undefined;
-        }
-    };
-
     useEffect(() => {
-        // Reset form when modal opens/closes or initialData changes
         if (!isOpen) {
-            // Reset form when modal closes
             setFormData({
                 Event_Name: '',
                 Event_Type: '',
@@ -108,20 +73,17 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
             return;
         }
         
-        // When modal opens, initialize form with initialData immediately
-        // No delay needed - React will handle the state update properly
         if (initialData) {
-            // Map Zoho fields to form fields, handling different field name variations
             setFormData({
-                Event_Name: extractValue(initialData.Event_Name || initialData.Event || initialData.Name || ''),
+                Event_Name: extractValue(initialData.name || initialData.Event_Name || initialData.Event || initialData.Name || ''),
                 Event_Type: extractValue(initialData.Event_Type || initialData.Type || ''),
-                Starting_Date: formatDateForInput(initialData.Starting_Date || initialData.Date || ''),
-                Industry: extractValue(initialData.Industry || ''),
-                Level: extractValue(initialData.Level || ''),
-                World_Area: extractValue(initialData.World_Area || initialData.Area || ''),
-                Country: extractValue(initialData.Country || ''),
-                City: extractValue(initialData.City || ''),
-                Frequency: extractValue(initialData.Frequency || '')
+                Starting_Date: formatDateForInput(initialData.Starting_Date || initialData.starting_date || initialData.Date || ''),
+                Industry: extractValue(initialData.industry || initialData.Industry || ''),
+                Level: extractValue(initialData.level || initialData.Level || ''),
+                World_Area: extractValue(initialData.World_Area || initialData.world_area || initialData.Area || ''),
+                Country: extractValue(initialData.country || initialData.Country || ''),
+                City: extractValue(initialData.city || initialData.City || ''),
+                Frequency: extractValue(initialData.frequency || initialData.Frequency || '')
             });
         } else {
             setFormData({
@@ -139,77 +101,37 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
     }, [initialData, isOpen]);
 
     const handleSubmit = async () => {
-        // Prevent submission if we're in edit mode but don't have initialData or ID
-        if (isOpen && initialData && !initialData.ID) {
-            console.error('Edit mode but no ID found:', initialData);
-            toast.error('Cannot update: Record ID is missing');
-            return;
-        }
-        
         setLoading(true);
         try {
-            // Prepare data for submission - ensure all fields are strings or empty strings
-            const submitData: any = {
-                Event_Name: formData.Event_Name || '',
-                Event_Type: formData.Event_Type || '',
-                Industry: formData.Industry || '',
-                Level: formData.Level || '',
-                World_Area: formData.World_Area || '',
-                Country: formData.Country || '',
-                City: formData.City || '',
-                Frequency: formData.Frequency || ''
+            const submitData = {
+                name: formData.Event_Name || '',
+                event_type: formData.Event_Type || '',
+                starting_date: formData.Starting_Date || null,
+                industry: formData.Industry || '',
+                level: formData.Level || '',
+                world_area: formData.World_Area || '',
+                country: formData.Country || '',
+                city: formData.City || '',
+                frequency: formData.Frequency || '',
             };
 
-            // Format date for Zoho (dd-MMM-yyyy format)
-            const formattedDate = formatDateForZoho(formData.Starting_Date);
-            if (formattedDate) {
-                submitData.Starting_Date = formattedDate;
-            }
-
-            // Remove empty fields to avoid sending unnecessary data
-            Object.keys(submitData).forEach(key => {
-                if (submitData[key] === '') {
-                    delete submitData[key];
+            const recordId = initialData?.id || initialData?.ID || null;
+            if (recordId) {
+                const updateRes = await supabase.from('shows').update(submitData).eq('id', recordId);
+                if (updateRes.error) {
+                    const fallbackRes = await supabase.from('shows').update(submitData).eq('ID', recordId);
+                    if (fallbackRes.error) throw fallbackRes.error;
                 }
-            });
-
-            // Check if this is an update (has ID) or new record
-            if (initialData?.ID) {
-                const recordId = initialData.ID;
-                // Use Show_List report name (matches what's used for fetching/deleting)
-                console.log('Updating record:', recordId, 'with data:', submitData);
-                const updateResult = await zohoApi.updateRecord('Show_List', recordId, submitData);
-                console.log('Update result:', updateResult);
-                
-                // Verify the update was successful
-                if (updateResult.code === 3000 || updateResult.code === 3001) {
-                    toast.success('Show updated successfully');
-                    // Wait a moment for Zoho to process the update before refreshing
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    onSuccess();
-                    onClose();
-                } else {
-                    throw new Error('Update failed: ' + (updateResult.error || 'Unknown error'));
-                }
+                toast.success('Show updated successfully');
             } else {
-                console.log('Adding new record with data:', submitData);
-                await zohoApi.addRecord('Show_Details', submitData);
+                const insertRes = await supabase.from('shows').insert({ ...submitData, id: crypto.randomUUID() });
+                if (insertRes.error) throw insertRes.error;
                 toast.success('Show created successfully');
-                onSuccess();
-                onClose();
             }
+            onSuccess();
+            onClose();
         } catch (error: any) {
-            // Extract detailed error message from Zoho API response
-            let errorMessage = 'Failed to save record';
-            if (error?.message) {
-                errorMessage = error.message;
-            } else if (error?.error) {
-                errorMessage = typeof error.error === 'string' ? error.error : JSON.stringify(error.error);
-            } else if (typeof error === 'string') {
-                errorMessage = error;
-            }
-            
-            toast.error(errorMessage);
+            toast.error(error?.message || 'Failed to save show');
             console.error('Show save error details:', error);
         } finally {
             setLoading(false);

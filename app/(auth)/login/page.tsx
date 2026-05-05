@@ -55,7 +55,7 @@ export default function LoginPage() {
         try {
             const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
             if (error) throw error;
-            router.push('/dashboard');
+            router.push('/shows');
             router.refresh();
         } catch (err: any) {
             const msg = err.message || 'Failed to login';

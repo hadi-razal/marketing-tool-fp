@@ -11,9 +11,9 @@ import {
     FileText,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
-import { getZohoConfig } from '@/lib/zoho';
+import { Globe } from 'lucide-react';
 
-/** Normalises Zoho link fields (string or { url }) for display. */
+/** Normalises link fields (string or { url }) for display. */
 function linkValue(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw === 'object' && 'url' in (raw as object)) {
@@ -49,16 +49,16 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
 }) => {
     if (!isOpen || !show) return null;
 
-    const title = String(show.Event || show.Event_Name || show.Name || 'Show');
-    const startLabel = formatEventDate(show.Starting_Date as string | undefined);
-    const city = show.City ? String(show.City) : '';
-    const country = show.Country ? String(show.Country) : '';
-    const worldArea = show.World_Area ? String(show.World_Area) : '';
+    const title = String(show.name || show.Event || show.Event_Name || show.Name || 'Show');
+    const startLabel = formatEventDate((show.starting_date || show.Starting_Date) as string | undefined);
+    const city = show.city ? String(show.city) : (show.City ? String(show.City) : '');
+    const country = show.country ? String(show.country) : (show.Country ? String(show.Country) : '');
+    const worldArea = show.world_area ? String(show.world_area) : (show.World_Area ? String(show.World_Area) : '');
     const location = [city, country, worldArea].filter(Boolean).join(', ');
-    const level = show.Level ? String(show.Level) : '';
-    const exhibitorList = linkValue(show.Exhibitor_List_Link);
-    const floorplanLink = linkValue(show.Floorplan_Link);
-    const floorplanRaw = show.Floorplan;
+    const level = show.level ? String(show.level) : (show.Level ? String(show.Level) : '');
+    const exhibitorList = linkValue(show.exhibitor_list_link || show.Exhibitor_List_Link);
+    const floorplanLink = linkValue(show.floorplan_link || show.Floorplan_Link);
+    const floorplanRaw = show.floorplan_file || show.Floorplan;
     const floorplanFileUrl =
         linkValue(floorplanRaw) ||
         (typeof floorplanRaw === 'string' && floorplanRaw.trim() ? floorplanRaw : null);
@@ -66,59 +66,22 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
     const logoUrl =
         typeof show.Event_logo === 'string' && show.Event_logo ? show.Event_logo : null;
 
-    const idLabel = show.ID != null ? String(show.ID) : null;
-
-    const handleFloorplanDownload = async (fileUrl: string) => {
-        try {
-            const config = getZohoConfig();
-            let downloadUrl = fileUrl;
-            if (fileUrl.startsWith('/api/v2/')) {
-                downloadUrl = `https://creator.zoho.com${fileUrl}`;
-            } else if (!fileUrl.startsWith('http')) {
-                downloadUrl = `https://creator.zoho.com/api/v2/${config.ownerName}/${config.appLinkName}/report/Show_List/${show.ID}/Floorplan/download?filepath=${fileUrl}`;
-            }
-            let filename = 'floorplan.pdf';
-            try {
-                const urlObj = new URL(downloadUrl);
-                const fp = urlObj.searchParams.get('filepath');
-                if (fp) {
-                    filename = fp.split('/').pop() || fp.split('\\').pop() || filename;
-                }
-            } catch {
-                /* use default */
-            }
-            const response = await fetch('/api/zoho/proxy-v2', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: downloadUrl,
-                    method: 'GET',
-                    headers: {},
-                }),
-            });
-            if (!response.ok) {
-                throw new Error(`Download failed: ${response.status}`);
-            }
-            const blob = await response.blob();
-            const href = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = href;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(href);
-            document.body.removeChild(a);
-        } catch (e) {
-            console.error(e);
-            alert(`Download failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
-        }
-    };
+    const idLabel = show.id != null ? String(show.id) : (show.ID != null ? String(show.ID) : null);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl" title={null}>
+        <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl" hideHeader>
             <div className="flex flex-col bg-white rounded-3xl overflow-hidden">
                 {/* Minimal Header */}
-                <div className="px-6 sm:px-10 pt-10 pb-8 border-b border-zinc-100">
+                <div className="relative px-6 sm:px-10 pt-10 pb-8 border-b border-zinc-100 bg-linear-to-br from-white via-zinc-50 to-orange-50/50">
+                    <button
+                        onClick={onClose}
+                        className="absolute right-5 top-5 rounded-full border border-zinc-200 bg-white p-2 text-zinc-500 transition-colors hover:text-zinc-900 hover:border-orange-200 hover:bg-orange-50"
+                        aria-label="Close modal"
+                    >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                    </button>
                     <div className="flex flex-col sm:flex-row gap-6 items-start">
                         {logoUrl ? (
                             <motion.div
@@ -189,19 +152,28 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
 
                 {(exhibitorList || floorplanLink || floorplanFileUrl) && (
                     <div className="px-6 sm:px-10 py-8">
-                        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400 mb-4">
-                            Quick links
-                        </h4>
+                        <div className="mb-4 flex items-end justify-between">
+                            <h4 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+                                Quick links
+                            </h4>
+                            <span className="text-[10px] font-medium text-zinc-400">
+                                {[
+                                    exhibitorList ? 1 : 0,
+                                    floorplanLink ? 1 : 0,
+                                    floorplanFileUrl ? 1 : 0,
+                                ].reduce((a, b) => a + b, 0)} resources
+                            </span>
+                        </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                                 {exhibitorList && (
                                     <a
                                         href={exhibitorList || undefined}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="group flex items-center justify-between p-4 rounded-2xl border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition-colors"
+                                        className="group flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow-md transition-all"
                                     >
                                         <div className="flex items-center gap-4 min-w-0">
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-100 text-zinc-600 shadow-sm">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-200 text-zinc-700 shadow-sm">
                                                 <Link2 className="h-4 w-4 group-hover:text-zinc-900 transition-colors" />
                                             </div>
                                             <div className="min-w-0">
@@ -217,10 +189,10 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                                         href={floorplanLink || undefined}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="group flex items-center justify-between p-4 rounded-2xl border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition-colors"
+                                        className="group flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow-md transition-all"
                                     >
                                         <div className="flex items-center gap-4 min-w-0">
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-100 text-zinc-600 shadow-sm">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-200 text-zinc-700 shadow-sm">
                                                 <LayoutTemplateIcon />
                                             </div>
                                             <div className="min-w-0">
@@ -232,13 +204,14 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                                     </a>
                                 )}
                                 {floorplanFileUrl && (
-                                    <button
-                                        type="button"
-                                        onClick={() => void handleFloorplanDownload(floorplanFileUrl)}
-                                        className="group sm:col-span-2 flex items-center justify-between p-4 rounded-2xl border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition-colors text-left"
+                                    <a
+                                        href={floorplanFileUrl || undefined}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="group sm:col-span-2 flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow-md transition-all text-left"
                                     >
                                         <div className="flex items-center gap-4 min-w-0">
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-100 text-zinc-600 shadow-sm">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-200 text-zinc-700 shadow-sm">
                                                 <FileText className="h-4 w-4 group-hover:text-zinc-900 transition-colors" />
                                             </div>
                                             <div className="min-w-0">
@@ -247,7 +220,7 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                                             </div>
                                         </div>
                                         <Download className="h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors" />
-                                    </button>
+                                    </a>
                                 )}
                             </div>
                     </div>

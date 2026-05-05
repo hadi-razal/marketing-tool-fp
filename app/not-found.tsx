@@ -19,7 +19,7 @@ export default function NotFound() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
                 >
-                    <h1 className="text-[150px] font-bold leading-none bg-gradient-to-r from-white to-zinc-600 bg-clip-text text-transparent select-none">
+                    <h1 className="text-[150px] font-bold leading-none bg-linear-to-r from-white to-zinc-600 bg-clip-text text-transparent select-none">
                         404
                     </h1>
                 </motion.div>
@@ -51,17 +51,17 @@ export default function NotFound() {
                     </button>
 
                     <Link
-                        href="/dashboard"
+                        href="/shows"
                         className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 transition-all font-medium shadow-lg shadow-white/10 group"
                     >
                         <Home className="w-4 h-4" />
-                        Dashboard
+                        Shows
                     </Link>
                 </motion.div>
             </div>
 
             {/* Decorative Grid */}
-            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center mask-[linear-gradient(180deg,white,rgba(255,255,255,0))]" />
         </div>
     );
 }

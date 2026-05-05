@@ -10,9 +10,10 @@ interface ModalProps {
     children: React.ReactNode;
     className?: string;
     maxWidth?: string;
+    hideHeader?: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, className, maxWidth = "max-w-2xl" }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, className, maxWidth = "max-w-2xl", hideHeader = false }) => {
     return (
         <AnimatePresence>
             {isOpen && (
@@ -36,15 +37,17 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
                                 className
                             )}
                         >
-                            <div className="flex items-center justify-between p-6 border-b border-zinc-200 bg-zinc-50">
-                                <div className="text-xl font-bold text-zinc-950">{title}</div>
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 rounded-full hover:bg-orange-50 text-zinc-500 hover:text-zinc-950 transition-colors"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
+                            {!hideHeader && (
+                                <div className="flex items-center justify-between p-6 border-b border-zinc-200 bg-zinc-50">
+                                    <div className="text-xl font-bold text-zinc-950">{title}</div>
+                                    <button
+                                        onClick={onClose}
+                                        className="p-2 rounded-full hover:bg-orange-50 text-zinc-500 hover:text-zinc-950 transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            )}
 
                             <div className="overflow-y-auto custom-scrollbar">
                                 {children}

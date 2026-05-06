@@ -5,41 +5,47 @@ import {
     Plus,
     Search,
     Filter,
-    FileSpreadsheet,
     MapPin,
-    Calendar,
-    Layers,
     ArrowRight,
-    CalendarDays,
-    Globe2,
     Building2,
+    Globe2,
+    Users,
+    Activity
 } from 'lucide-react';
 import { FilterPopover, type FilterSelections, type FilterCategory } from './FilterPopover';
-import { ShowFormModal } from './ShowFormModal';
 import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
 import { toast } from 'sonner';
-import { SpreadsheetImportModal, type SpreadsheetImportProgress } from '@/components/SpreadsheetImportModal';
-import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
-import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
 import { createClient } from '@/lib/supabase';
+import { getBrandColor } from '@/lib/utils';
 
-export const ShowsTable = () => {
+const initialsFromName = (name: string) => {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const formatMoney = (amount?: number) => {
+    if (!amount) return '';
+    if (amount >= 1e9) return `$${(amount / 1e9).toFixed(1)}B`;
+    if (amount >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
+    if (amount >= 1e3) return `$${(amount / 1e3).toFixed(1)}K`;
+    return `$${amount}`;
+};
+
+export const CompaniesTable = () => {
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [fetchError, setFetchError] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedItem, setSelectedItem] = useState<any>(null);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(0);
     const LIMIT = 100;
-
-    const [importOpen, setImportOpen] = useState(false);
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [allFetchedData, setAllFetchedData] = useState<any[]>([]);
@@ -49,42 +55,11 @@ export const ShowsTable = () => {
     const [filterSelections, setFilterSelections] = useState<FilterSelections>({
         country: [],
         city: [],
-        event_type: [],
         industry: [],
-        level: [],
-        world_area: [],
-        frequency: [],
     });
 
     const totalActiveFilters = Object.values(filterSelections).reduce((s, a) => s + a.length, 0);
 
-    const normalizeShow = (row: any) => {
-        const id = row?.id ?? row?.ID ?? row?.show_id ?? row?.showId;
-        const eventName = row?.name ?? row?.event_name ?? row?.Event_Name ?? row?.event ?? row?.Event ?? row?.Name ?? '';
-        const eventType = row?.event_type ?? row?.Event_Type ?? row?.type ?? row?.Type ?? '';
-        const city = row?.city ?? row?.City ?? '';
-        const country = row?.country ?? row?.Country ?? '';
-        const industry = row?.industry ?? row?.Industry ?? '';
-        const level = row?.level ?? row?.Level ?? '';
-        const worldArea = row?.world_area ?? row?.World_Area ?? '';
-        const frequency = row?.frequency ?? row?.Frequency ?? '';
-
-        return {
-            ...row,
-            ID: String(id ?? ''),
-            Event_Name: eventName,
-            Event_Type: eventType,
-            City: city,
-            Country: country,
-            Industry: industry,
-            Level: level,
-            World_Area: worldArea,
-            Frequency: frequency,
-            __source: 'supabase',
-        };
-    };
-
-    /* ─── Extract unique filter options from all fetched data ── */
     const filterCategories: FilterCategory[] = useMemo(() => {
         const unique = (key: string) => {
             const set = new Set<string>();
@@ -96,13 +71,9 @@ export const ShowsTable = () => {
         };
 
         return [
-            { key: 'country', label: 'Country', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('Country') },
-            { key: 'city', label: 'City', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('City') },
-            { key: 'event_type', label: 'Event Type', icon: <Calendar className="h-3.5 w-3.5" />, options: unique('Event_Type') },
-            { key: 'industry', label: 'Industry', icon: <Building2 className="h-3.5 w-3.5" />, options: unique('Industry') },
-            { key: 'level', label: 'Level', icon: <Layers className="h-3.5 w-3.5" />, options: unique('Level') },
-            { key: 'world_area', label: 'World Area', icon: <Globe2 className="h-3.5 w-3.5" />, options: unique('World_Area') },
-            { key: 'frequency', label: 'Frequency', icon: <RefreshCw className="h-3.5 w-3.5" />, options: unique('Frequency') },
+            { key: 'country', label: 'Country', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('country') },
+            { key: 'city', label: 'City', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('city') },
+            { key: 'industry', label: 'Industry', icon: <Building2 className="h-3.5 w-3.5" />, options: unique('industry') },
         ].filter(c => c.options.length > 0);
     }, [allFetchedData]);
 
@@ -111,23 +82,24 @@ export const ShowsTable = () => {
         setFetchError('');
         try {
             const from = reset ? 0 : page * LIMIT;
-            const { data: rows, error: fetchErr } = await supabase
-                .from('shows')
+            let query = supabase
+                .from('companies')
                 .select('*')
-                .order('id', { ascending: false })
+                .order('created_at', { ascending: false })
                 .range(from, from + LIMIT - 1);
+
+            const { data: rows, error: fetchErr } = await query;
 
             if (fetchErr) throw fetchErr;
 
-            let normalized = (rows || []).map(normalizeShow);
+            let normalized = rows || [];
 
-            // Store all fetched data for extracting filter options
             if (reset) {
                 setAllFetchedData(normalized);
             } else {
                 setAllFetchedData(prev => {
-                    const uniqueItems = new Map(prev.map(item => [item.ID, item]));
-                    normalized.forEach(item => uniqueItems.set(item.ID, item));
+                    const uniqueItems = new Map(prev.map(item => [item.id, item]));
+                    normalized.forEach(item => uniqueItems.set(item.id, item));
                     return Array.from(uniqueItems.values());
                 });
             }
@@ -135,80 +107,63 @@ export const ShowsTable = () => {
             const trimmedSearch = searchTerm.trim().toLowerCase();
             if (trimmedSearch) {
                 normalized = normalized.filter((item) =>
-                    String(item.Event_Name || '').toLowerCase().includes(trimmedSearch),
+                    String(item.name || '').toLowerCase().includes(trimmedSearch) ||
+                    String(item.primary_domain || '').toLowerCase().includes(trimmedSearch)
                 );
             }
 
-            /* Apply quick region filter */
             if (quickRegion !== 'All') {
                 normalized = normalized.filter(item => {
-                    const country = String(item.Country || '').toLowerCase();
-                    const area = String(item.World_Area || '').toLowerCase();
+                    const country = String(item.country || '').toLowerCase();
                     if (quickRegion === 'UAE') return country.includes('united arab emirates') || country === 'uae';
                     if (quickRegion === 'KSA') return country.includes('saudi arabia') || country === 'ksa';
-                    if (quickRegion === 'Europe') return area.includes('europe');
+                    if (quickRegion === 'Europe') return country.includes('uk') || country.includes('germany') || country.includes('france') || country.includes('italy') || country.includes('spain') || country.includes('netherlands');
                     return true;
                 });
             }
 
-            /* Apply all active filters (AND across categories) */
-            const filterFieldMap: Record<string, string> = {
-                country: 'Country',
-                city: 'City',
-                event_type: 'Event_Type',
-                industry: 'Industry',
-                level: 'Level',
-                world_area: 'World_Area',
-                frequency: 'Frequency',
-            };
-            for (const [filterKey, selectedValues] of Object.entries(filterSelections)) {
-                if (selectedValues.length > 0) {
-                    const field = filterFieldMap[filterKey];
-                    if (field) {
-                        const selectedLower = selectedValues.map(v => v.toLowerCase());
-                        normalized = normalized.filter(item =>
-                            selectedLower.includes(String(item[field] || '').toLowerCase())
-                        );
-                    }
+            Object.entries(filterSelections).forEach(([key, selectedValues]) => {
+                if (selectedValues && selectedValues.length > 0) {
+                    normalized = normalized.filter(item => {
+                        const val = String(item[key] || '');
+                        return selectedValues.includes(val);
+                    });
                 }
-            }
+            });
 
             if (reset) {
                 setData(normalized);
                 setPage(1);
             } else {
-                setData((prev) => {
-                    const uniqueItems = new Map(prev.map((item) => [item.ID, item]));
-                    normalized.forEach((item: any) => uniqueItems.set(item.ID, item));
+                setData(prev => {
+                    const newItems = normalized;
+                    const uniqueItems = new Map(prev.map(item => [item.id, item]));
+                    newItems.forEach((item: any) => uniqueItems.set(item.id, item));
                     return Array.from(uniqueItems.values());
                 });
-                setPage((prev) => prev + 1);
+                setPage(p => p + 1);
             }
 
-            setHasMore((rows || []).length === LIMIT);
+            setHasMore(rows.length === LIMIT);
         } catch (err: any) {
-            console.error(err);
-            const message = err?.message || 'Failed to load shows from Supabase';
-            setFetchError(message);
-            if (reset) toast.error(message);
-            if (reset) setData([]);
-            setHasMore(false);
+            console.error('Fetch companies error:', err);
+            setFetchError(err.message || 'Failed to fetch companies');
         } finally {
             setLoading(false);
         }
     }, [page, filterSelections, quickRegion, supabase]);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
+        const handler = setTimeout(() => {
             setDebouncedSearch(search);
-        }, 500);
-        return () => clearTimeout(timer);
+        }, 300);
+        return () => clearTimeout(handler);
     }, [search]);
 
     useEffect(() => {
         setPage(0);
         fetchData(true, debouncedSearch);
-    }, [debouncedSearch, filterSelections, quickRegion]);
+    }, [debouncedSearch, filterSelections, quickRegion, fetchData]);
 
     const handleApplyFilters = (selections: FilterSelections) => {
         setFilterSelections(selections);
@@ -218,11 +173,7 @@ export const ShowsTable = () => {
         setFilterSelections({
             country: [],
             city: [],
-            event_type: [],
             industry: [],
-            level: [],
-            world_area: [],
-            frequency: [],
         });
     };
 
@@ -232,125 +183,18 @@ export const ShowsTable = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure?')) return;
-        try {
-            const primaryDelete = await supabase.from('shows').delete().eq('id', id);
-            if (primaryDelete.error) {
-                const fallbackDelete = await supabase.from('shows').delete().eq('ID', id);
-                if (fallbackDelete.error) throw fallbackDelete.error;
-            }
-            setData((prev) => prev.filter((item) => item.ID !== id));
-            toast.success('Show deleted');
-        } catch (err: any) {
-            toast.error(err?.message || 'Failed to delete show');
-        }
-    };
-
-    const handleEdit = (item: any) => {
-        setSelectedItem(item);
-        setIsModalOpen(true);
-    };
-
-    const handleUpdateSuccess = async () => {
-        await fetchData(true, debouncedSearch);
-    };
-
     const handleAdd = () => {
-        setSelectedItem(null);
-        setIsModalOpen(true);
-    };
-
-    const handleShowsSpreadsheetImport = async (
-        rows: SpreadsheetRow[],
-        meta?: { comment?: string },
-        onProgress?: (p: SpreadsheetImportProgress) => void,
-    ) => {
-        const { rowsToShowZohoPayloads } = await import('@/lib/importSpreadsheet');
-        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
-        const payloads = rowsToShowZohoPayloads(rows);
-        if (payloads.length === 0) {
-            toast.error('No valid rows. Include Event Name (Event_Name, Event, Name, or Show).');
-            return;
-        }
-        onProgress?.({ current: 0, total: payloads.length });
-        let ok = 0;
-
-        for (let i = 0; i < payloads.length; i++) {
-            const payload = payloads[i];
-            try {
-                const row = {
-                    id: crypto.randomUUID(),
-                    name: payload.Event_Name || payload.Event || payload.Name || '',
-                    event_type: payload.Event_Type || '',
-                    starting_date: payload.Starting_Date || null,
-                    industry: payload.Industry || '',
-                    level: payload.Level || '',
-                    world_area: payload.World_Area || '',
-                    country: payload.Country || '',
-                    city: payload.City || '',
-                    frequency: payload.Frequency || '',
-                };
-                const { error: insertError } = await supabase.from('shows').insert(row);
-                if (!insertError) ok++;
-            } catch (e) {
-                console.error(e);
-            }
-            onProgress?.({ current: i + 1, total: payloads.length });
-        }
-        await fetchData(true, debouncedSearch);
-        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
-        toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
+        toast.info('Add company functionality coming soon');
     };
 
     const handleRowClick = (item: any) => {
-        router.push(`/shows/${item.ID}`);
+        router.push(`/companies/${item.id}`);
     };
 
-    const formatCardDate = (raw: string) => {
-        if (!raw) return 'Date TBC';
-        const parsed = new Date(raw);
-        return Number.isNaN(parsed.getTime())
-            ? raw
-            : parsed.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-    };
-
-    const initialsFromName = (name: string) => {
-        const parts = name.trim().split(/\s+/).filter(Boolean);
-        if (parts.length === 0) return '?';
-        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    };
+    const uniqueCountries = new Set(data.map(item => item.country).filter(Boolean)).size;
 
     return (
         <div className="h-full flex flex-col gap-6">
-            {importOpen && (
-                <SpreadsheetImportModal
-                    isOpen
-                    onClose={() => setImportOpen(false)}
-                    title="Import shows (CSV / Excel)"
-                    columnHint={
-                        <>
-                            Required: <strong>Event_Name</strong> (or Event / Name / Show). Optional: Event_Type, Starting_Date,
-                            Industry, Level, World_Area, Country, City, Frequency.
-                        </>
-                    }
-                    demoCsvTemplate={fpMarketingImportDemoTemplates.showsZoho}
-                    onImportRows={handleShowsSpreadsheetImport}
-                />
-            )}
-
-            <ShowFormModal
-                key={selectedItem?.ID || 'new'}
-                isOpen={isModalOpen}
-                onClose={() => {
-                    setIsModalOpen(false);
-                    setTimeout(() => setSelectedItem(null), 100);
-                }}
-                onSuccess={handleUpdateSuccess}
-                initialData={selectedItem}
-            />
-
             {/* Toolbar */}
             <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-950/5">
                 {/* Search */}
@@ -358,7 +202,7 @@ export const ShowsTable = () => {
                     <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                     <input
                         type="text"
-                        placeholder="Search by show name..."
+                        placeholder="Search by company name or domain..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-3 pl-10 pr-4 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
@@ -369,7 +213,7 @@ export const ShowsTable = () => {
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Region:</span>
                     {['All', 'UAE', 'KSA', 'Europe'].map((region) => {
                         const isSelected = quickRegion === region;
-                        const label = region === 'All' ? 'All Shows' : region;
+                        const label = region === 'All' ? 'All Companies' : region;
                         return (
                             <button
                                 key={region}
@@ -381,7 +225,7 @@ export const ShowsTable = () => {
                         );
                     })}
                 </div>
-                {/* Actions — single row, Add Show pushed right */}
+                {/* Actions — single row, Add Company pushed right */}
                 <div className="flex items-center gap-2">
                     <div className="relative">
                         <Button
@@ -411,19 +255,11 @@ export const ShowsTable = () => {
                         {!loading && <RefreshCw className="h-4 w-4" />}
                     </Button>
                     <Button
-                        variant="secondary"
-                        onClick={() => setImportOpen(true)}
-                        leftIcon={<FileSpreadsheet className="h-4 w-4" />}
-                        className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
-                    >
-                        <span className="hidden sm:inline">Import</span>
-                    </Button>
-                    <Button
                         onClick={handleAdd}
                         leftIcon={<Plus className="h-4 w-4" />}
                         className="ml-auto h-10 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
                     >
-                        Add Show
+                        Add Company
                     </Button>
                 </div>
             </div>
@@ -447,89 +283,74 @@ export const ShowsTable = () => {
                     ) : data.length === 0 ? (
                         <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
                             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-orange-50 ring-1 ring-orange-100">
-                                <CalendarDays className="h-9 w-9 text-orange-500" />
+                                <Building2 className="h-9 w-9 text-orange-500" />
                             </div>
                             <div>
-                                <p className="text-lg font-semibold text-zinc-900">No shows yet</p>
+                                <p className="text-lg font-semibold text-zinc-900">No companies yet</p>
                                 <p className="mt-1 max-w-md text-sm text-zinc-500">
-                                    {fetchError ? fetchError : 'Add a show or import a spreadsheet to populate this list.'}
+                                    {fetchError ? fetchError : 'Add a company or adjust your filters.'}
                                 </p>
                             </div>
                             <Button onClick={handleAdd} leftIcon={<Plus className="h-4 w-4" />} className="mt-2 rounded-xl">
-                                Add your first show
+                                Add your first company
                             </Button>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                             {data.map((item) => {
-                                const name = item.name || item.Event_Name || item.Name || 'Untitled show';
-                                const eventType = item.Event_Type || item.event_type || '';
-                                const industry = item.industry || item.Industry || '';
-                                const level = item.level || item.Level || '';
-                                const worldArea = item.world_area || item.World_Area || '';
-                                const city = item.City || '';
-                                const country = item.Country || '';
-                                const date = item.starting_date || item.Starting_Date || '';
+                                const name = item.name || 'Unknown Company';
+                                const industry = item.industry || '';
+                                const city = item.city || '';
+                                const country = item.country || '';
                                 const location = [city, country].filter(Boolean).join(', ');
                                 const initials = initialsFromName(name);
-                                const isIbc = name.toLowerCase().includes('ibc');
-                                const ibcImage = 'https://cdn.prod.website-files.com/686e72da8be0fd92280388b7/6970abf7af4eaf76f110b30a_689ca814a9cbd6ff03649c1a_Newsroom_events_template_IBC.webp';
-                                const ibcCoverImage = 'https://cdn.prod.website-files.com/6641aa6384a3010ab6b735d7/679b179403837ff93b623af0_IBC2024-0915-Alex-105928-1-.webp';
+                                const employees = item.estimated_num_employees;
+                                const revenue = item.organization_revenue_printed || formatMoney(item.organization_revenue);
+                                const logoUrl = item.logo_url || item.logo;
 
                                 return (
                                     <button
-                                        key={item.ID}
+                                        key={item.id}
                                         type="button"
                                         onClick={() => handleRowClick(item)}
                                         className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left shadow-sm shadow-zinc-950/5 outline-none transition-all duration-300 cursor-pointer hover:border-orange-200 hover:shadow-2xl hover:shadow-orange-950/15 focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2"
                                     >
                                         {/* Visual header */}
                                         <div className="relative h-36 overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
-                                            {isIbc && (
-                                                <>
-                                                    <img
-                                                        src={ibcCoverImage}
-                                                        alt={`${name} cover`}
-                                                        className="absolute inset-0 h-full w-full object-cover opacity-60"
-                                                        loading="lazy"
-                                                    />
-                                                    <div className="pointer-events-none absolute inset-0 bg-black/40" />
-                                                </>
-                                            )}
                                             {/* Layered glows */}
-                                            {!isIbc && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_70%_at_90%_10%,rgba(251,146,60,0.5),transparent)]" />}
-                                            {!isIbc && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_10%_100%,rgba(251,146,60,0.2),transparent)]" />}
-                                            {!isIbc && <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />}
+                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_70%_at_90%_10%,rgba(251,146,60,0.5),transparent)]" />
+                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_10%_100%,rgba(251,146,60,0.2),transparent)]" />
+                                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
                                             {/* Subtle grid pattern */}
                                             <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
                                                 style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)' }}
                                             />
-                                            {/* World area top label */}
-                                            {worldArea && (
+                                            {/* Domain top label */}
+                                            {item.primary_domain && (
                                                 <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-white/70 backdrop-blur-sm ring-1 ring-white/10">
                                                     <Globe2 className="h-2.5 w-2.5" />
-                                                    {worldArea}
+                                                    {item.primary_domain}
                                                 </div>
                                             )}
                                             <div className="relative flex h-full items-end justify-between px-4 pb-4">
-                                                {/* Initials avatar */}
+                                                {/* Initials/Logo avatar */}
                                                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white text-base font-bold tracking-tight text-zinc-900 shadow-2xl ring-2 ring-white/25">
-                                                    {isIbc ? (
+                                                    {logoUrl ? (
                                                         <img
-                                                            src={ibcImage}
-                                                            alt={`${name} cover`}
-                                                            className="h-full w-full object-cover"
+                                                            src={logoUrl}
+                                                            alt={`${name} logo`}
+                                                            className="h-full w-full object-contain p-1"
                                                             loading="lazy"
                                                         />
                                                     ) : (
-                                                        initials
+                                                        <div 
+                                                            className="w-full h-full flex items-center justify-center text-xl text-white"
+                                                            style={{ backgroundColor: getBrandColor(name) }}
+                                                        >
+                                                            {initials}
+                                                        </div>
                                                     )}
                                                 </div>
-                                                {eventType ? (
-                                                    <span className="rounded-full bg-orange-500/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-orange-100 ring-1 ring-orange-400/30 backdrop-blur-sm">
-                                                        {eventType}
-                                                    </span>
-                                                ) : null}
                                             </div>
                                         </div>
 
@@ -544,12 +365,6 @@ export const ShowsTable = () => {
                                                         {industry}
                                                     </span>
                                                 ) : null}
-                                                {level ? (
-                                                    <span className="inline-flex items-center gap-1 rounded-lg border border-orange-100 bg-orange-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-700">
-                                                        <Layers className="h-2.5 w-2.5" />
-                                                        {level}
-                                                    </span>
-                                                ) : null}
                                             </div>
 
                                             <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
@@ -557,10 +372,22 @@ export const ShowsTable = () => {
                                                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" />
                                                     <span className="line-clamp-1 font-medium text-zinc-700">{location || 'Location TBC'}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-sm text-zinc-500">
-                                                    <Calendar className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                                                    <span className="font-medium text-zinc-700">{formatCardDate(date)}</span>
-                                                </div>
+                                                {(employees > 0 || revenue) && (
+                                                    <div className="flex items-center gap-3 text-sm text-zinc-500">
+                                                        {employees > 0 && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Users className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                                <span className="font-medium text-zinc-700">{employees.toLocaleString()} emp</span>
+                                                            </div>
+                                                        )}
+                                                        {revenue && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Activity className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                                <span className="font-medium text-zinc-700">{revenue}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="mt-auto flex items-center justify-end border-t border-zinc-100 pt-4">

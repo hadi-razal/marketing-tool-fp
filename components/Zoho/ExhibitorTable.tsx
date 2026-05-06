@@ -270,9 +270,9 @@ export const ExhibitorTable = () => {
         fetchData(true, debouncedSearch);
     }, [selectedCountries, selectedContinents, debouncedSearch, fetchData]);
 
-    const handleApplyFilters = (countries: string[], continents: string[]) => {
-        setSelectedCountries(countries);
-        setSelectedContinents(continents);
+    const handleApplyFilters = (selections: any) => {
+        setSelectedCountries(selections.country || []);
+        setSelectedContinents(selections.continent || []);
         // fetchData is triggered by useEffect
     };
 
@@ -416,10 +416,14 @@ export const ExhibitorTable = () => {
                         <FilterPopover
                             isOpen={isFilterOpen}
                             onClose={() => setIsFilterOpen(false)}
-                            availableCountries={availableCountries}
-                            availableContinents={availableContinents}
-                            selectedCountries={selectedCountries}
-                            selectedContinents={selectedContinents}
+                            categories={[
+                                { key: 'country', label: 'Country', icon: <MapPin className="h-3.5 w-3.5" />, options: availableCountries },
+                                { key: 'continent', label: 'Continent', icon: <Globe2 className="h-3.5 w-3.5" />, options: availableContinents },
+                            ].filter(c => c.options.length > 0)}
+                            selections={{
+                                country: selectedCountries,
+                                continent: selectedContinents,
+                            }}
                             onApply={handleApplyFilters}
                             onClear={handleClearFilters}
                         />

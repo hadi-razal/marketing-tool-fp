@@ -1,15 +1,15 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
     FolderOpen, Search, Database, Trash2, Users, Building2, Plus, Filter, MapPin, Calendar, Globe, LayoutGrid, ArrowUpDown, ChevronDown, RefreshCw, FileSpreadsheet, ImagePlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { ProfileCard } from './ProfileCard';
 import { CompanyCard, Company } from './CompanyCard';
 import { CreatePersonModal } from './CreatePersonModal';
 import { CreateCompanyModal } from './CreateCompanyModal';
-import { CompanyDetailsModal } from './CompanyDetailsModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { CompanyCardSkeleton } from './CompanyCardSkeleton';
 import { ConfirmModal } from './ui/ConfirmModal';
@@ -25,8 +25,9 @@ interface DatabasePageProps {
 }
 
 export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
+    const router = useRouter();
     const supabase = createClient();
-    const [activeView, setActiveView] = useState<'people' | 'companies' | 'shows'>('people');
+    const [activeView, setActiveView] = useState<'people' | 'shows'>('people');
     const [people, setPeople] = useState<SavedPerson[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
     const [shows, setShows] = useState<any[]>([]);
@@ -53,8 +54,6 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     // Modal States
     const [isCreatePersonOpen, setIsCreatePersonOpen] = useState(false);
     const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
-    const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-    const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
     const [selectedPerson, setSelectedPerson] = useState<SavedPerson | null>(null);
 
     const [selectedShow, setSelectedShow] = useState<any | null>(null);
@@ -501,14 +500,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         {activeView === 'people' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
                     </button>
 
-                    <button
-                        onClick={() => setActiveView('companies')}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'companies' ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 border border-transparent'}`}
-                    >
-                        <Building2 className={`w-4 h-4 ${activeView === 'companies' ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500'}`} />
-                        <span>Companies</span>
-                        {activeView === 'companies' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
-                    </button>
+
 
                     <button
                         onClick={() => setActiveView('shows')}
@@ -522,7 +514,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
 
                 <div className="mt-auto pt-4 border-t border-zinc-200">
                     <div className="px-4 py-2 text-xs text-zinc-500 flex items-center gap-2">
-                        <FolderOpen className="w-3 h-3" /> {activeView === 'people' ? `${people.length} People` : activeView === 'companies' ? `${companies.length} Companies` : `${shows.length} Shows`}
+                        <FolderOpen className="w-3 h-3" /> {activeView === 'people' ? `${people.length} People` : `${shows.length} Shows`}
                     </div>
                 </div>
             </div>
@@ -533,7 +525,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                     <div>
                         <p className="text-xs font-bold text-orange-600 uppercase tracking-[0.22em] mb-1">CRM</p>
                         <h1 className="text-2xl lg:text-3xl font-bold text-zinc-950 tracking-tight mb-1">
-                            {activeView === 'people' ? 'People' : activeView === 'companies' ? 'Companies' : 'Shows'}
+                            {activeView === 'people' ? 'People' : 'Shows'}
                         </h1>
                         <p className="text-zinc-500 text-xs font-medium">
                             {activeView === 'shows'
@@ -605,17 +597,17 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setSpreadsheetImport(activeView === 'people' ? 'people' : 'companies')}
+                                    onClick={() => setSpreadsheetImport('people')}
                                     className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 border border-zinc-200 bg-white text-zinc-700 hover:text-zinc-950 hover:bg-orange-50 hover:border-orange-200 shadow-sm"
                                 >
                                     <FileSpreadsheet className="w-3.5 h-3.5" /> Import
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => activeView === 'people' ? setIsCreatePersonOpen(true) : setIsCreateCompanyOpen(true)}
+                                    onClick={() => setIsCreatePersonOpen(true)}
                                     className="bg-zinc-950 hover:bg-zinc-800 text-white px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-zinc-950/15"
                                 >
-                                    <Plus className="w-3.5 h-3.5" /> Add {activeView === 'people' ? 'Person' : 'Company'}
+                                    <Plus className="w-3.5 h-3.5" /> Add Person
                                 </button>
                             </div>
                         )}
@@ -633,64 +625,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                                 className="overflow-hidden mb-6"
                             >
                                 <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {activeView === 'companies' ? (
-                                        <>
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Industry</label>
-                                                <div className="relative">
-                                                    <select
-                                                        value={filters.industry}
-                                                        onChange={(e) => setFilters(prev => ({ ...prev, industry: e.target.value }))}
-                                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 appearance-none cursor-pointer shadow-sm"
-                                                    >
-                                                        <option value="">All Industries</option>
-                                                        {uniqueIndustries.map(ind => (
-                                                            <option key={ind} value={ind}>{ind}</option>
-                                                        ))}
-                                                    </select>
-                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                        <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Location</label>
-                                                <div className="relative">
-                                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="City, Country..."
-                                                        value={filters.location}
-                                                        onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
-                                                        className="w-full bg-white border border-zinc-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 placeholder:text-zinc-400 shadow-sm"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Employees</label>
-                                                <div className="relative">
-                                                    <select
-                                                        value={filters.employees}
-                                                        onChange={(e) => setFilters(prev => ({ ...prev, employees: e.target.value }))}
-                                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-950 focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 appearance-none cursor-pointer shadow-sm"
-                                                    >
-                                                        <option value="">Any Size</option>
-                                                        <option value="1-10">1-10 Employees</option>
-                                                        <option value="11-50">11-50 Employees</option>
-                                                        <option value="51-200">51-200 Employees</option>
-                                                        <option value="201-500">201-500 Employees</option>
-                                                        <option value="501-1000">501-1000 Employees</option>
-                                                        <option value="1000+">1000+ Employees</option>
-                                                    </select>
-                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                        <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </>
-                                    ) : activeView === 'people' ? (
+                                    {activeView === 'people' ? (
                                         <div className="space-y-3 md:col-span-3">
                                             <div className="flex flex-wrap gap-2">
                                                 {['Need to Contact', 'Good Lead', 'Not Interested', 'Need a Follow Up'].map((status) => {
@@ -1139,46 +1074,25 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
-                            {activeView === 'people' ? (
-                                (filteredData as SavedPerson[]).map((person, idx) => (
-                                    <motion.div
-                                        key={person.id}
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ delay: idx * 0.05 }}
-                                    >
-                                        <ProfileCard
-                                            lead={person}
-                                            actionIcon={Trash2}
-                                            onAction={() => handleDeletePersonClick(person)}
-                                            onClick={() => {
-                                                setSelectedPerson(person);
-                                            }}
-                                            actionType="delete"
-                                            isSaved={true}
-                                        />
-                                    </motion.div>
-                                ))
-                            ) : (
-                                (filteredData as Company[]).map((company, idx) => (
-                                    <motion.div
-                                        key={company.id}
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ delay: idx * 0.05 }}
-                                    >
-                                        <CompanyCard
-                                            company={company}
-                                            actionIcon={Trash2}
-                                            onAction={() => handleDeleteCompanyClick(company)}
-                                            onClick={() => {
-                                                setSelectedCompany(company);
-                                                setIsCompanyModalOpen(true);
-                                            }}
-                                        />
-                                    </motion.div>
-                                ))
-                            )}
+                            {(filteredData as SavedPerson[]).map((person, idx) => (
+                                <motion.div
+                                    key={person.id}
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                >
+                                    <ProfileCard
+                                        lead={person}
+                                        actionIcon={Trash2}
+                                        onAction={() => handleDeletePersonClick(person)}
+                                        onClick={() => {
+                                            setSelectedPerson(person);
+                                        }}
+                                        actionType="delete"
+                                        isSaved={true}
+                                    />
+                                </motion.div>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -1194,19 +1108,6 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 isOpen={isCreateCompanyOpen}
                 onClose={() => setIsCreateCompanyOpen(false)}
                 onSubmit={handleCreateCompany}
-            />
-            <CompanyDetailsModal
-                company={selectedCompany}
-                isOpen={isCompanyModalOpen}
-                onClose={() => setIsCompanyModalOpen(false)}
-                onSave={async () => {
-                    setIsCompanyModalOpen(false);
-                }}
-                onPersonRemoved={(personId) => setPeople((prev) => prev.filter((p) => p.id !== personId))}
-                onCompanyUpdated={(updated) => {
-                    setCompanies((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-                    setSelectedCompany(updated);
-                }}
             />
             <ConfirmModal
                 isOpen={confirmModal.isOpen}

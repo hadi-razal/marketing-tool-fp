@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Database, LayoutDashboard, LogOut, Settings, X, Menu, CheckSquare, BarChart2, Sparkles, Calendar } from 'lucide-react';
+import { Search, Database, LayoutDashboard, LogOut, Settings, X, Menu, CheckSquare, BarChart2, Sparkles, Calendar, Building2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/Button';
 import Link from 'next/link';
@@ -43,6 +43,7 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
 
     const navItems = [
         { id: 'shows', icon: Calendar, label: 'Shows', href: '/shows' },
+        { id: 'companies', icon: Building2, label: 'Companies', href: '/companies' },
         { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
         { id: 'search', icon: Search, label: 'Search', href: '/search' },
         { id: 'database', icon: Database, label: 'Database', href: '/database' },

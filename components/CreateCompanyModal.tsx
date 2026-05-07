@@ -187,8 +187,7 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ isOpen, 
                                             icon={Globe}
                                             value={formData.website}
                                             onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                                            placeholder="https://example.com"
-                                            type="url"
+                                            placeholder="example.com or https://example.com"
                                         />
                                     </div>
                                 </section>

@@ -28,6 +28,7 @@ import {
     ChevronUp,
     ChevronDown,
     ArrowUpDown,
+    ArrowRight,
     Download,
     Link2,
 } from 'lucide-react';
@@ -51,11 +52,46 @@ const formatDate = (dateStr: string) => {
     return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
+const normalizeExternalUrl = (url: string) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+};
+
 const initialsFromName = (name: string) => {
     const parts = name.trim().split(/\s+/).filter(Boolean);
     if (parts.length === 0) return '?';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const hashToNumber = (value: string) => {
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+        hash = (hash << 5) - hash + value.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash);
+};
+
+const randomExhibitorMeta = (seed: string) => {
+    const hash = hashToNumber(seed);
+    const currentYear = new Date().getFullYear();
+    const year = String(currentYear - (hash % 3));
+    const hallLetter = String.fromCharCode(65 + (hash % 14)); // A-N
+    const booth = `${hallLetter}-${String((hash % 390) + 10)}`;
+    const size = `${(hash % 231) + 20} sqm`;
+    return { year, booth, size };
+};
+
+const extractLinks = (raw: string) => {
+    if (!raw) return [];
+    return raw
+        .split(/[\n,;]+/)
+        .map((v) => v.trim())
+        .filter(Boolean);
 };
 
 /* ─── tabs ────────────────────────────────────────────────── */
@@ -64,22 +100,22 @@ type Tab = 'overview' | 'contacts' | 'exhibitors' | 'floorplans' | 'comments';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <LayoutGrid className="h-4 w-4" /> },
-    { id: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
     { id: 'exhibitors', label: 'Exhibitors', icon: <Building2 className="h-4 w-4" /> },
+    { id: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
     { id: 'floorplans', label: 'Floorplans', icon: <Globe className="h-4 w-4" /> },
     { id: 'comments', label: 'Comments', icon: <FileText className="h-4 w-4" /> },
 ];
 
 /* ─── info row ────────────────────────────────────────────── */
 
-const InfoRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+const InfoRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) => (
     <div className="flex items-start gap-3 py-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-500">
             {icon}
         </div>
         <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">{label}</p>
-            <p className="mt-0.5 text-sm font-semibold text-zinc-800 break-words">{value}</p>
+            <div className="mt-0.5 text-sm font-semibold text-zinc-800 break-words">{value}</div>
         </div>
     </div>
 );
@@ -110,8 +146,40 @@ export default function ShowDetailPage() {
     const [activeTab, setActiveTab] = useState<Tab>('overview');
     const [exSearch, setExSearch] = useState('');
     const [exSort, setExSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: '', dir: 'asc' });
+    const [isExhibitorSelectMode, setIsExhibitorSelectMode] = useState(false);
+    const [selectedExhibitorIds, setSelectedExhibitorIds] = useState<string[]>([]);
+    const [exhibitorCompanies, setExhibitorCompanies] = useState<Array<{
+        id: string;
+        name: string;
+        logo_url?: string;
+        logo?: string;
+        city?: string;
+        country?: string;
+        industry?: string;
+        primary_domain?: string;
+        estimated_num_employees?: number;
+    }>>([]);
+    const [exhibitorsLoading, setExhibitorsLoading] = useState(false);
+    const [exhibitorContacts, setExhibitorContacts] = useState<any[]>([]);
+    const [contactsLoading, setContactsLoading] = useState(false);
+    const [isContactSelectMode, setIsContactSelectMode] = useState(false);
+    const [selectedContactKeys, setSelectedContactKeys] = useState<string[]>([]);
+    const [featureInfoModal, setFeatureInfoModal] = useState<{ isOpen: boolean; title: string; description: string }>({
+        isOpen: false,
+        title: '',
+        description: '',
+    });
 
     const showId = params?.id as string;
+    const companyLogoByName = useMemo(() => {
+        const map = new Map<string, string>();
+        exhibitorCompanies.forEach((company) => {
+            const name = String(company.name || '').trim().toLowerCase();
+            const logo = String(company.logo_url || company.logo || '').trim();
+            if (name && logo) map.set(name, logo);
+        });
+        return map;
+    }, [exhibitorCompanies]);
 
     useEffect(() => {
         if (!showId) {
@@ -141,6 +209,76 @@ export default function ShowDetailPage() {
         fetchShow();
     }, [showId, supabase]);
 
+    useEffect(() => {
+        const fetchCompanies = async () => {
+            setExhibitorsLoading(true);
+            try {
+                const { data: rows, error } = await supabase
+                    .from('companies')
+                    .select('*');
+                if (error) throw error;
+                const normalized = (rows || []).map((row: any) => {
+                    const fallbackIdSeed = String(
+                        row?.name ?? row?.Name ?? row?.company_name ?? row?.primary_domain ?? row?.Primary_Domain ?? crypto.randomUUID(),
+                    );
+                    const id = String(row?.id ?? row?.ID ?? row?.company_id ?? `tmp-${hashToNumber(fallbackIdSeed)}`);
+                    const name = String(row?.name ?? row?.Name ?? row?.company_name ?? 'Unknown Company');
+                    return {
+                        id,
+                        name,
+                        logo_url: row?.logo_url ?? row?.Logo_URL ?? '',
+                        logo: row?.logo ?? row?.Logo ?? '',
+                        city: row?.city ?? row?.City ?? '',
+                        country: row?.country ?? row?.Country ?? '',
+                        industry: row?.industry ?? row?.Industry ?? '',
+                        primary_domain: row?.primary_domain ?? row?.Primary_Domain ?? row?.website ?? row?.Website ?? '',
+                        estimated_num_employees: Number(row?.estimated_num_employees ?? row?.Estimated_Num_Employees ?? row?.employees ?? 0),
+                    };
+                });
+                setExhibitorCompanies(normalized);
+            } catch (err: any) {
+                console.error('Fetch exhibitors from companies error:', err);
+                toast.error(err?.message || 'Failed to load companies for exhibitors.');
+                setExhibitorCompanies([]);
+            } finally {
+                setExhibitorsLoading(false);
+            }
+        };
+        fetchCompanies();
+    }, [supabase]);
+
+    useEffect(() => {
+        const fetchAllContacts = async () => {
+            setContactsLoading(true);
+            try {
+                const { data: rows, error } = await supabase.from('people').select('*');
+                if (error) throw error;
+
+                const merged = rows || [];
+                const unique = new Map<string, any>();
+                merged.forEach((person: any, index: number) => {
+                    const key = String(
+                        person?.id
+                        || person?.email
+                        || person?.primary_email
+                        || `${person?.first_name || ''}-${person?.last_name || ''}-${person?.organization_name || ''}-${index}`,
+                    );
+                    unique.set(key, person);
+                });
+
+                setExhibitorContacts(Array.from(unique.values()));
+            } catch (err: any) {
+                console.error('Fetch exhibitor contacts error:', err);
+                toast.error(err?.message || 'Failed to load exhibitor contacts');
+                setExhibitorContacts([]);
+            } finally {
+                setContactsLoading(false);
+            }
+        };
+
+        fetchAllContacts();
+    }, [supabase]);
+
     const handleDelete = async () => {
         if (!confirm('Delete this show permanently?')) return;
         const { error } = await supabase.from('shows').delete().eq('id', showId);
@@ -152,6 +290,14 @@ export default function ShowDetailPage() {
         }
     };
 
+    const openFeatureInfoModal = (title: string, description: string) => {
+        setFeatureInfoModal({ isOpen: true, title, description });
+    };
+
+    const closeFeatureInfoModal = () => {
+        setFeatureInfoModal({ isOpen: false, title: '', description: '' });
+    };
+
     const handleEditSuccess = async () => {
         setIsEditOpen(false);
         const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
@@ -161,14 +307,57 @@ export default function ShowDetailPage() {
     /* ── loading ── */
     if (loading) {
         return (
-            <div className="min-h-full bg-white p-6 sm:p-10">
-                <Skeleton className="mb-6 h-10 w-48 rounded-md" />
-                <Skeleton className="mb-2 h-8 w-96 rounded-md" />
-                <Skeleton className="mb-8 h-4 w-64 rounded-md" />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <Skeleton key={i} className="h-20 rounded-md" />
-                    ))}
+            <div className="-m-4 h-[calc(100%+2rem)] lg:-m-6 lg:h-[calc(100%+3rem)] flex flex-col bg-white">
+                <div className="shrink-0 bg-zinc-900">
+                    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                        <div className="flex items-center justify-between py-4">
+                            <Skeleton className="h-5 w-24 rounded-md bg-white/20" />
+                            <div className="flex items-center gap-2">
+                                <Skeleton className="h-8 w-20 rounded-md bg-white/20" />
+                                <Skeleton className="h-8 w-20 rounded-md bg-white/20" />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4 pb-6 sm:pb-8">
+                            <Skeleton className="h-16 w-16 rounded-lg bg-white/20" />
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-28 rounded bg-white/20" />
+                                <Skeleton className="h-6 w-64 rounded bg-white/20" />
+                                <Skeleton className="h-4 w-40 rounded bg-white/20" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="shrink-0 border-b border-zinc-200 bg-white">
+                    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                        <div className="flex items-center gap-2 py-2">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <Skeleton key={i} className="h-8 w-24 rounded-md" />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+                        <div className="rounded-lg border border-zinc-200 bg-white p-5">
+                            <Skeleton className="mb-4 h-5 w-36 rounded-md" />
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                {Array.from({ length: 6 }).map((_, i) => (
+                                    <div key={i} className="space-y-2">
+                                        <Skeleton className="h-3 w-20 rounded" />
+                                        <Skeleton className="h-4 w-40 rounded" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                            <Skeleton className="mb-4 h-5 w-28 rounded-md" />
+                            <div className="space-y-3">
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                    <Skeleton key={i} className="h-14 w-full rounded-md" />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -203,11 +392,15 @@ export default function ShowDetailPage() {
     const city = String(getValue(data, ['city', 'City']) || '');
     const frequency = String(getValue(data, ['frequency', 'Frequency']) || '');
     const organiser = String(getValue(data, ['organiser', 'Organiser']) || '');
+    const showWebsite = String(getValue(data, ['show_website', 'Show_Website', 'website', 'Website', 'event_website', 'Event_Website']) || '');
     const tags = String(getValue(data, ['tags', 'Tags']) || '');
     const note = String(getValue(data, ['note', 'Note', 'Note1']) || '');
     const exhibitorList = String(getValue(data, ['exhibitor_list', 'Exhibitor_List', 'Last_edition_n_Exhibitors']) || '');
     const exhibitorListLink = String(getValue(data, ['exhibitor_list_link', 'Exhibitor_List_Link']) || '');
     const floorplanLink = String(getValue(data, ['floorplan_link', 'Floorplan_Link']) || '');
+    const floorplanFileLink = String(getValue(data, ['floorplan_file_link', 'Floorplan_File_Link', 'file_link', 'File_Link']) || '');
+    const mapLink = String(getValue(data, ['map_link', 'Map_Link']) || '');
+    const websiteHref = normalizeExternalUrl(showWebsite);
 
     const location = [city, country].filter(Boolean).join(', ');
     const initials = initialsFromName(eventName);
@@ -222,10 +415,25 @@ export default function ShowDetailPage() {
         level && { label: 'Level', value: level, icon: <Layers className="h-4 w-4" /> },
         frequency && { label: 'Frequency', value: frequency, icon: <RefreshCw className="h-4 w-4" /> },
         worldArea && { label: 'World Area', value: worldArea, icon: <Globe2 className="h-4 w-4" /> },
+        showWebsite && {
+            label: 'Website',
+            value: (
+                <a
+                    href={websiteHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-orange-600 underline-offset-2 hover:text-orange-500 hover:underline"
+                >
+                    {showWebsite}
+                    <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+            ),
+            icon: <ExternalLink className="h-4 w-4" />,
+        },
         exhibitorList && { label: 'Exhibitors', value: exhibitorList, icon: <Users className="h-4 w-4" /> },
         organiser && { label: 'Organiser', value: organiser, icon: <Building2 className="h-4 w-4" /> },
         tags && { label: 'Tags', value: tags, icon: <Tag className="h-4 w-4" /> },
-    ].filter(Boolean) as { label: string; value: string; icon: React.ReactNode }[];
+    ].filter(Boolean) as { label: string; value: React.ReactNode; icon: React.ReactNode }[];
 
     const demoGalleryImages = Array.from({ length: 10 }, (_, i) => ({
         id: i + 1,
@@ -239,14 +447,6 @@ export default function ShowDetailPage() {
         { author: 'Ali R.', time: '3 days ago', text: 'Competitors nearby had larger screens. Consider adding one center display next edition.' },
     ];
 
-    const demoContacts = [
-        { name: 'Emma Thompson', role: 'Event Director', company: 'IBC', email: 'emma.thompson@ibc.org', phone: '+31 20 555 0142' },
-        { name: 'Liam Carter', role: 'Sponsorship Lead', company: 'IBC', email: 'liam.carter@ibc.org', phone: '+31 20 555 0178' },
-        { name: 'Sofia Mendes', role: 'Operations Manager', company: 'RAI Amsterdam', email: 'sofia.mendes@rai.nl', phone: '+31 20 555 0113' },
-        { name: 'Noah Becker', role: 'Exhibitor Support', company: 'IBC', email: 'noah.becker@ibc.org', phone: '+31 20 555 0190' },
-        { name: 'Ava Rahman', role: 'Partnership Manager', company: 'MediaConnect', email: 'ava.rahman@mediaconnect.io', phone: '+44 20 7123 4421' },
-    ];
-
     return (
         <>
             <ShowFormModal
@@ -256,6 +456,25 @@ export default function ShowDetailPage() {
                 onSuccess={handleEditSuccess}
                 initialData={data}
             />
+            {featureInfoModal.isOpen && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="Close feature modal"
+                        onClick={closeFeatureInfoModal}
+                        className="fixed inset-0 z-140 bg-zinc-950/45 backdrop-blur-sm"
+                    />
+                    <div className="fixed inset-0 z-150 m-auto h-fit w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl shadow-zinc-950/20">
+                        <h3 className="text-base font-semibold text-zinc-900">{featureInfoModal.title}</h3>
+                        <p className="mt-2 text-sm leading-relaxed text-zinc-600">{featureInfoModal.description}</p>
+                        <div className="mt-4 flex justify-end">
+                            <Button size="sm" variant="primary" onClick={closeFeatureInfoModal}>
+                                Got it
+                            </Button>
+                        </div>
+                    </div>
+                </>
+            )}
 
             <div className="-m-4 h-[calc(100%+2rem)] lg:-m-6 lg:h-[calc(100%+3rem)] flex flex-col bg-white">
 
@@ -277,14 +496,14 @@ export default function ShowDetailPage() {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setIsEditOpen(true)}
-                                    className="flex h-8 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:bg-white/20 hover:text-white"
+                                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:bg-white/20 hover:text-white"
                                 >
                                     <Edit2 className="h-3.5 w-3.5" />
                                     Edit
                                 </button>
                                 <button
                                     onClick={handleDelete}
-                                    className="flex h-8 items-center gap-1.5 rounded-md bg-red-500/20 px-3 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 hover:text-red-300"
+                                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-red-500/20 px-3 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 hover:text-red-300"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />
                                     Delete
@@ -428,29 +647,152 @@ export default function ShowDetailPage() {
                                     <div className="flex flex-1 min-h-0 flex-col gap-5">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <h2 className="text-lg font-semibold text-zinc-900">Contacts</h2>
-                                            <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
-                                                Add Contact
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="h-8 rounded-md"
+                                                    onClick={() => {
+                                                        setIsContactSelectMode((prev) => {
+                                                            if (prev) setSelectedContactKeys([]);
+                                                            return !prev;
+                                                        });
+                                                    }}
+                                                >
+                                                    {isContactSelectMode ? 'Cancel Selection' : 'Select'}
+                                                </Button>
+                                                <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
+                                                    Add Contact
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        {isContactSelectMode && (
+                                        <div className="flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+                                            <span className="text-xs font-medium text-zinc-600">{selectedContactKeys.length} selected</span>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                className="h-8 rounded-md"
+                                                disabled={selectedContactKeys.length === 0}
+                                                onClick={() =>
+                                                    openFeatureInfoModal(
+                                                        'Bulk Send Email (Coming Soon)',
+                                                        `You selected ${selectedContactKeys.length} contacts. This will send personalized email campaigns to all selected contacts with delivery and response tracking.`,
+                                                    )
+                                                }
+                                            >
+                                                Bulk Send Email
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                className="h-8 rounded-md"
+                                                disabled={selectedContactKeys.length === 0}
+                                                onClick={() =>
+                                                    openFeatureInfoModal(
+                                                        'Email Auto Generation (Coming Soon)',
+                                                        `You selected ${selectedContactKeys.length} contacts. This feature will auto-generate tailored outreach copy based on each contact and company profile.`,
+                                                    )
+                                                }
+                                            >
+                                                Email Auto Generation
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                className="h-8 rounded-md"
+                                                disabled={selectedContactKeys.length === 0}
+                                                onClick={() =>
+                                                    openFeatureInfoModal(
+                                                        'Bulk Enrich (Coming Soon)',
+                                                        `You selected ${selectedContactKeys.length} contacts. This will enrich selected contacts with verified emails, phones, and updated profile data.`,
+                                                    )
+                                                }
+                                            >
+                                                Bulk Enrich
                                             </Button>
                                         </div>
+                                        )}
                                         <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                             <div className="border-b border-zinc-100 px-5 py-3.5">
-                                                <p className="text-sm font-semibold text-zinc-900">{demoContacts.length} contacts</p>
+                                                <p className="text-sm font-semibold text-zinc-900">{exhibitorContacts.length} contacts</p>
                                             </div>
                                             <div className="divide-y divide-zinc-100">
-                                                {demoContacts.map((contact) => (
-                                                    <div key={contact.email} className="px-5 py-4">
-                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                            <div>
-                                                                <p className="text-sm font-semibold text-zinc-900">{contact.name}</p>
-                                                                <p className="mt-0.5 text-xs text-zinc-500">{contact.role} · {contact.company}</p>
+                                                {contactsLoading ? (
+                                                    <div className="px-5 py-8 text-center text-sm text-zinc-500">Loading contacts...</div>
+                                                ) : exhibitorContacts.length > 0 ? (
+                                                    exhibitorContacts.map((contact, index) => {
+                                                        const fullName = String(
+                                                            contact?.name
+                                                            || [contact?.first_name, contact?.last_name].filter(Boolean).join(' ')
+                                                            || contact?.full_name
+                                                            || 'Unknown Contact',
+                                                        );
+                                                        const role = String(contact?.title || contact?.job_title || contact?.role || 'Contact');
+                                                        const companyName = String(contact?.organization_name || contact?.company || '');
+                                                        const email = String(contact?.email || contact?.primary_email || '');
+                                                        const phone = String(contact?.phone || contact?.mobile_phone || contact?.work_phone || '');
+                                                        const avatar = String(contact?.photo_url || contact?.image || '');
+                                                        const companyLogo = companyLogoByName.get(companyName.trim().toLowerCase()) || '';
+                                                        const key = String(contact?.id || email || `${fullName}-${index}`);
+                                                        const isSelected = selectedContactKeys.includes(key);
+
+                                                        return (
+                                                            <div key={key} className="px-5 py-4">
+                                                                <div className={`rounded-xl border p-3 ${isSelected ? 'border-orange-200 bg-orange-50/40' : 'border-zinc-100 bg-zinc-50/40'}`}>
+                                                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                                        <div className="flex min-w-0 items-start gap-3">
+                                                                            {isContactSelectMode && (
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isSelected}
+                                                                                    onChange={() => {
+                                                                                        setSelectedContactKeys((prev) =>
+                                                                                            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+                                                                                        );
+                                                                                    }}
+                                                                                    className="mt-1 h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                                    title={`Select ${fullName}`}
+                                                                                />
+                                                                            )}
+                                                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
+                                                                                {avatar ? (
+                                                                                    <img src={avatar} alt={fullName} className="h-full w-full object-cover" />
+                                                                                ) : (
+                                                                                    initialsFromName(fullName)
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="min-w-0">
+                                                                                <p className="truncate text-sm font-semibold text-zinc-900">{fullName}</p>
+                                                                                <p className="mt-0.5 text-xs text-zinc-500">{role}</p>
+                                                                                {companyName && (
+                                                                                    <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1">
+                                                                                        {companyLogo ? (
+                                                                                            <img src={companyLogo} alt={`${companyName} logo`} className="h-4 w-4 shrink-0 object-contain" />
+                                                                                        ) : (
+                                                                                            <Building2 className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                                                        )}
+                                                                                        <span className="truncate text-xs font-medium text-zinc-700">{companyName}</span>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-sm text-zinc-600 sm:text-right">
+                                                                            <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Email</p>
+                                                                            <p className="text-sm">{email || 'No email'}</p>
+                                                                            <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Phone</p>
+                                                                            <p className="text-xs text-zinc-500">{phone || 'No phone'}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <div className="text-sm text-zinc-600">
-                                                                <p>{contact.email}</p>
-                                                                <p className="text-xs text-zinc-500">{contact.phone}</p>
-                                                            </div>
-                                                        </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <div className="px-5 py-8 text-center text-sm text-zinc-500">
+                                                        No contacts found.
                                                     </div>
-                                                ))}
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -555,13 +897,38 @@ export default function ShowDetailPage() {
                                 </div>
                                 <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                     {(() => {
-                                        const demoFloorplans = [
-                                            { id: 1, name: `${eventName} — Hall Layout`, year: '2025', type: 'pdf' as const, source: 'Uploaded' },
-                                            { id: 2, name: `${eventName} — Full Venue Map`, year: '2025', type: 'link' as const, source: 'Google Maps' },
-                                            { id: 3, name: `${eventName} — Booth Overview`, year: '2024', type: 'pdf' as const, source: 'Uploaded' },
-                                            { id: 4, name: `${eventName} — Entrance Layout`, year: '2024', type: 'image' as const, source: 'Uploaded' },
-                                            { id: 5, name: `${eventName} — Parking & Access`, year: '2023', type: 'link' as const, source: 'Custom URL' },
-                                            { id: 6, name: `${eventName} — Exhibition Halls A-D`, year: '2023', type: 'pdf' as const, source: 'Uploaded' },
+                                        const toType = (url: string): 'pdf' | 'link' | 'image' => {
+                                            const lower = url.toLowerCase();
+                                            if (lower.includes('.pdf')) return 'pdf';
+                                            if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) return 'image';
+                                            return 'link';
+                                        };
+
+                                        const floorplanItems = [
+                                            ...extractLinks(floorplanLink).map((url, idx) => ({
+                                                id: `floorplan-${idx}-${url}`,
+                                                name: `${eventName} — Floorplan ${idx + 1}`,
+                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                type: toType(url),
+                                                source: 'Floorplan Link',
+                                                url: normalizeExternalUrl(url),
+                                            })),
+                                            ...extractLinks(floorplanFileLink).map((url, idx) => ({
+                                                id: `file-${idx}-${url}`,
+                                                name: `${eventName} — Floorplan File ${idx + 1}`,
+                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                type: toType(url),
+                                                source: 'File Link',
+                                                url: normalizeExternalUrl(url),
+                                            })),
+                                            ...extractLinks(mapLink).map((url, idx) => ({
+                                                id: `map-${idx}-${url}`,
+                                                name: `${eventName} — Venue Map ${idx + 1}`,
+                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                type: 'link' as const,
+                                                source: 'Map Link',
+                                                url: normalizeExternalUrl(url),
+                                            })),
                                         ];
 
                                         const typeBadge = (type: 'pdf' | 'link' | 'image') => {
@@ -585,7 +952,7 @@ export default function ShowDetailPage() {
 
                                         return (
                                             <div className="divide-y divide-zinc-100">
-                                                {demoFloorplans.map((fp) => (
+                                                {floorplanItems.length > 0 ? floorplanItems.map((fp) => (
                                                     <div
                                                         key={fp.id}
                                                         className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-zinc-50/80"
@@ -601,32 +968,22 @@ export default function ShowDetailPage() {
                                                             {typeBadge(fp.type)}
                                                         </div>
                                                         <div className="flex items-center gap-1.5">
-                                                            {fp.type === 'link' ? (
-                                                                <button
-                                                                    onClick={() => toast.info('Open link (coming soon)')}
-                                                                    className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
-                                                                >
-                                                                    <ExternalLink className="h-3.5 w-3.5" />
-                                                                    Open
-                                                                </button>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => toast.info('Download (coming soon)')}
-                                                                    className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
-                                                                >
-                                                                    <Download className="h-3.5 w-3.5" />
-                                                                    Download
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => toast.info('Delete floorplan (coming soon)')}
-                                                                className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                                                            <a
+                                                                href={fp.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
                                                             >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
+                                                                {fp.type === 'link' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                                                                {fp.type === 'link' ? 'Open' : 'Download'}
+                                                            </a>
                                                         </div>
                                                     </div>
-                                                ))}
+                                                )) : (
+                                                    <div className="px-5 py-12 text-center">
+                                                        <p className="text-sm text-zinc-400">No floorplan or file links available for this show.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })()}
@@ -637,9 +994,9 @@ export default function ShowDetailPage() {
 
                     {/* Exhibitors Tab — full width */}
                     {activeTab === 'exhibitors' && (
-                        <div className="w-full py-6 sm:py-8 flex flex-col min-h-full">
-                            <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-                                <div className="flex flex-col gap-3 pb-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="w-full py-4 sm:py-6 flex min-h-0 flex-1 flex-col">
+                            <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col px-4 sm:px-6 lg:px-8">
+                                <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
                                     <h2 className="text-lg font-semibold text-zinc-900">Exhibitors</h2>
                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                         <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 sm:w-56">
@@ -655,62 +1012,85 @@ export default function ShowDetailPage() {
                                         <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
                                             Add Exhibitor
                                         </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-9 rounded-md"
+                                            onClick={() => {
+                                                setIsExhibitorSelectMode((prev) => {
+                                                    if (prev) setSelectedExhibitorIds([]);
+                                                    return !prev;
+                                                });
+                                            }}
+                                        >
+                                            {isExhibitorSelectMode ? 'Cancel Selection' : 'Select'}
+                                        </Button>
                                     </div>
                                 </div>
-                                <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
+                                {isExhibitorSelectMode && (
+                                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+                                    <span className="text-xs font-medium text-zinc-600">{selectedExhibitorIds.length} selected</span>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() =>
+                                            openFeatureInfoModal(
+                                                'Bulk Delete (Coming Soon)',
+                                                `You selected ${selectedExhibitorIds.length} exhibitors. Soon you will be able to delete selected exhibitors in one confirmed action.`,
+                                            )
+                                        }
+                                        className="h-8 rounded-md"
+                                        disabled={selectedExhibitorIds.length === 0}
+                                    >
+                                        Bulk Delete
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() =>
+                                            openFeatureInfoModal(
+                                                'Bulk Enrich Data (Coming Soon)',
+                                                `You selected ${selectedExhibitorIds.length} exhibitors. This will enrich selected companies with additional firmographic and profile details.`,
+                                            )
+                                        }
+                                        className="h-8 rounded-md"
+                                        disabled={selectedExhibitorIds.length === 0}
+                                    >
+                                        Bulk Enrich Data
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() =>
+                                            openFeatureInfoModal(
+                                                'Get Contacts (Coming Soon)',
+                                                `You selected ${selectedExhibitorIds.length} exhibitors. This will fetch relevant decision-maker contacts for the selected companies.`,
+                                            )
+                                        }
+                                        className="h-8 rounded-md"
+                                        disabled={selectedExhibitorIds.length === 0}
+                                    >
+                                        Get Contacts
+                                    </Button>
+                                </div>
+                                )}
+                                <div className="flex h-[calc(100vh-320px)] min-h-[500px] max-h-[760px] min-w-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                     {(() => {
-                                        const demoExhibitors = [
-                                            { company: 'Sony Professional', year: '2025', booth: 'A-101', size: '120 sqm' },
-                                            { company: 'Samsung Display', year: '2025', booth: 'A-102', size: '200 sqm' },
-                                            { company: 'Panasonic Connect', year: '2025', booth: 'A-205', size: '80 sqm' },
-                                            { company: 'Blackmagic Design', year: '2025', booth: 'B-301', size: '150 sqm' },
-                                            { company: 'Grass Valley', year: '2024', booth: 'B-312', size: '90 sqm' },
-                                            { company: 'Avid Technology', year: '2025', booth: 'C-110', size: '180 sqm' },
-                                            { company: 'Ross Video', year: '2024', booth: 'C-115', size: '60 sqm' },
-                                            { company: 'Vizrt Group', year: '2025', booth: 'C-220', size: '140 sqm' },
-                                            { company: 'EVS Broadcast', year: '2025', booth: 'D-105', size: '100 sqm' },
-                                            { company: 'Haivision', year: '2024', booth: 'D-210', size: '45 sqm' },
-                                            { company: 'Harmonic Inc.', year: '2025', booth: 'D-305', size: '110 sqm' },
-                                            { company: 'Lawo AG', year: '2025', booth: 'E-101', size: '70 sqm' },
-                                            { company: 'Calrec Audio', year: '2024', booth: 'E-112', size: '55 sqm' },
-                                            { company: 'Shure Inc.', year: '2025', booth: 'E-200', size: '85 sqm' },
-                                            { company: 'Sennheiser', year: '2025', booth: 'E-215', size: '95 sqm' },
-                                            { company: 'Arri AG', year: '2025', booth: 'F-101', size: '250 sqm' },
-                                            { company: 'Canon Professional', year: '2025', booth: 'F-110', size: '200 sqm' },
-                                            { company: 'Fujinon (Fujifilm)', year: '2024', booth: 'F-205', size: '75 sqm' },
-                                            { company: 'RED Digital Cinema', year: '2025', booth: 'F-301', size: '130 sqm' },
-                                            { company: 'Atomos', year: '2024', booth: 'G-102', size: '40 sqm' },
-                                            { company: 'AJA Video Systems', year: '2025', booth: 'G-108', size: '50 sqm' },
-                                            { company: 'Telestream', year: '2025', booth: 'G-210', size: '65 sqm' },
-                                            { company: 'Imagine Comms.', year: '2024', booth: 'G-305', size: '90 sqm' },
-                                            { company: 'Dalet', year: '2025', booth: 'H-101', size: '80 sqm' },
-                                            { company: 'Rohde & Schwarz', year: '2025', booth: 'H-115', size: '160 sqm' },
-                                            { company: 'Tektronix', year: '2024', booth: 'H-220', size: '55 sqm' },
-                                            { company: 'Riedel Communications', year: '2025', booth: 'H-310', size: '120 sqm' },
-                                            { company: 'Clear-Com', year: '2024', booth: 'I-105', size: '45 sqm' },
-                                            { company: 'Dolby Laboratories', year: '2025', booth: 'I-201', size: '180 sqm' },
-                                            { company: 'Akamai Technologies', year: '2025', booth: 'I-305', size: '100 sqm' },
-                                            { company: 'Brightcove', year: '2024', booth: 'J-102', size: '60 sqm' },
-                                            { company: 'Wowza Media', year: '2025', booth: 'J-108', size: '35 sqm' },
-                                            { company: 'Limelight Networks', year: '2024', booth: 'J-210', size: '50 sqm' },
-                                            { company: 'Appear TV', year: '2025', booth: 'J-305', size: '70 sqm' },
-                                            { company: 'NewTek (Vizrt)', year: '2025', booth: 'K-101', size: '90 sqm' },
-                                            { company: 'Matrox Video', year: '2024', booth: 'K-115', size: '40 sqm' },
-                                            { company: 'Deltacast', year: '2025', booth: 'K-210', size: '30 sqm' },
-                                            { company: 'Cinegy GmbH', year: '2025', booth: 'K-302', size: '55 sqm' },
-                                            { company: 'EditShare', year: '2024', booth: 'L-105', size: '65 sqm' },
-                                            { company: 'Object Matrix', year: '2025', booth: 'L-112', size: '25 sqm' },
-                                            { company: 'Tedial', year: '2024', booth: 'L-205', size: '45 sqm' },
-                                            { company: 'Marquis Broadcast', year: '2025', booth: 'L-301', size: '35 sqm' },
-                                            { company: 'Apantac', year: '2025', booth: 'M-101', size: '50 sqm' },
-                                            { company: 'Phabrix', year: '2024', booth: 'M-108', size: '30 sqm' },
-                                            { company: 'Leader Electronics', year: '2025', booth: 'M-205', size: '40 sqm' },
-                                            { company: 'TAG Video Systems', year: '2025', booth: 'M-310', size: '60 sqm' },
-                                            { company: 'LiveU', year: '2025', booth: 'N-102', size: '75 sqm' },
-                                            { company: 'TVU Networks', year: '2024', booth: 'N-210', size: '55 sqm' },
-                                            { company: 'Dejero', year: '2025', booth: 'N-305', size: '45 sqm' },
-                                            { company: 'Comrex', year: '2024', booth: 'N-401', size: '30 sqm' },
-                                        ];
+                                        const demoExhibitors = exhibitorCompanies.map((company) => {
+                                            const meta = randomExhibitorMeta(`${company.id}-${company.name}`);
+                                            return {
+                                                id: company.id,
+                                                company: company.name,
+                                                year: meta.year,
+                                                booth: meta.booth,
+                                                size: meta.size,
+                                                logoUrl: company.logo_url || company.logo || '',
+                                                location: [company.city, company.country].filter(Boolean).join(', '),
+                                                industry: company.industry || '',
+                                                domain: company.primary_domain || '',
+                                                employees: Number(company.estimated_num_employees || 0),
+                                            };
+                                        });
 
                                         // Filter by search
                                         const q = exSearch.toLowerCase();
@@ -753,59 +1133,131 @@ export default function ShowDetailPage() {
                                                 : <ChevronDown className="h-3 w-3 text-orange-500" />;
                                         };
 
-                                        const columns = [
-                                            { key: 'company', label: 'Company' },
-                                            { key: 'year', label: 'Attended Year' },
-                                            { key: 'booth', label: 'Booth Number' },
-                                            { key: 'size', label: 'Booth Size' },
-                                        ];
+                                        const visibleIds = sorted.map((ex) => ex.id);
+                                        const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedExhibitorIds.includes(id));
+
+                                        const toggleSelectAllVisible = () => {
+                                            setSelectedExhibitorIds((prev) => {
+                                                if (allVisibleSelected) {
+                                                    return prev.filter((id) => !visibleIds.includes(id));
+                                                }
+                                                const next = new Set(prev);
+                                                visibleIds.forEach((id) => next.add(id));
+                                                return Array.from(next);
+                                            });
+                                        };
+
+                                        const toggleSelectOne = (id: string) => {
+                                            setSelectedExhibitorIds((prev) => (
+                                                prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+                                            ));
+                                        };
 
                                         return (
-                                            <div className="max-h-[62vh] overflow-y-auto border-t border-zinc-100">
-                                                <table className="w-full text-left text-sm">
-                                                    <thead className="sticky top-0 z-10 bg-white border-b border-zinc-200">
-                                                        <tr>
-                                                            {columns.map(col => (
-                                                                <th
-                                                                    key={col.key}
-                                                                    onClick={() => toggleSort(col.key)}
-                                                                    className="cursor-pointer select-none whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-600"
-                                                                >
-                                                                    <span className="inline-flex items-center gap-1.5">
-                                                                        {col.label}
-                                                                        <SortIcon col={col.key} />
-                                                                    </span>
-                                                                </th>
-                                                            ))}
-                                                            <th className="whitespace-nowrap px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400"></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-zinc-50">
-                                                        {sorted.length > 0 ? (
-                                                            sorted.map((ex, i) => (
-                                                                <tr key={i} className="transition-colors hover:bg-zinc-50/80 cursor-pointer group">
-                                                                    <td className="whitespace-nowrap px-5 py-3 font-medium text-zinc-900 group-hover:text-orange-600 transition-colors">{ex.company}</td>
-                                                                    <td className="whitespace-nowrap px-5 py-3 text-zinc-600">{ex.year}</td>
-                                                                    <td className="whitespace-nowrap px-5 py-3">
-                                                                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700">{ex.booth}</span>
-                                                                    </td>
-                                                                    <td className="whitespace-nowrap px-5 py-3 text-zinc-600">{ex.size}</td>
-                                                                    <td className="whitespace-nowrap px-5 py-3 text-right">
-                                                                        <button className="text-xs font-semibold text-orange-600 transition-colors group-hover:text-orange-700">
-                                                                            View More
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
-                                                            ))
-                                                        ) : (
-                                                            <tr>
-                                                                <td colSpan={5} className="py-12 text-center">
-                                                                    <p className="text-sm text-zinc-400">No exhibitors match &ldquo;{exSearch}&rdquo;</p>
-                                                                </td>
-                                                            </tr>
+                                            <div className="h-full overflow-y-auto border-t border-zinc-100">
+                                                <div className="sticky top-0 z-20 border-b border-zinc-100 bg-zinc-50/95 px-4 py-2.5 backdrop-blur sm:px-5">
+                                                    <div className={`grid ${isExhibitorSelectMode ? 'grid-cols-[30px_minmax(0,1fr)_110px_120px_110px]' : 'grid-cols-[minmax(0,1fr)_110px_120px_110px]'} items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500`}>
+                                                        {isExhibitorSelectMode && (
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={allVisibleSelected}
+                                                                onChange={toggleSelectAllVisible}
+                                                                className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                title="Select all visible"
+                                                            />
                                                         )}
-                                                    </tbody>
-                                                </table>
+                                                        <button onClick={() => toggleSort('company')} className="inline-flex items-center gap-1 hover:text-zinc-600">
+                                                            Company <SortIcon col="company" />
+                                                        </button>
+                                                        <button onClick={() => toggleSort('year')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                            Attended Year <SortIcon col="year" />
+                                                        </button>
+                                                        <button onClick={() => toggleSort('booth')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                            Booth Number <SortIcon col="booth" />
+                                                        </button>
+                                                        <button onClick={() => toggleSort('size')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                            Booth Size <SortIcon col="size" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {sorted.length > 0 ? (
+                                                    <div className="space-y-2.5 p-3 sm:p-4">
+                                                        {sorted.map((ex) => {
+                                                            const avatarText = initialsFromName(ex.company);
+                                                            return (
+                                                                <div
+                                                                    key={ex.id}
+                                                                    role="button"
+                                                                    tabIndex={0}
+                                                                    onClick={() => router.push(`/companies/${ex.id}`)}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                                            e.preventDefault();
+                                                                            router.push(`/companies/${ex.id}`);
+                                                                        }
+                                                                    }}
+                                                                    className="group cursor-pointer rounded-xl border border-zinc-200 bg-white px-3 py-2.5 transition-all duration-200 hover:border-orange-200 hover:shadow-sm hover:shadow-zinc-950/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-1"
+                                                                >
+                                                                    <div className={`grid ${isExhibitorSelectMode ? 'grid-cols-[30px_minmax(0,1fr)_110px_120px_110px]' : 'grid-cols-[minmax(0,1fr)_110px_120px_110px]'} items-center gap-2`}>
+                                                                        {isExhibitorSelectMode && (
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={selectedExhibitorIds.includes(ex.id)}
+                                                                                onChange={() => toggleSelectOne(ex.id)}
+                                                                                onClick={(event) => event.stopPropagation()}
+                                                                                className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                                title={`Select ${ex.company}`}
+                                                                            />
+                                                                        )}
+                                                                        <div className="flex min-w-0 items-center gap-3">
+                                                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200">
+                                                                                {ex.logoUrl ? (
+                                                                                    <img
+                                                                                        src={ex.logoUrl}
+                                                                                        alt={`${ex.company} logo`}
+                                                                                        className="h-full w-full object-contain p-1"
+                                                                                        loading="lazy"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: '#fb923c' }}>
+                                                                                        {avatarText}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+
+                                                                                <div className="min-w-0">
+                                                                                <p className="truncate text-[14px] font-semibold text-zinc-900 group-hover:text-orange-700">{ex.company}</p>
+                                                                                <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
+                                                                                    {ex.location ? (
+                                                                                        <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                                                                                            <MapPin className="h-3 w-3 shrink-0 text-orange-500" />
+                                                                                            <span className="truncate">{ex.location}</span>
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="text-zinc-400">Location N/A</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <span className="justify-self-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">{ex.year}</span>
+                                                                        <span className="justify-self-center rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">{ex.booth}</span>
+                                                                        <span className="justify-self-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">{ex.size}</span>
+                                                                        </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : exhibitorsLoading ? (
+                                                    <div className="py-12 text-center">
+                                                        <p className="text-sm text-zinc-400">Loading exhibitors...</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="py-12 text-center">
+                                                        <p className="text-sm text-zinc-400">No exhibitors match &ldquo;{exSearch}&rdquo;</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })()}

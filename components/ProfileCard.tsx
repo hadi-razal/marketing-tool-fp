@@ -15,6 +15,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { getBrandColor, isPersonSavedFromLinkedInSearch } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface Lead {
     id: string;
@@ -160,6 +161,30 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
     const image = lead.photo_url || lead.image;
     const isVerified = lead.status === 'Verified' || lead.email_status === 'verified';
     const saved = isSaved || lead.isSaved;
+    const canCopyEmail = Boolean(email && email !== 'N/A' && email !== 'Available (Unlock)');
+    const canCopyPhone = Boolean(phone && phone !== 'N/A' && phone !== 'Available (Unlock)');
+
+    const handleCopyEmail = async (event: React.MouseEvent) => {
+        event.stopPropagation();
+        if (!canCopyEmail) return;
+        try {
+            await navigator.clipboard.writeText(email);
+            toast.success('Email copied');
+        } catch {
+            toast.error('Failed to copy email');
+        }
+    };
+
+    const handleCopyPhone = async (event: React.MouseEvent) => {
+        event.stopPropagation();
+        if (!canCopyPhone) return;
+        try {
+            await navigator.clipboard.writeText(phone);
+            toast.success('Phone copied');
+        } catch {
+            toast.error('Failed to copy phone');
+        }
+    };
 
     const pipelineLabel = (lead.contact_status || 'New').trim() || 'New';
     const pipelineVisual = PIPELINE_VISUAL[pipelineLabel] ?? PIPELINE_VISUAL.New;
@@ -300,7 +325,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                         title="Saved from LinkedIn / Apollo search"
                     >
                         <Linkedin className="h-3 w-3 shrink-0" />
-                        <span className="min-w-0">Saved from LinkedIn</span>
+                        <span className="min-w-0">LinkedIn Enriched</span>
                     </span>
                 )}
             </div>
@@ -311,13 +336,27 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ lead, onAction, action
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-200 bg-white">
                         <Mail className="h-2.5 w-2.5 text-zinc-400" />
                     </div>
-                    <span className="flex-1 truncate text-[11px] text-zinc-600">{email}</span>
+                    <button
+                        type="button"
+                        onClick={handleCopyEmail}
+                        className={`flex-1 truncate text-left text-[11px] ${canCopyEmail ? 'cursor-pointer text-zinc-600 hover:text-orange-600' : 'cursor-default text-zinc-600'}`}
+                        title={canCopyEmail ? 'Click to copy email' : undefined}
+                    >
+                        {email}
+                    </button>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-200 bg-white">
                         <Phone className="h-2.5 w-2.5 text-zinc-400" />
                     </div>
-                    <span className="text-[11px] text-zinc-600">{phone}</span>
+                    <button
+                        type="button"
+                        onClick={handleCopyPhone}
+                        className={`truncate text-left text-[11px] ${canCopyPhone ? 'cursor-pointer text-zinc-600 hover:text-orange-600' : 'cursor-default text-zinc-600'}`}
+                        title={canCopyPhone ? 'Click to copy phone' : undefined}
+                    >
+                        {phone}
+                    </button>
                 </div>
             </div>
         </div>

@@ -298,16 +298,16 @@ export const TasksTable = () => {
             <TaskDetailsModal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} task={viewTask} />
 
             {/* Hero */}
-            <header className="shrink-0 space-y-5 pb-4">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 space-y-1">
+            <header className="shrink-0 space-y-3 pb-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 space-y-0.5">
                         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-orange-600">Productivity</p>
-                        <h1 className="text-balance text-3xl font-bold tracking-tight text-zinc-950 sm:text-4xl">Tasks</h1>
+                        <h1 className="text-balance text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Tasks</h1>
                     </div>
                     <button
                         type="button"
                         onClick={handleAddClick}
-                        className="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded-2xl bg-zinc-950 px-5 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:bg-zinc-800 active:scale-[0.98] sm:self-auto"
+                        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:bg-zinc-800 active:scale-[0.98] sm:self-auto"
                     >
                         <Plus className="h-4 w-4" />
                         New task
@@ -316,92 +316,33 @@ export const TasksTable = () => {
 
                 {/* Summary: workspace + team vs personal progress */}
                 {!loading && totalVisible > 0 && (
-                    <div className="space-y-3">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <div className="rounded-2xl border border-zinc-200/80 bg-white/80 p-4 shadow-sm shadow-zinc-950/5 backdrop-blur-sm">
+                    <div className="space-y-2">
+                        <div className="grid gap-2 sm:grid-cols-3">
+                            <div className="rounded-xl border border-zinc-200/80 bg-white p-3">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Workspace</p>
-                                <p className="mt-1 text-2xl font-bold tabular-nums text-zinc-950">{totalVisible}</p>
-                                <p className="mt-0.5 text-xs text-zinc-500">visible to you</p>
-                                <p className="mt-2 flex items-center gap-2 border-t border-zinc-100 pt-2 text-xs text-zinc-600">
-                                    <span className="font-semibold text-zinc-900">{pendingCount}</span> active
-                                    <span className="text-zinc-300">·</span>
-                                    <span className="font-semibold text-emerald-700">{completedCount}</span> done
+                                <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950">{totalVisible}</p>
+                                <p className="text-[11px] text-zinc-500">{pendingCount} active · {completedCount} done</p>
+                            </div>
+                            <div className="rounded-xl border border-sky-200/70 bg-sky-50/30 p-3">
+                                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                                    <Users className="h-3.5 w-3.5" aria-hidden />
+                                    Team
                                 </p>
+                                <p className="mt-1 text-lg font-bold tabular-nums text-sky-800">{teamStats.total}</p>
+                                <p className="text-[11px] text-zinc-500">{teamStats.done} done · {teamStats.open} open</p>
                             </div>
-
-                            <div className="rounded-2xl border border-sky-200/70 bg-linear-to-br from-white to-sky-50/50 p-4 shadow-sm shadow-zinc-950/5 backdrop-blur-sm">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-                                            <Users className="h-3.5 w-3.5" aria-hidden />
-                                            Team
-                                        </p>
-                                        <p className="mt-0.5 text-xs leading-snug text-zinc-500">Public tasks not assigned to you—shared with everyone.</p>
-                                    </div>
-                                    <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-sky-900 ring-1 ring-sky-200/80">
-                                        {teamStats.total}
-                                    </span>
-                                </div>
-                                {teamStats.total === 0 ? (
-                                    <p className="mt-3 text-xs text-zinc-400">No shared-queue tasks right now.</p>
-                                ) : (
-                                    <>
-                                        <p className="mt-2 text-2xl font-bold tabular-nums text-sky-800">{teamStats.pct}%</p>
-                                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100/90">
-                                            <div
-                                                className="h-full rounded-full bg-linear-to-r from-sky-500 to-cyan-500 transition-[width] duration-500 ease-out"
-                                                style={{ width: `${teamStats.pct}%` }}
-                                            />
-                                        </div>
-                                        <p className="mt-1.5 text-xs text-zinc-600">
-                                            <span className="font-medium text-zinc-800">{teamStats.done}</span> done ·{' '}
-                                            <span className="font-medium text-zinc-800">{teamStats.open}</span> open
-                                        </p>
-                                    </>
-                                )}
-                            </div>
-
-                            <div className="rounded-2xl border border-orange-200/80 bg-linear-to-br from-white to-orange-50/40 p-4 shadow-sm shadow-zinc-950/5 backdrop-blur-sm">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-orange-700">
-                                            <User className="h-3.5 w-3.5" aria-hidden />
-                                            Yours
-                                        </p>
-                                        <p className="mt-0.5 text-xs leading-snug text-zinc-500">Private tasks plus anything assigned to you.</p>
-                                    </div>
-                                    <span className="shrink-0 rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-orange-950 ring-1 ring-orange-200/80">
-                                        {personalStats.total}
-                                    </span>
-                                </div>
-                                {personalStats.total === 0 ? (
-                                    <p className="mt-3 text-xs text-zinc-400">Nothing in your personal queue.</p>
-                                ) : (
-                                    <>
-                                        <p className="mt-2 flex items-baseline gap-2 text-2xl font-bold tabular-nums text-orange-900">
-                                            {personalStats.pct}%
-                                            {personalStats.open > 0 && (
-                                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-orange-500" aria-hidden />
-                                            )}
-                                        </p>
-                                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-orange-100/90">
-                                            <div
-                                                className="h-full rounded-full bg-linear-to-r from-orange-500 to-amber-500 transition-[width] duration-500 ease-out"
-                                                style={{ width: `${personalStats.pct}%` }}
-                                            />
-                                        </div>
-                                        <p className="mt-1.5 text-xs text-zinc-600">
-                                            <span className="font-medium text-zinc-800">{personalStats.done}</span> done ·{' '}
-                                            <span className="font-medium text-zinc-800">{personalStats.open}</span> open
-                                        </p>
-                                    </>
-                                )}
+                            <div className="rounded-xl border border-orange-200/80 bg-orange-50/30 p-3">
+                                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-orange-700">
+                                    <User className="h-3.5 w-3.5" aria-hidden />
+                                    Yours
+                                </p>
+                                <p className="mt-1 text-lg font-bold tabular-nums text-orange-900">{personalStats.total}</p>
+                                <p className="text-[11px] text-zinc-500">{personalStats.done} done · {personalStats.open} open</p>
                             </div>
                         </div>
 
                         <p className="text-center text-[11px] leading-relaxed text-zinc-400 sm:text-left">
-                            Overall <span className="font-semibold text-zinc-600">{progressPct}%</span> complete across all visible tasks.
-                            Team and Yours split the list so progress matches how you actually work.
+                            Overall <span className="font-semibold text-zinc-600">{progressPct}%</span> complete across visible tasks.
                         </p>
                     </div>
                 )}

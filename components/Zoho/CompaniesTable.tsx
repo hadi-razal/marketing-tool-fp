@@ -6,11 +6,8 @@ import {
     Search,
     Filter,
     MapPin,
-    ArrowRight,
     Building2,
     Globe2,
-    Users,
-    Activity
 } from 'lucide-react';
 import { FilterPopover, type FilterSelections, type FilterCategory } from './FilterPopover';
 import { Button } from '../ui/Button';
@@ -18,20 +15,13 @@ import { Skeleton } from '../ui/Skeleton';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase';
 import { getBrandColor } from '@/lib/utils';
+import { CreateCompanyModal } from '@/components/CreateCompanyModal';
 
 const initialsFromName = (name: string) => {
     const parts = name.trim().split(/\s+/).filter(Boolean);
     if (parts.length === 0) return '?';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-};
-
-const formatMoney = (amount?: number) => {
-    if (!amount) return '';
-    if (amount >= 1e9) return `$${(amount / 1e9).toFixed(1)}B`;
-    if (amount >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
-    if (amount >= 1e3) return `$${(amount / 1e3).toFixed(1)}K`;
-    return `$${amount}`;
 };
 
 export const CompaniesTable = () => {
@@ -42,6 +32,7 @@ export const CompaniesTable = () => {
     const [fetchError, setFetchError] = useState('');
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(0);
@@ -184,7 +175,73 @@ export const CompaniesTable = () => {
     };
 
     const handleAdd = () => {
-        toast.info('Add company functionality coming soon');
+        setIsCreateModalOpen(true);
+    };
+
+    const handleCreateCompany = async (formData: any) => {
+        try {
+            const location = String(formData?.location || '').trim();
+            const locationParts = location.split(',').map((v: string) => v.trim()).filter(Boolean);
+            const city = locationParts[0] || '';
+            const country = locationParts.length > 1 ? locationParts[locationParts.length - 1] : '';
+            const state = locationParts.length > 2 ? locationParts.slice(1, -1).join(', ') : '';
+            const websiteInput = String(formData?.website || '').trim();
+            const websiteUrl = websiteInput
+                ? (/^https?:\/\//i.test(websiteInput) ? websiteInput : `https://${websiteInput}`)
+                : '';
+            const websiteHost = websiteUrl
+                ? websiteUrl
+                    .replace(/^https?:\/\//i, '')
+                    .replace(/^www\./i, '')
+                    .replace(/\/.*$/, '')
+                    .trim()
+                : '';
+            const keywords = String(formData?.keywords || '')
+                .split(',')
+                .map((v: string) => v.trim())
+                .filter(Boolean);
+            const foundedYear = Number.parseInt(String(formData?.founded_year || '').trim(), 10);
+
+            const row = {
+                id: crypto.randomUUID(),
+                name: String(formData?.name || '').trim(),
+                industry: String(formData?.industry || '').trim(),
+                website_url: websiteUrl || null,
+                blog_url: null,
+                linkedin_url: String(formData?.linkedin || '').trim() || null,
+                twitter_url: String(formData?.twitter || '').trim() || null,
+                facebook_url: String(formData?.facebook || '').trim() || null,
+                logo_url: String(formData?.logo || '').trim() || null,
+                primary_domain: websiteHost || null,
+                keywords: keywords.length > 0 ? keywords : null,
+                phone: String(formData?.phone || '').trim() || null,
+                street_address: null,
+                city,
+                state: state || null,
+                country,
+                postal_code: null,
+                founded_year: Number.isNaN(foundedYear) ? null : foundedYear,
+                estimated_num_employees: null,
+                saved_uid: null,
+                desc: String(formData?.description || '').trim() || null,
+            };
+
+            if (!row.name) {
+                toast.error('Company name is required.');
+                return;
+            }
+
+            const { error } = await supabase.from('companies').insert(row);
+            if (error) throw error;
+
+            toast.success('Company created');
+            setIsCreateModalOpen(false);
+            setPage(0);
+            await fetchData(true, debouncedSearch);
+        } catch (err: any) {
+            console.error('Create company error:', err);
+            toast.error(err?.message || 'Failed to create company');
+        }
     };
 
     const handleRowClick = (item: any) => {
@@ -195,21 +252,67 @@ export const CompaniesTable = () => {
 
     return (
         <div className="h-full flex flex-col gap-6">
+            <CreateCompanyModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSubmit={handleCreateCompany}
+            />
+
             {/* Toolbar */}
-            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-950/5">
-                {/* Search */}
-                <div className="relative">
-                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                    <input
-                        type="text"
-                        placeholder="Search by company name or domain..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-3 pl-10 pr-4 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
-                    />
+            <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-950/5">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                    {/* Search */}
+                    <div className="relative lg:min-w-0 lg:flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by company name or domain..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-2 pl-9 pr-3 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                        />
+                    </div>
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-0.5 lg:overflow-visible">
+                        <div className="relative">
+                            <Button
+                                variant="secondary"
+                                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                                className={`h-9 rounded-xl border px-3 ${totalActiveFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
+                                leftIcon={<Filter className="h-4 w-4" />}
+                            >
+                                <span className="hidden sm:inline">Filters</span>
+                                {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
+                            </Button>
+                            <FilterPopover
+                                isOpen={isFilterOpen}
+                                onClose={() => setIsFilterOpen(false)}
+                                categories={filterCategories}
+                                selections={filterSelections}
+                                onApply={handleApplyFilters}
+                                onClear={handleClearFilters}
+                            />
+                        </div>
+                        <Button
+                            variant="secondary"
+                            onClick={() => fetchData(true, debouncedSearch)}
+                            isLoading={loading}
+                            className="h-9 w-9 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
+                        >
+                            {!loading && <RefreshCw className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                            onClick={handleAdd}
+                            leftIcon={<Plus className="h-4 w-4" />}
+                            className="h-9 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
+                        >
+                            Add Company
+                        </Button>
+                    </div>
                 </div>
-                {/* Region chips — horizontal scroll on mobile */}
-                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+
+                {/* Region chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Region:</span>
                     {['All', 'UAE', 'KSA', 'Europe'].map((region) => {
                         const isSelected = quickRegion === region;
@@ -218,49 +321,12 @@ export const CompaniesTable = () => {
                             <button
                                 key={region}
                                 onClick={() => setQuickRegion(region)}
-                                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${isSelected ? 'bg-zinc-950 text-white border-zinc-950' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300 hover:text-zinc-950 hover:bg-orange-50'}`}
+                                className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${isSelected ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-orange-300 hover:bg-orange-50 hover:text-zinc-950'}`}
                             >
                                 {label}
                             </button>
                         );
                     })}
-                </div>
-                {/* Actions — single row, Add Company pushed right */}
-                <div className="flex items-center gap-2">
-                    <div className="relative">
-                        <Button
-                            variant="secondary"
-                            onClick={() => setIsFilterOpen(!isFilterOpen)}
-                            className={`h-10 rounded-xl border px-3 ${totalActiveFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
-                            leftIcon={<Filter className="h-4 w-4" />}
-                        >
-                            <span className="hidden sm:inline">Filters</span>
-                            {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
-                        </Button>
-                        <FilterPopover
-                            isOpen={isFilterOpen}
-                            onClose={() => setIsFilterOpen(false)}
-                            categories={filterCategories}
-                            selections={filterSelections}
-                            onApply={handleApplyFilters}
-                            onClear={handleClearFilters}
-                        />
-                    </div>
-                    <Button
-                        variant="secondary"
-                        onClick={() => fetchData(true, debouncedSearch)}
-                        isLoading={loading}
-                        className="h-10 w-10 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
-                    >
-                        {!loading && <RefreshCw className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                        onClick={handleAdd}
-                        leftIcon={<Plus className="h-4 w-4" />}
-                        className="ml-auto h-10 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
-                    >
-                        Add Company
-                    </Button>
                 </div>
             </div>
 
@@ -270,12 +336,23 @@ export const CompaniesTable = () => {
                     {loading && data.length === 0 ? (
                         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50/80">
-                                    <Skeleton className="h-28 w-full rounded-none" />
-                                    <div className="space-y-3 p-5">
-                                        <Skeleton className="h-6 w-4/5" />
-                                        <Skeleton className="h-4 w-1/2" />
-                                        <Skeleton className="h-4 w-2/3" />
+                                <div key={i} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                                    <div className="space-y-4 p-5">
+                                        <div className="flex items-start justify-between">
+                                            <Skeleton className="h-12 w-12 rounded-xl" />
+                                            <Skeleton className="h-5 w-28 rounded-md" />
+                                        </div>
+                                        <Skeleton className="h-6 w-5/6 rounded-md" />
+                                        <div className="flex gap-2">
+                                            <Skeleton className="h-5 w-24 rounded-md" />
+                                        </div>
+                                        <div className="space-y-2 border-t border-zinc-100 pt-3">
+                                            <Skeleton className="h-4 w-3/4 rounded" />
+                                            <Skeleton className="h-4 w-2/3 rounded" />
+                                        </div>
+                                        <div className="border-t border-zinc-100 pt-3">
+                                            <Skeleton className="ml-auto h-4 w-20 rounded" />
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -304,9 +381,8 @@ export const CompaniesTable = () => {
                                 const country = item.country || '';
                                 const location = [city, country].filter(Boolean).join(', ');
                                 const initials = initialsFromName(name);
-                                const employees = item.estimated_num_employees;
-                                const revenue = item.organization_revenue_printed || formatMoney(item.organization_revenue);
                                 const logoUrl = item.logo_url || item.logo;
+                                const domain = item.primary_domain || item.website_url || '';
 
                                 return (
                                     <button
@@ -315,26 +391,9 @@ export const CompaniesTable = () => {
                                         onClick={() => handleRowClick(item)}
                                         className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left shadow-sm shadow-zinc-950/5 outline-none transition-all duration-300 cursor-pointer hover:border-orange-200 hover:shadow-2xl hover:shadow-orange-950/15 focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2"
                                     >
-                                        {/* Visual header */}
-                                        <div className="relative h-36 overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
-                                            {/* Layered glows */}
-                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_70%_at_90%_10%,rgba(251,146,60,0.5),transparent)]" />
-                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_10%_100%,rgba(251,146,60,0.2),transparent)]" />
-                                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                                            {/* Subtle grid pattern */}
-                                            <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
-                                                style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)' }}
-                                            />
-                                            {/* Domain top label */}
-                                            {item.primary_domain && (
-                                                <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-white/70 backdrop-blur-sm ring-1 ring-white/10">
-                                                    <Globe2 className="h-2.5 w-2.5" />
-                                                    {item.primary_domain}
-                                                </div>
-                                            )}
-                                            <div className="relative flex h-full items-end justify-between px-4 pb-4">
-                                                {/* Initials/Logo avatar */}
-                                                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white text-base font-bold tracking-tight text-zinc-900 shadow-2xl ring-2 ring-white/25">
+                                        <div className="flex flex-1 flex-col gap-3 p-4">
+                                            <div className="flex items-start gap-3">
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 text-base font-bold tracking-tight text-zinc-900 ring-1 ring-zinc-200">
                                                     {logoUrl ? (
                                                         <img
                                                             src={logoUrl}
@@ -343,59 +402,38 @@ export const CompaniesTable = () => {
                                                             loading="lazy"
                                                         />
                                                     ) : (
-                                                        <div 
-                                                            className="w-full h-full flex items-center justify-center text-xl text-white"
+                                                        <div
+                                                            className="flex h-full w-full items-center justify-center text-sm font-bold text-white"
                                                             style={{ backgroundColor: getBrandColor(name) }}
                                                         >
                                                             {initials}
                                                         </div>
                                                     )}
                                                 </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-zinc-950 transition-colors group-hover:text-orange-700">
+                                                        {name}
+                                                    </h3>
+                                                    {industry ? (
+                                                        <p className="mt-0.5 truncate text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                                            {industry}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        <div className="flex flex-1 flex-col p-5">
-                                            <h3 className="line-clamp-2 text-base font-bold leading-snug tracking-tight text-zinc-950 transition-colors group-hover:text-orange-700">
-                                                {name}
-                                            </h3>
-
-                                            <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                                {industry ? (
-                                                    <span className="inline-flex items-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                                                        {industry}
-                                                    </span>
+                                            <div className="mt-auto space-y-2 border-t border-zinc-100 pt-3">
+                                                {domain ? (
+                                                    <div className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-700">
+                                                        <Globe2 className="h-3 w-3 shrink-0 text-zinc-500" />
+                                                        <span className="truncate">{domain}</span>
+                                                    </div>
+                                                ) : null}
+                                                {location ? (
+                                                    <p className="truncate text-xs text-zinc-500">{location}</p>
                                                 ) : null}
                                             </div>
 
-                                            <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
-                                                <div className="flex items-center gap-2 text-sm text-zinc-500">
-                                                    <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                                                    <span className="line-clamp-1 font-medium text-zinc-700">{location || 'Location TBC'}</span>
-                                                </div>
-                                                {(employees > 0 || revenue) && (
-                                                    <div className="flex items-center gap-3 text-sm text-zinc-500">
-                                                        {employees > 0 && (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Users className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                                                                <span className="font-medium text-zinc-700">{employees.toLocaleString()} emp</span>
-                                                            </div>
-                                                        )}
-                                                        {revenue && (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Activity className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                                                                <span className="font-medium text-zinc-700">{revenue}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="mt-auto flex items-center justify-end border-t border-zinc-100 pt-4">
-                                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 transition-all duration-200 group-hover:gap-2 group-hover:text-orange-500">
-                                                    View details
-                                                    <ArrowRight className="h-3.5 w-3.5" />
-                                                </span>
-                                            </div>
                                         </div>
                                     </button>
                                 );

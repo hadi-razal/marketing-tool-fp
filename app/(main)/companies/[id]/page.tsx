@@ -20,6 +20,7 @@ import {
     Edit2,
     Trash2,
     Plus,
+    Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBrandColor } from '@/lib/utils';
@@ -78,6 +79,13 @@ export default function CompanyDetailPage() {
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>('overview');
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [currentUserId, setCurrentUserId] = useState('');
+    const [currentUserName, setCurrentUserName] = useState('Unknown User');
+    const [currentUserProfileUrl, setCurrentUserProfileUrl] = useState('');
+    const [savingComment, setSavingComment] = useState(false);
+    const [deletingCommentId, setDeletingCommentId] = useState('');
 
     const companyId = params?.id as string;
 
@@ -101,6 +109,7 @@ export default function CompanyDetailPage() {
                     return;
                 }
                 setCompany(cData);
+                setComments(Array.isArray(cData.comments) ? cData.comments : []);
 
                 const { data: pData } = await supabase
                     .from('people')
@@ -117,6 +126,86 @@ export default function CompanyDetailPage() {
         fetchCompanyAndPeople();
     }, [companyId, supabase]);
 
+    useEffect(() => {
+        const fetchCurrentUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            setCurrentUserId(user.id);
+
+            const { data: userProfile } = await supabase
+                .from('users')
+                .select('name, profile_url')
+                .eq('uid', user.id)
+                .single();
+
+            if (userProfile?.name) setCurrentUserName(userProfile.name);
+            if (userProfile?.profile_url) setCurrentUserProfileUrl(userProfile.profile_url);
+        };
+        fetchCurrentUser();
+    }, [supabase]);
+
+    const handleAddComment = async () => {
+        const text = commentText.trim();
+        if (!text) return;
+        if (!currentUserId) {
+            toast.error('Please sign in to comment.');
+            return;
+        }
+
+        const newComment = {
+            id: crypto.randomUUID(),
+            uid: currentUserId,
+            userName: currentUserName,
+            userProfileUrl: currentUserProfileUrl || undefined,
+            text,
+            createdAt: new Date().toISOString(),
+        };
+
+        const updatedComments = [...comments, newComment];
+        setSavingComment(true);
+        try {
+            const { error } = await supabase
+                .from('companies')
+                .update({ comments: updatedComments })
+                .eq('id', companyId);
+            if (error) throw error;
+            setComments(updatedComments);
+            setCommentText('');
+            toast.success('Comment added');
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err?.message || 'Failed to add comment');
+        } finally {
+            setSavingComment(false);
+        }
+    };
+
+    const handleDeleteComment = async (commentId: string) => {
+        const target = comments.find((comment) => comment.id === commentId);
+        if (!target) return;
+        if (target.uid !== currentUserId) {
+            toast.error('You can only delete your own comments.');
+            return;
+        }
+
+        const updatedComments = comments.filter((comment) => comment.id !== commentId);
+        setDeletingCommentId(commentId);
+        try {
+            const { error } = await supabase
+                .from('companies')
+                .update({ comments: updatedComments })
+                .eq('id', companyId);
+            if (error) throw error;
+            setComments(updatedComments);
+            toast.success('Comment deleted');
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err?.message || 'Failed to delete comment');
+        } finally {
+            setDeletingCommentId('');
+        }
+    };
+
     const handleDelete = async () => {
         if (!confirm('Delete this company permanently?')) return;
         const { error } = await supabase.from('companies').delete().eq('id', companyId);
@@ -131,14 +220,57 @@ export default function CompanyDetailPage() {
     /* ── loading ── */
     if (loading) {
         return (
-            <div className="min-h-full bg-white p-6 sm:p-10">
-                <Skeleton className="mb-6 h-10 w-48 rounded-md" />
-                <Skeleton className="mb-2 h-8 w-96 rounded-md" />
-                <Skeleton className="mb-8 h-4 w-64 rounded-md" />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <Skeleton key={i} className="h-20 rounded-md" />
-                    ))}
+            <div className="-m-4 h-[calc(100%+2rem)] lg:-m-6 lg:h-[calc(100%+3rem)] flex flex-col bg-white">
+                <div className="shrink-0 bg-zinc-900">
+                    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                        <div className="flex items-center justify-between py-4">
+                            <Skeleton className="h-5 w-28 rounded-md bg-white/20" />
+                            <div className="flex items-center gap-2">
+                                <Skeleton className="h-8 w-20 rounded-md bg-white/20" />
+                                <Skeleton className="h-8 w-20 rounded-md bg-white/20" />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4 pb-6 sm:pb-8">
+                            <Skeleton className="h-16 w-16 rounded-lg bg-white/20" />
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-40 rounded bg-white/20" />
+                                <Skeleton className="h-6 w-64 rounded bg-white/20" />
+                                <Skeleton className="h-4 w-44 rounded bg-white/20" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="shrink-0 border-b border-zinc-200 bg-white">
+                    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                        <div className="flex items-center gap-2 py-2">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <Skeleton key={i} className="h-8 w-24 rounded-md" />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+                        <div className="rounded-lg border border-zinc-200 bg-white p-5">
+                            <Skeleton className="mb-4 h-5 w-40 rounded-md" />
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                {Array.from({ length: 6 }).map((_, i) => (
+                                    <div key={i} className="space-y-2">
+                                        <Skeleton className="h-3 w-20 rounded" />
+                                        <Skeleton className="h-4 w-44 rounded" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                            <Skeleton className="mb-4 h-5 w-32 rounded-md" />
+                            <div className="space-y-3">
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                    <Skeleton key={i} className="h-14 w-full rounded-md" />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -197,23 +329,30 @@ export default function CompanyDetailPage() {
                     {/* Top bar */}
                     <div className="flex items-center justify-between py-4">
                         <button
-                            onClick={() => router.push('/companies')}
-                            className="group flex items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+                            onClick={() => router.back()}
+                            className="group flex cursor-pointer items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white"
                         >
                             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
                             Companies
                         </button>
                         <div className="flex items-center gap-2">
                             <button
+                                onClick={() => toast.info('Apollo enrichment coming soon')}
+                                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-blue-500/15 px-3 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/25 hover:text-blue-200"
+                            >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Enrich (Apollo)
+                            </button>
+                            <button
                                 onClick={() => toast.info('Edit coming soon')}
-                                className="flex h-8 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:bg-white/20 hover:text-white"
+                                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:bg-white/20 hover:text-white"
                             >
                                 <Edit2 className="h-3.5 w-3.5" />
                                 Edit
                             </button>
                             <button
                                 onClick={handleDelete}
-                                className="flex h-8 items-center gap-1.5 rounded-md bg-red-500/20 px-3 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 hover:text-red-300"
+                                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-red-500/20 px-3 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 hover:text-red-300"
                             >
                                 <Trash2 className="h-3.5 w-3.5" />
                                 Delete
@@ -351,7 +490,22 @@ export default function CompanyDetailPage() {
                                                         </div>
                                                         <div className="min-w-0 flex-1">
                                                             <p className="text-sm font-semibold text-zinc-900 truncate">{person.full_name}</p>
-                                                            <p className="text-[10px] text-zinc-500 truncate">{person.title || 'Employee'}</p>
+                                                            <p className="text-[10px] text-zinc-500 truncate">{person.title || person.job_title || 'Employee'}</p>
+                                                            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+                                                                {(person.email || person.primary_email) && <span className="truncate">{person.email || person.primary_email}</span>}
+                                                                {(person.phone || person.mobile_phone || person.work_phone) && <span>{person.phone || person.mobile_phone || person.work_phone}</span>}
+                                                                {(person.city && person.country) ? <span>{person.city}, {person.country}</span> : person.location ? <span>{person.location}</span> : null}
+                                                                {(person.linkedin_url || person.linkedin) && (
+                                                                    <a
+                                                                        href={(person.linkedin_url || person.linkedin).startsWith('http') ? (person.linkedin_url || person.linkedin) : `https://${person.linkedin_url || person.linkedin}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="font-medium text-orange-600 hover:underline"
+                                                                    >
+                                                                        LinkedIn
+                                                                    </a>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -370,6 +524,53 @@ export default function CompanyDetailPage() {
                                         </div>
                                     )}
                                 </div>
+
+                                {comments.length > 0 && (
+                                    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
+                                        <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3.5">
+                                            <h2 className="text-sm font-semibold text-zinc-900">Recent Comments</h2>
+                                            <span className="text-xs font-medium text-zinc-400">{comments.length} total</span>
+                                        </div>
+                                        <div className="divide-y divide-zinc-100">
+                                            {comments
+                                                .slice()
+                                                .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+                                                .slice(0, 3)
+                                                .map((comment) => {
+                                                    const commentName = String(comment.userName || 'Unknown User');
+                                                    const createdAt = comment.createdAt
+                                                        ? new Date(comment.createdAt).toLocaleString()
+                                                        : 'Unknown time';
+                                                    return (
+                                                        <div key={comment.id} className="px-5 py-4">
+                                                            <div className="mb-1.5 flex items-start justify-between gap-3">
+                                                                <div className="flex min-w-0 items-center gap-2">
+                                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-[10px] font-bold text-zinc-600">
+                                                                        {comment.userProfileUrl ? (
+                                                                            <img src={comment.userProfileUrl} alt={commentName} className="h-full w-full object-cover" />
+                                                                        ) : (
+                                                                            initialsFromName(commentName)
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="truncate text-sm font-semibold text-zinc-900">{commentName}</p>
+                                                                </div>
+                                                                <p className="text-xs text-zinc-400">{createdAt}</p>
+                                                            </div>
+                                                            <p className="line-clamp-2 text-sm leading-relaxed text-zinc-600">{String(comment.text || '')}</p>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                        <div className="border-t border-zinc-100 bg-zinc-50/60 px-5 py-3">
+                                            <button
+                                                onClick={() => setActiveTab('comments')}
+                                                className="text-xs font-semibold text-orange-600 transition-colors hover:text-orange-700"
+                                            >
+                                                View all comments
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -409,24 +610,97 @@ export default function CompanyDetailPage() {
                         {/* Comments Tab */}
                         {activeTab === 'comments' && (
                             <div className="flex flex-col gap-5">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <h2 className="text-lg font-semibold text-zinc-900">Comments</h2>
-                                        <p className="mt-1 text-sm text-zinc-500">Keep team comments and follow-ups in one stream.</p>
-                                    </div>
-                                    <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
-                                        Add Comment
-                                    </Button>
+                                <div>
+                                    <h2 className="text-lg font-semibold text-zinc-900">Comments</h2>
+                                    <p className="mt-1 text-sm text-zinc-500">Keep team comments and follow-ups in one stream.</p>
                                 </div>
-                                <div className="flex flex-col items-center justify-center gap-4 py-20 bg-white rounded-2xl border border-zinc-200">
-                                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-zinc-50">
-                                        <FileText className="h-8 w-8 text-zinc-300" />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-base font-semibold text-zinc-900">No comments yet</p>
-                                        <p className="mt-1 text-sm text-zinc-500">Be the first to add a comment to {name}.</p>
+
+                                <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                                    <textarea
+                                        value={commentText}
+                                        onChange={(e) => setCommentText(e.target.value)}
+                                        placeholder="Write a comment..."
+                                        className="min-h-[96px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+                                    />
+                                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="text-xs text-zinc-500">
+                                            <span>{commentText.length} chars</span>
+                                            <span className="mx-1.5 text-zinc-300">·</span>
+                                            <span>Signed in as {currentUserName}</span>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            variant="primary"
+                                            leftIcon={<Plus className="h-4 w-4" />}
+                                            onClick={handleAddComment}
+                                            isLoading={savingComment}
+                                            disabled={!commentText.trim()}
+                                            className="self-end sm:self-auto"
+                                        >
+                                            Post Comment
+                                        </Button>
                                     </div>
                                 </div>
+
+                                {comments.length > 0 ? (
+                                    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
+                                        <div className="border-b border-zinc-100 px-5 py-3.5">
+                                            <p className="text-sm font-semibold text-zinc-900">{comments.length} comments</p>
+                                        </div>
+                                        <div className="divide-y divide-zinc-100">
+                                            {comments
+                                                .slice()
+                                                .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+                                                .map((comment) => {
+                                                    const commentName = String(comment.userName || 'Unknown User');
+                                                    const createdAt = comment.createdAt
+                                                        ? new Date(comment.createdAt).toLocaleString()
+                                                        : 'Unknown time';
+                                                    const canDelete = comment.uid === currentUserId;
+
+                                                    return (
+                                                        <div key={comment.id} className="px-5 py-4">
+                                                            <div className="mb-2 flex items-start justify-between gap-3">
+                                                                <div className="flex min-w-0 items-center gap-2">
+                                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-[10px] font-bold text-zinc-600">
+                                                                        {comment.userProfileUrl ? (
+                                                                            <img src={comment.userProfileUrl} alt={commentName} className="h-full w-full object-cover" />
+                                                                        ) : (
+                                                                            initialsFromName(commentName)
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p className="truncate text-sm font-semibold text-zinc-900">{commentName}</p>
+                                                                        <p className="text-xs text-zinc-500">{createdAt}</p>
+                                                                    </div>
+                                                                </div>
+                                                                {canDelete && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteComment(comment.id)}
+                                                                        disabled={deletingCommentId === comment.id}
+                                                                        className="cursor-pointer rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-60"
+                                                                    >
+                                                                        {deletingCommentId === comment.id ? 'Deleting...' : 'Delete'}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{String(comment.text || '')}</p>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center gap-4 py-20 bg-white rounded-2xl border border-zinc-200">
+                                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-zinc-50">
+                                            <FileText className="h-8 w-8 text-zinc-300" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-base font-semibold text-zinc-900">No comments yet</p>
+                                            <p className="mt-1 text-sm text-zinc-500">Be the first to add a comment to {name}.</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

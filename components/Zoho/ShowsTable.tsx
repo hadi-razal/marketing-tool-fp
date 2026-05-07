@@ -352,20 +352,68 @@ export const ShowsTable = () => {
             />
 
             {/* Toolbar */}
-            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-950/5">
-                {/* Search */}
-                <div className="relative">
-                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                    <input
-                        type="text"
-                        placeholder="Search by show name..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-3 pl-10 pr-4 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
-                    />
+            <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-950/5">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                    {/* Search */}
+                    <div className="relative lg:min-w-0 lg:flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by show name..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-2 pl-9 pr-3 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                        />
+                    </div>
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-0.5 lg:overflow-visible">
+                        <div className="relative">
+                            <Button
+                                variant="secondary"
+                                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                                className={`h-9 rounded-xl border px-3 ${totalActiveFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
+                                leftIcon={<Filter className="h-4 w-4" />}
+                            >
+                                <span className="hidden sm:inline">Filters</span>
+                                {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
+                            </Button>
+                            <FilterPopover
+                                isOpen={isFilterOpen}
+                                onClose={() => setIsFilterOpen(false)}
+                                categories={filterCategories}
+                                selections={filterSelections}
+                                onApply={handleApplyFilters}
+                                onClear={handleClearFilters}
+                            />
+                        </div>
+                        <Button
+                            variant="secondary"
+                            onClick={() => fetchData(true, debouncedSearch)}
+                            isLoading={loading}
+                            className="h-9 w-9 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
+                        >
+                            {!loading && <RefreshCw className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={() => setImportOpen(true)}
+                            leftIcon={<FileSpreadsheet className="h-4 w-4" />}
+                            className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
+                        >
+                            <span className="hidden sm:inline">Import</span>
+                        </Button>
+                        <Button
+                            onClick={handleAdd}
+                            leftIcon={<Plus className="h-4 w-4" />}
+                            className="h-9 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
+                        >
+                            Add Show
+                        </Button>
+                    </div>
                 </div>
-                {/* Region chips — horizontal scroll on mobile */}
-                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+
+                {/* Region chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Region:</span>
                     {['All', 'UAE', 'KSA', 'Europe'].map((region) => {
                         const isSelected = quickRegion === region;
@@ -374,57 +422,12 @@ export const ShowsTable = () => {
                             <button
                                 key={region}
                                 onClick={() => setQuickRegion(region)}
-                                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${isSelected ? 'bg-zinc-950 text-white border-zinc-950' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300 hover:text-zinc-950 hover:bg-orange-50'}`}
+                                className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${isSelected ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-orange-300 hover:bg-orange-50 hover:text-zinc-950'}`}
                             >
                                 {label}
                             </button>
                         );
                     })}
-                </div>
-                {/* Actions — single row, Add Show pushed right */}
-                <div className="flex items-center gap-2">
-                    <div className="relative">
-                        <Button
-                            variant="secondary"
-                            onClick={() => setIsFilterOpen(!isFilterOpen)}
-                            className={`h-10 rounded-xl border px-3 ${totalActiveFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
-                            leftIcon={<Filter className="h-4 w-4" />}
-                        >
-                            <span className="hidden sm:inline">Filters</span>
-                            {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
-                        </Button>
-                        <FilterPopover
-                            isOpen={isFilterOpen}
-                            onClose={() => setIsFilterOpen(false)}
-                            categories={filterCategories}
-                            selections={filterSelections}
-                            onApply={handleApplyFilters}
-                            onClear={handleClearFilters}
-                        />
-                    </div>
-                    <Button
-                        variant="secondary"
-                        onClick={() => fetchData(true, debouncedSearch)}
-                        isLoading={loading}
-                        className="h-10 w-10 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
-                    >
-                        {!loading && <RefreshCw className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={() => setImportOpen(true)}
-                        leftIcon={<FileSpreadsheet className="h-4 w-4" />}
-                        className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
-                    >
-                        <span className="hidden sm:inline">Import</span>
-                    </Button>
-                    <Button
-                        onClick={handleAdd}
-                        leftIcon={<Plus className="h-4 w-4" />}
-                        className="ml-auto h-10 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
-                    >
-                        Add Show
-                    </Button>
                 </div>
             </div>
 
@@ -434,12 +437,22 @@ export const ShowsTable = () => {
                     {loading && data.length === 0 ? (
                         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50/80">
-                                    <Skeleton className="h-28 w-full rounded-none" />
-                                    <div className="space-y-3 p-5">
-                                        <Skeleton className="h-6 w-4/5" />
-                                        <Skeleton className="h-4 w-1/2" />
-                                        <Skeleton className="h-4 w-2/3" />
+                                <div key={i} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                                    <Skeleton className="h-32 w-full rounded-none" />
+                                    <div className="space-y-4 p-5">
+                                        <div className="flex items-center justify-between">
+                                            <Skeleton className="h-6 w-14 rounded-xl" />
+                                            <Skeleton className="h-5 w-16 rounded-full" />
+                                        </div>
+                                        <Skeleton className="h-6 w-5/6 rounded-md" />
+                                        <div className="flex gap-2">
+                                            <Skeleton className="h-5 w-20 rounded-md" />
+                                            <Skeleton className="h-5 w-24 rounded-md" />
+                                        </div>
+                                        <div className="space-y-2 border-t border-zinc-100 pt-3">
+                                            <Skeleton className="h-4 w-3/4 rounded" />
+                                            <Skeleton className="h-4 w-2/3 rounded" />
+                                        </div>
                                     </div>
                                 </div>
                             ))}

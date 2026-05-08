@@ -1109,11 +1109,11 @@ export default function ShowDetailPage() {
                                                 const bVal = b[exSort.key as keyof typeof b];
                                                 // Extract numeric value for size column
                                                 if (exSort.key === 'size') {
-                                                    const aNum = parseInt(aVal);
-                                                    const bNum = parseInt(bVal);
+                                                    const aNum = parseInt(String(aVal), 10);
+                                                    const bNum = parseInt(String(bVal), 10);
                                                     return exSort.dir === 'asc' ? aNum - bNum : bNum - aNum;
                                                 }
-                                                const cmp = aVal.localeCompare(bVal);
+                                                const cmp = String(aVal).localeCompare(String(bVal));
                                                 return exSort.dir === 'asc' ? cmp : -cmp;
                                             })
                                             : filtered;

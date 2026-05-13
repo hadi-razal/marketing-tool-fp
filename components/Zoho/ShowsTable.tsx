@@ -489,6 +489,23 @@ export const ShowsTable = () => {
                                 const ibcImage = 'https://cdn.prod.website-files.com/686e72da8be0fd92280388b7/6970abf7af4eaf76f110b30a_689ca814a9cbd6ff03649c1a_Newsroom_events_template_IBC.webp';
                                 const ibcCoverImage = 'https://cdn.prod.website-files.com/6641aa6384a3010ab6b735d7/679b179403837ff93b623af0_IBC2024-0915-Alex-105928-1-.webp';
 
+                                const RANDOM_COVERS = [
+                                    'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1551818255-e6e10975bc17?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1561489413-985b06da5bee?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1475721025592-7156fb1525f0?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1558008258-3256797b43f3?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1559136555-e4616d80c057?auto=format&fit=crop&q=80&w=800',
+                                    'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80&w=800'
+                                ];
+                                const nameSum = name.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+                                const randomCover = RANDOM_COVERS[nameSum % RANDOM_COVERS.length];
+
+                                const coverImage = isIbc ? ibcCoverImage : randomCover;
+
                                 return (
                                     <button
                                         key={item.ID}
@@ -498,21 +515,17 @@ export const ShowsTable = () => {
                                     >
                                         {/* Visual header */}
                                         <div className="relative h-36 overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
-                                            {isIbc && (
-                                                <>
-                                                    <img
-                                                        src={ibcCoverImage}
-                                                        alt={`${name} cover`}
-                                                        className="absolute inset-0 h-full w-full object-cover opacity-60"
-                                                        loading="lazy"
-                                                    />
-                                                    <div className="pointer-events-none absolute inset-0 bg-black/40" />
-                                                </>
-                                            )}
+                                            <img
+                                                src={coverImage}
+                                                alt={`${name} cover`}
+                                                className="absolute inset-0 h-full w-full object-cover opacity-60"
+                                                loading="lazy"
+                                            />
+                                            <div className="pointer-events-none absolute inset-0 bg-black/40" />
                                             {/* Layered glows */}
-                                            {!isIbc && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_70%_at_90%_10%,rgba(251,146,60,0.5),transparent)]" />}
-                                            {!isIbc && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_10%_100%,rgba(251,146,60,0.2),transparent)]" />}
-                                            {!isIbc && <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />}
+                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_70%_at_90%_10%,rgba(251,146,60,0.5),transparent)]" />
+                                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_10%_100%,rgba(251,146,60,0.2),transparent)]" />
+                                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
                                             {/* Subtle grid pattern */}
                                             <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
                                                 style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)' }}

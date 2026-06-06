@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -21,6 +21,8 @@ import {
     Trash2,
     Plus,
     Sparkles,
+    Layers,
+    ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBrandColor } from '@/lib/utils';
@@ -41,6 +43,243 @@ const initialsFromName = (name: string) => {
     if (parts.length === 0) return '?';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+type BoothCategory = 'Small' | 'Medium' | 'Large' | 'Enterprise';
+
+const boothCategoryFromSqm = (sqm: number): BoothCategory => {
+    if (sqm >= 150) return 'Enterprise';
+    if (sqm >= 100) return 'Large';
+    if (sqm >= 60) return 'Medium';
+    return 'Small';
+};
+
+const boothCategoryBadgeClass = (label: BoothCategory) => {
+    const styles: Record<BoothCategory, string> = {
+        Small: 'border-zinc-200 bg-zinc-50 text-zinc-700',
+        Medium: 'border-blue-200 bg-blue-50 text-blue-700',
+        Large: 'border-violet-200 bg-violet-50 text-violet-700',
+        Enterprise: 'border-orange-200 bg-orange-50 text-orange-700',
+    };
+    return styles[label];
+};
+
+type ShowEdition = {
+    year: number;
+    booth: string;
+    sqm: number;
+    hall?: string;
+};
+
+type ResolvedShowParticipation = {
+    showId: string;
+    showName: string;
+    location: string;
+    coverImage: string;
+    profileImage: string;
+    editions: (ShowEdition & { id: string })[];
+};
+
+const SHOW_COVER_FALLBACKS = [
+    'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800',
+    'https://images.unsplash.com/photo-1551818255-e6e10975bc17?auto=format&fit=crop&q=80&w=800',
+    'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&q=80&w=800',
+    'https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800',
+    'https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?auto=format&fit=crop&q=80&w=800',
+];
+
+const HARDCODED_EDITION_TEMPLATES: ShowEdition[][] = [
+    [
+        { year: 2024, booth: 'C18', hall: 'Hall 4.2', sqm: 84 },
+        { year: 2023, booth: 'B12', hall: 'Hall 4.1', sqm: 72 },
+    ],
+    [
+        { year: 2024, booth: 'F08', hall: 'Hall 6', sqm: 135 },
+        { year: 2022, booth: 'E42', hall: 'Hall 5', sqm: 120 },
+    ],
+    [
+        { year: 2023, booth: 'B07', hall: 'Salone del Mobile', sqm: 48 },
+    ],
+];
+
+const getShowCoverImage = (show: any, showName: string) => {
+    const cover = show?.cover_img_link ?? show?.Cover_Img_Link ?? show?.cover_image ?? '';
+    if (cover) return String(cover);
+    const nameSum = showName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return SHOW_COVER_FALLBACKS[nameSum % SHOW_COVER_FALLBACKS.length];
+};
+
+const buildShowParticipations = (shows: any[]): ResolvedShowParticipation[] => {
+    return shows.slice(0, HARDCODED_EDITION_TEMPLATES.length).map((show, index) => {
+        const showId = String(show?.id ?? show?.ID ?? '');
+        const showName = String(show?.name ?? show?.Event_Name ?? show?.Event ?? show?.Name ?? 'Untitled show');
+        const city = String(show?.city ?? show?.City ?? '');
+        const country = String(show?.country ?? show?.Country ?? '');
+        const location = [city, country].filter(Boolean).join(', ') || 'Location TBC';
+        const profileImage = String(show?.profile_img_link ?? show?.Profile_Img_Link ?? '');
+        const editions = HARDCODED_EDITION_TEMPLATES[index]
+            .map(edition => ({
+                ...edition,
+                id: `${showId}-${edition.year}`,
+            }))
+            .sort((a, b) => b.year - a.year);
+
+        return {
+            showId,
+            showName,
+            location,
+            coverImage: getShowCoverImage(show, showName),
+            profileImage,
+            editions,
+        };
+    });
+};
+
+const StatPill = ({ label, value, accent }: { label: string; value: string; accent?: boolean }) => (
+    <span
+        className={`inline-flex min-w-[4.5rem] flex-col rounded-lg border px-2.5 py-1.5 ${
+            accent ? 'border-orange-200 bg-orange-50' : 'border-zinc-200 bg-zinc-50'
+        }`}
+    >
+        <span className={`text-[9px] font-bold uppercase tracking-wider ${accent ? 'text-orange-400' : 'text-zinc-400'}`}>
+            {label}
+        </span>
+        <span className={`text-[11px] font-semibold ${accent ? 'text-orange-800' : 'text-zinc-800'}`}>{value}</span>
+    </span>
+);
+
+const ShowParticipationBars = ({
+    groups,
+    loading,
+    onShowClick,
+}: {
+    groups: ResolvedShowParticipation[];
+    loading: boolean;
+    onShowClick: (showId: string) => void;
+}) => {
+    if (loading) {
+        return (
+            <div className="space-y-3 p-4 sm:p-5">
+                {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="overflow-hidden rounded-xl border border-zinc-200 p-4">
+                        <div className="flex items-center gap-3">
+                            <Skeleton className="h-16 w-24 shrink-0 rounded-lg" />
+                            <div className="flex-1 space-y-2">
+                                <Skeleton className="h-4 w-48 rounded" />
+                                <Skeleton className="h-3 w-32 rounded" />
+                            </div>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                            <Skeleton className="h-12 w-full rounded-lg" />
+                            <Skeleton className="h-12 w-full rounded-lg" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (groups.length === 0) {
+        return (
+            <div className="px-5 py-10 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50 text-orange-500">
+                    <Layers className="h-5 w-5" />
+                </div>
+                <p className="text-sm font-semibold text-zinc-900">No show participations yet</p>
+                <p className="mt-1 text-xs text-zinc-500">Shows from your database will appear here once linked.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3 p-4 sm:p-5">
+            {groups.map(group => (
+                <div
+                    key={group.showId}
+                    className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5 transition-colors hover:border-orange-200"
+                >
+                    <button
+                        type="button"
+                        onClick={() => onShowClick(group.showId)}
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-zinc-100 bg-linear-to-r from-zinc-50 to-white px-4 py-3 text-left transition-colors hover:bg-orange-50/50 sm:px-5"
+                    >
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
+                                <img
+                                    src={group.coverImage}
+                                    alt={`${group.showName} cover`}
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-linear-to-t from-black/50 via-transparent to-transparent" />
+                                {group.profileImage ? (
+                                    <img
+                                        src={group.profileImage}
+                                        alt={`${group.showName} logo`}
+                                        className="absolute bottom-1.5 left-1.5 h-7 w-7 rounded-md border border-white/80 object-cover shadow-sm"
+                                        loading="lazy"
+                                    />
+                                ) : (
+                                    <div className="absolute bottom-1.5 left-1.5 flex h-7 w-7 items-center justify-center rounded-md border border-white/80 bg-white text-[10px] font-bold text-zinc-700 shadow-sm">
+                                        {initialsFromName(group.showName)}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-zinc-900 transition-colors group-hover:text-orange-700">
+                                    {group.showName}
+                                </p>
+                                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-zinc-500">
+                                    <MapPin className="h-3 w-3 shrink-0 text-orange-500" />
+                                    <span className="truncate">{group.location}</span>
+                                </p>
+                                <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
+                                    View show
+                                    <ArrowRight className="h-3 w-3" />
+                                </span>
+                            </div>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600">
+                            {group.editions.length} {group.editions.length === 1 ? 'edition' : 'editions'}
+                        </span>
+                    </button>
+
+                    <div className="divide-y divide-zinc-100">
+                        {group.editions.map((edition, index) => {
+                            const category = boothCategoryFromSqm(edition.sqm);
+                            return (
+                                <div
+                                    key={edition.id}
+                                    className="group/edition relative flex items-stretch gap-3 px-4 py-3 transition-colors hover:bg-orange-50/40 sm:gap-4 sm:px-5"
+                                >
+                                    <div
+                                        className={`w-1 shrink-0 rounded-full ${
+                                            index === 0 ? 'bg-orange-500' : 'bg-orange-300'
+                                        }`}
+                                    />
+                                    <div className="flex w-14 shrink-0 flex-col justify-center sm:w-16">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Year</span>
+                                        <span className="text-base font-bold tabular-nums text-zinc-900">{edition.year}</span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                                            {edition.hall && <StatPill label="Hall" value={edition.hall} />}
+                                            <StatPill label="Booth" value={edition.booth} accent />
+                                            <StatPill label="Size" value={`${edition.sqm} sqm`} />
+                                            <span className={`inline-flex min-w-[4.5rem] flex-col rounded-lg border px-2.5 py-1.5 ${boothCategoryBadgeClass(category)}`}>
+                                                <span className="text-[9px] font-bold uppercase tracking-wider opacity-70">Category</span>
+                                                <span className="text-[11px] font-semibold">{category}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 };
 
 /* ─── tabs ────────────────────────────────────────────────── */
@@ -72,7 +311,12 @@ const InfoRow = ({ icon, label, value }: { icon: React.ReactNode; label: string;
 export default function CompanyDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const supabase = useMemo(() => createClient(), []);
+
+    const fromShowId = searchParams.get('fromShow') || '';
+    const fromShowName = searchParams.get('showName') || '';
+    const fromTab = searchParams.get('fromTab') || '';
 
     const [company, setCompany] = useState<any>(null);
     const [people, setPeople] = useState<any[]>([]);
@@ -86,8 +330,16 @@ export default function CompanyDetailPage() {
     const [currentUserProfileUrl, setCurrentUserProfileUrl] = useState('');
     const [savingComment, setSavingComment] = useState(false);
     const [deletingCommentId, setDeletingCommentId] = useState('');
+    const [shows, setShows] = useState<any[]>([]);
+    const [showsLoading, setShowsLoading] = useState(true);
 
     const companyId = params?.id as string;
+
+    const showParticipations = useMemo(() => buildShowParticipations(shows), [shows]);
+    const totalEditions = useMemo(
+        () => showParticipations.reduce((sum, group) => sum + group.editions.length, 0),
+        [showParticipations],
+    );
 
     useEffect(() => {
         if (!companyId) {
@@ -125,6 +377,28 @@ export default function CompanyDetailPage() {
         };
         fetchCompanyAndPeople();
     }, [companyId, supabase]);
+
+    useEffect(() => {
+        const fetchShows = async () => {
+            setShowsLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('shows')
+                    .select('*')
+                    .order('id', { ascending: false })
+                    .limit(HARDCODED_EDITION_TEMPLATES.length);
+
+                if (error) throw error;
+                setShows(data || []);
+            } catch (err) {
+                console.error('Failed to fetch shows:', err);
+                setShows([]);
+            } finally {
+                setShowsLoading(false);
+            }
+        };
+        fetchShows();
+    }, [supabase]);
 
     useEffect(() => {
         const fetchCurrentUser = async () => {
@@ -306,6 +580,17 @@ export default function CompanyDetailPage() {
     const revenue = company.organization_revenue_printed || formatMoney(company.organization_revenue) || '';
     const founded = company.founded_year || '';
 
+    const handleBack = () => {
+        if (fromShowId) {
+            const query = fromTab && fromTab !== 'overview'
+                ? `?tab=${encodeURIComponent(fromTab)}`
+                : '';
+            router.push(`/shows/${fromShowId}${query}`);
+            return;
+        }
+        router.push('/companies');
+    };
+
     const detailRows = [
         industry && { label: 'Industry', value: industry, icon: <Building2 className="h-4 w-4" /> },
         location && { label: 'Location', value: location, icon: <MapPin className="h-4 w-4" /> },
@@ -329,11 +614,22 @@ export default function CompanyDetailPage() {
                     {/* Top bar */}
                     <div className="flex items-center justify-between py-4">
                         <button
-                            onClick={() => router.back()}
+                            onClick={handleBack}
                             className="group flex cursor-pointer items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white"
                         >
-                            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-                            Companies
+                            <ArrowLeft className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" />
+                            {fromShowId && fromShowName ? (
+                                <span className="flex min-w-0 flex-col items-start leading-tight">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
+                                        Exhibition
+                                    </span>
+                                    <span className="max-w-[12rem] truncate text-sm font-medium text-zinc-300 group-hover:text-white sm:max-w-xs">
+                                        {fromShowName}
+                                    </span>
+                                </span>
+                            ) : (
+                                'Companies'
+                            )}
                         </button>
                         <div className="flex items-center gap-2">
                             <button
@@ -471,58 +767,18 @@ export default function CompanyDetailPage() {
 
                                 <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                     <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3.5">
-                                        <h2 className="text-sm font-semibold text-zinc-900">Key Contacts</h2>
-                                        <span className="text-xs font-medium text-zinc-400">{people.length} contacts</span>
+                                        <h2 className="text-sm font-semibold text-zinc-900">Show Participations</h2>
+                                        <span className="text-xs font-medium text-zinc-400">
+                                            {showsLoading
+                                                ? 'Loading...'
+                                                : `${showParticipations.length} exhibitions · ${totalEditions} editions`}
+                                        </span>
                                     </div>
-                                    <div className="divide-y divide-zinc-100">
-                                        {people.length > 0 ? (
-                                            people.slice(0, 4).map(person => (
-                                                <div key={person.id} className="px-5 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-100 shrink-0">
-                                                            {person.photo_url || person.image ? (
-                                                                <img src={person.photo_url || person.image} alt={person.full_name} className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" style={{ backgroundColor: getBrandColor(person.full_name) }}>
-                                                                    {initialsFromName(person.full_name || 'U')}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className="text-sm font-semibold text-zinc-900 truncate">{person.full_name}</p>
-                                                            <p className="text-[10px] text-zinc-500 truncate">{person.title || person.job_title || 'Employee'}</p>
-                                                            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
-                                                                {(person.email || person.primary_email) && <span className="truncate">{person.email || person.primary_email}</span>}
-                                                                {(person.phone || person.mobile_phone || person.work_phone) && <span>{person.phone || person.mobile_phone || person.work_phone}</span>}
-                                                                {(person.city && person.country) ? <span>{person.city}, {person.country}</span> : person.location ? <span>{person.location}</span> : null}
-                                                                {(person.linkedin_url || person.linkedin) && (
-                                                                    <a
-                                                                        href={(person.linkedin_url || person.linkedin).startsWith('http') ? (person.linkedin_url || person.linkedin) : `https://${person.linkedin_url || person.linkedin}`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="font-medium text-orange-600 hover:underline"
-                                                                    >
-                                                                        LinkedIn
-                                                                    </a>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="px-5 py-6 text-center">
-                                                <p className="text-xs text-zinc-500">No people found.</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {people.length > 4 && (
-                                        <div className="border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
-                                            <button onClick={() => setActiveTab('contacts')} className="text-xs font-semibold text-orange-600 transition-colors hover:text-orange-700">
-                                                View all {people.length} contacts
-                                            </button>
-                                        </div>
-                                    )}
+                                    <ShowParticipationBars
+                                        groups={showParticipations}
+                                        loading={showsLoading}
+                                        onShowClick={(showId) => router.push(`/shows/${showId}`)}
+                                    />
                                 </div>
 
                                 {comments.length > 0 && (

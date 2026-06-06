@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -296,6 +296,9 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'images', label: 'Images', icon: <Camera className="h-4 w-4" /> },
 ];
 
+const isValidShowTab = (value: string | null): value is Tab =>
+    !!value && TABS.some(tab => tab.id === value);
+
 /* ─── info row ────────────────────────────────────────────── */
 
 const InfoRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) => (
@@ -327,6 +330,8 @@ const EmptyState = ({ icon, title, description }: { icon: React.ReactNode; title
 export default function ShowDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const supabase = useMemo(() => createClient(), []);
 
     const [data, setData] = useState<any>(null);
@@ -376,6 +381,23 @@ export default function ShowDetailPage() {
     const [commentAuthors, setCommentAuthors] = useState<Record<string, string>>({});
 
     const showId = params?.id as string;
+
+    const selectTab = useCallback((tab: Tab) => {
+        setActiveTab(tab);
+        const nextParams = new URLSearchParams(searchParams.toString());
+        if (tab === 'overview') {
+            nextParams.delete('tab');
+        } else {
+            nextParams.set('tab', tab);
+        }
+        const query = nextParams.toString();
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    }, [pathname, router, searchParams]);
+
+    useEffect(() => {
+        const tabParam = searchParams.get('tab');
+        setActiveTab(isValidShowTab(tabParam) ? tabParam : 'overview');
+    }, [searchParams]);
 
     const updateTabScrollState = useCallback(() => {
         const el = tabsScrollRef.current;
@@ -1195,7 +1217,7 @@ export default function ShowDetailPage() {
                                 {TABS.map((tab) => (
                                     <button
                                         key={tab.id}
-                                        onClick={() => setActiveTab(tab.id)}
+                                        onClick={() => selectTab(tab.id)}
                                         className={`relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
                                             ? 'text-zinc-900'
                                             : 'text-zinc-400 hover:text-zinc-600'
@@ -2038,7 +2060,14 @@ export default function ShowDetailPage() {
                                                         <div className="flex w-full flex-col gap-2.5">
                                                             {sorted.map((ex) => {
                                                                 const avatarText = initialsFromName(ex.company);
-                                                                const openCompany = () => router.push(`/companies/${ex.id}`);
+                                                                const openCompany = () => {
+                                                                    const query = new URLSearchParams({
+                                                                        fromShow: showId,
+                                                                        showName: eventName,
+                                                                        fromTab: activeTab,
+                                                                    });
+                                                                    router.push(`/companies/${ex.id}?${query.toString()}`);
+                                                                };
                                                                 return (
                                                                     <div
                                                                         key={ex.id}

@@ -200,7 +200,7 @@ export default function RegisterPage() {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
-                className="w-full max-w-[420px] relative z-10"
+                className="w-full max-w-105 relative z-10"
             >
                 <div className="bg-zinc-900/60 backdrop-blur-2xl border border-white/8 rounded-[28px] p-8 shadow-2xl shadow-black/60">
                     {/* Logo + header */}

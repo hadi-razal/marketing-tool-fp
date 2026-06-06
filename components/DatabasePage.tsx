@@ -484,40 +484,6 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 show={selectedShow}
             />
 
-            {/* Database Sidebar */}
-            <div className="w-full lg:w-72 shrink-0 flex flex-col h-full bg-white/90 border border-zinc-200 rounded-2xl p-6 shadow-xl shadow-zinc-950/5">
-                <h2 className="text-sm font-bold text-zinc-950 mb-6 flex items-center gap-2.5">
-                    <Database className="w-4 h-4 text-orange-500" /> Database
-                </h2>
-
-                <div className="space-y-2">
-                    <button
-                        onClick={() => setActiveView('people')}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'people' ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 border border-transparent'}`}
-                    >
-                        <Users className={`w-4 h-4 ${activeView === 'people' ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500'}`} />
-                        <span>People</span>
-                        {activeView === 'people' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
-                    </button>
-
-
-
-                    <button
-                        onClick={() => setActiveView('shows')}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium transition-all flex items-center gap-3 group ${activeView === 'shows' ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-zinc-600 hover:text-zinc-950 hover:bg-orange-50 border border-transparent'}`}
-                    >
-                        <Calendar className={`w-4 h-4 ${activeView === 'shows' ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500'}`} />
-                        <span>Shows</span>
-                        {activeView === 'shows' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white"></div>}
-                    </button>
-                </div>
-
-                <div className="mt-auto pt-4 border-t border-zinc-200">
-                    <div className="px-4 py-2 text-xs text-zinc-500 flex items-center gap-2">
-                        <FolderOpen className="w-3 h-3" /> {activeView === 'people' ? `${people.length} People` : `${shows.length} Shows`}
-                    </div>
-                </div>
-            </div>
 
             {/* Main Content */}
             <div className="flex-1 bg-white/95 border border-zinc-200 rounded-2xl p-6 lg:p-8 flex flex-col overflow-hidden shadow-xl shadow-zinc-950/5">

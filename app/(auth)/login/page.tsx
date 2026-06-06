@@ -75,9 +75,9 @@ export default function LoginPage() {
         <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden">
             {/* Ambient background */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-[-15%] left-[-10%] w-[45%] h-[45%] bg-orange-500/15 rounded-full blur-[130px]" />
-                <div className="absolute bottom-[-15%] right-[-10%] w-[45%] h-[45%] bg-blue-600/10 rounded-full blur-[130px]" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-orange-900/5 rounded-full blur-[150px]" />
+                <div className="absolute top-[-15%] left-[-10%] w-[45%] h-[45%] bg-orange-500/15 rounded-md blur-[130px]" />
+                <div className="absolute bottom-[-15%] right-[-10%] w-[45%] h-[45%] bg-blue-600/10 rounded-md blur-[130px]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] bg-orange-900/5 rounded-md blur-[150px]" />
             </div>
 
             {/* Grid overlay */}
@@ -93,9 +93,9 @@ export default function LoginPage() {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
-                className="w-full max-w-[420px] px-4 relative z-10"
+                className="w-full max-w-105 px-4 relative z-10"
             >
-                <div className="bg-zinc-900/60 backdrop-blur-2xl border border-white/8 rounded-[28px] p-8 shadow-2xl shadow-black/60">
+                <div className="bg-zinc-900/60 backdrop-blur-2xl border border-white/8 rounded-md p-8 shadow-2xl shadow-black/60">
                     {/* Logo + header */}
                     <div className="text-center mb-8">
                         <div className="flex justify-center mb-5">
@@ -170,7 +170,7 @@ export default function LoginPage() {
                                         if (errors.password) setErrors(prev => ({ ...prev, password: undefined }));
                                     }}
                                     className={cn(
-                                        "w-full bg-black/30 border rounded-xl pl-10 pr-11 py-3 text-sm text-white placeholder:text-zinc-600 outline-none transition-all duration-200",
+                                        "w-full bg-black/30 border rounded-md pl-10 pr-11 py-3 text-sm text-white placeholder:text-zinc-600 outline-none transition-all duration-200",
                                         "focus:bg-black/50 focus:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_0_20px_-8px_rgba(249,115,22,0.4)]",
                                         "hover:border-zinc-700",
                                         errors.password
@@ -198,7 +198,7 @@ export default function LoginPage() {
                             disabled={loading}
                             whileHover={{ scale: loading ? 1 : 1.01 }}
                             whileTap={{ scale: loading ? 1 : 0.98 }}
-                            className="w-full h-11 mt-1 bg-linear-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-sm font-semibold rounded-xl shadow-lg shadow-orange-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="w-full h-11 mt-1 bg-linear-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-sm font-semibold rounded-md shadow-lg shadow-orange-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">

@@ -44,7 +44,7 @@ export function DashboardPipelineSummary({ stats, loading }: DashboardPipelineSu
         } else if (progress > 0) {
             hint = {
                 title: 'Follow-ups in motion',
-                body: `${progress.toLocaleString()} in progress—keep statuses and notes current as you move deals forward.`,
+                body: `${progress.toLocaleString()} in progress keep statuses and notes current as you move deals forward.`,
             };
         } else if (good > 0) {
             hint = {
@@ -109,12 +109,20 @@ export function DashboardPipelineSummary({ stats, loading }: DashboardPipelineSu
                             ) : null
                         )}
                     </div>
-                    <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-zinc-500">
+                    <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                         {segments.map((s) => (
-                            <li key={s.key} className="inline-flex items-center gap-1.5">
-                                <span className={`h-2 w-2 shrink-0 rounded-full ${s.color}`} aria-hidden />
-                                <span className="font-medium text-zinc-700">{s.label}</span>
-                                <span className="tabular-nums text-zinc-400">{s.pct}%</span>
+                            <li
+                                key={s.key}
+                                className="flex items-center justify-between gap-2 rounded-xl border border-zinc-100 bg-zinc-50/60 px-3 py-2 text-[11px]"
+                            >
+                                <span className="inline-flex min-w-0 items-center gap-2">
+                                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.color}`} aria-hidden />
+                                    <span className="truncate font-medium text-zinc-700">{s.label}</span>
+                                </span>
+                                <span className="shrink-0 tabular-nums text-zinc-500">
+                                    <span className="font-semibold text-zinc-800">{s.value.toLocaleString()}</span>
+                                    <span className="text-zinc-400"> · {s.pct}%</span>
+                                </span>
                             </li>
                         ))}
                     </ul>

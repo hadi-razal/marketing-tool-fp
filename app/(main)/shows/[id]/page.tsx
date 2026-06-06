@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
@@ -24,13 +24,14 @@ import {
     FileText,
     Plus,
     Search,
-    UserCircle2,
     ChevronUp,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     ArrowUpDown,
-    ArrowRight,
     Download,
     Link2,
+    Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ShowFormModal } from '@/components/Zoho/ShowFormModal';
@@ -50,6 +51,19 @@ const formatDate = (dateStr: string) => {
     const parsed = new Date(dateStr);
     if (Number.isNaN(parsed.getTime())) return dateStr;
     return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
+const formatRelativeTime = (iso: string) => {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 };
 
 const normalizeExternalUrl = (url: string) => {
@@ -76,6 +90,9 @@ const hashToNumber = (value: string) => {
     return Math.abs(hash);
 };
 
+const AVATAR_COLORS = ['#f97316','#8b5cf6','#06b6d4','#10b981','#f43f5e','#3b82f6','#eab308','#ec4899'];
+const avatarColor = (name: string) => AVATAR_COLORS[hashToNumber(name) % AVATAR_COLORS.length];
+
 const randomExhibitorMeta = (seed: string) => {
     const hash = hashToNumber(seed);
     const currentYear = new Date().getFullYear();
@@ -86,6 +103,96 @@ const randomExhibitorMeta = (seed: string) => {
     return { year, booth, size };
 };
 
+const parseSqm = (size: string) => {
+    const match = String(size).match(/(\d+(?:\.\d+)?)/);
+    return match ? Number(match[1]) : 0;
+};
+
+type BoothCategory = 'Small' | 'Medium' | 'Large' | 'Enterprise';
+
+const boothCategoryFromSqm = (sqm: number): { label: BoothCategory; order: number } => {
+    if (sqm >= 150) return { label: 'Enterprise', order: 4 };
+    if (sqm >= 100) return { label: 'Large', order: 3 };
+    if (sqm >= 60) return { label: 'Medium', order: 2 };
+    return { label: 'Small', order: 1 };
+};
+
+const boothCategoryBadgeClass = (label: BoothCategory) => {
+    const styles: Record<BoothCategory, string> = {
+        Small: 'border-zinc-200 bg-zinc-50 text-zinc-700',
+        Medium: 'border-blue-200 bg-blue-50 text-blue-700',
+        Large: 'border-violet-200 bg-violet-50 text-violet-700',
+        Enterprise: 'border-orange-200 bg-orange-50 text-orange-700',
+    };
+    return styles[label];
+};
+
+const EXHIBITOR_GRID_COLS = {
+    default: 'md:grid-cols-[minmax(0,1fr)_100px_110px_120px_110px_100px]',
+    select: 'md:grid-cols-[30px_minmax(0,1fr)_100px_110px_120px_110px_100px]',
+} as const;
+
+type ShowContact = {
+    id: string;
+    name: string;
+    role: string;
+    department: string;
+    email: string;
+    phone: string;
+};
+
+/** Placeholder show contacts — replace with show.people JSONB when wired to DB */
+const DEMO_SHOW_CONTACTS: ShowContact[] = [
+    {
+        id: 'show-contact-1',
+        name: 'Sarah Mitchell',
+        role: 'Event Director',
+        department: 'Organiser Team',
+        email: 'sarah.mitchell@eventorganiser.com',
+        phone: '+971 2 555 0101',
+    },
+    {
+        id: 'show-contact-2',
+        name: 'Omar Al-Hassan',
+        role: 'Registration Manager',
+        department: 'Visitor Services',
+        email: 'omar.alhassan@eventorganiser.com',
+        phone: '+971 2 555 0102',
+    },
+    {
+        id: 'show-contact-3',
+        name: 'Elena Petrova',
+        role: 'Exhibitor Relations Lead',
+        department: 'Sales & Exhibitors',
+        email: 'elena.petrova@eventorganiser.com',
+        phone: '+971 2 555 0103',
+    },
+    {
+        id: 'show-contact-4',
+        name: 'James Whitfield',
+        role: 'Marketing Coordinator',
+        department: 'Communications',
+        email: 'james.whitfield@eventorganiser.com',
+        phone: '+971 2 555 0104',
+    },
+    {
+        id: 'show-contact-5',
+        name: 'Fatima Al-Qasimi',
+        role: 'Venue Operations',
+        department: 'ADNEC Operations',
+        email: 'fatima.alqasimi@adnec.ae',
+        phone: '+971 2 555 0199',
+    },
+];
+
+const EXHIBITOR_SORT_OPTIONS: { key: string; label: string }[] = [
+    { key: 'company', label: 'Company' },
+    { key: 'year', label: 'Year' },
+    { key: 'booth', label: 'Booth' },
+    { key: 'size', label: 'Size' },
+    { key: 'category', label: 'Category' },
+];
+
 const extractLinks = (raw: string) => {
     if (!raw) return [];
     return raw
@@ -94,9 +201,91 @@ const extractLinks = (raw: string) => {
         .filter(Boolean);
 };
 
+type FloorplanLinkItem = {
+    title: string;
+    url: string;
+    added_by_id?: string;
+    added_by_name?: string;
+    created_at?: string;
+};
+
+type FloorplanFileItem = {
+    id: string;
+    title: string;
+    url: string;
+    file_name?: string;
+    mime_type?: string;
+    storage_path?: string;
+    uploaded_by_id?: string;
+    uploaded_by_name?: string;
+    created_at?: string;
+};
+
+const FLOORPLAN_STORAGE_BUCKET = 'floorplans';
+const MAX_FLOORPLAN_BYTES = 25 * 1024 * 1024;
+const FLOORPLAN_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,application/pdf,image/*';
+
+const sanitizeStorageFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+const titleFromFileName = (name: string) => {
+    const base = name.replace(/\.[^/.]+$/, '');
+    return base.replace(/[_-]+/g, ' ').trim() || name;
+};
+
+const parseLinksJson = (raw: any): FloorplanLinkItem[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter((item: any) => item?.url);
+    const trimmed = String(raw).trim();
+    if (trimmed.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed.filter((item: any) => item?.url);
+        } catch {}
+    }
+    return extractLinks(trimmed).map((url, i) => ({ title: `Link ${i + 1}`, url }));
+};
+
+const parseFloorplanFiles = (raw: any): FloorplanFileItem[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw
+            .filter((item: any) => item?.url)
+            .map((item: any, idx: number) => ({
+                id: String(item.id || `file-${idx}`),
+                title: String(item.title || item.file_name || 'Floorplan'),
+                url: String(item.url),
+                file_name: item.file_name ? String(item.file_name) : undefined,
+                mime_type: item.mime_type ? String(item.mime_type) : undefined,
+                storage_path: item.storage_path ? String(item.storage_path) : undefined,
+                uploaded_by_id: item.uploaded_by_id ? String(item.uploaded_by_id) : undefined,
+                uploaded_by_name: item.uploaded_by_name ? String(item.uploaded_by_name) : undefined,
+                created_at: item.created_at ? String(item.created_at) : undefined,
+            }));
+    }
+    const trimmed = String(raw).trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+        try {
+            return parseFloorplanFiles(JSON.parse(trimmed));
+        } catch {}
+    }
+    return [{
+        id: 'legacy-file',
+        title: 'Floorplan',
+        url: trimmed,
+    }];
+};
+
+const floorplanAttribution = (name?: string, createdAt?: string) => {
+    const parts: string[] = [];
+    if (name) parts.push(`Added by ${name}`);
+    if (createdAt) parts.push(formatRelativeTime(createdAt));
+    return parts.join(' · ') || '—';
+};
+
 /* ─── tabs ────────────────────────────────────────────────── */
 
-type Tab = 'overview' | 'contacts' | 'exhibitors' | 'floorplans' | 'comments';
+type Tab = 'overview' | 'contacts' | 'exhibitors' | 'floorplans' | 'comments' | 'images';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <LayoutGrid className="h-4 w-4" /> },
@@ -104,6 +293,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
     { id: 'floorplans', label: 'Floorplans', icon: <Globe className="h-4 w-4" /> },
     { id: 'comments', label: 'Comments', icon: <FileText className="h-4 w-4" /> },
+    { id: 'images', label: 'Images', icon: <Camera className="h-4 w-4" /> },
 ];
 
 /* ─── info row ────────────────────────────────────────────── */
@@ -160,8 +350,7 @@ export default function ShowDetailPage() {
         estimated_num_employees?: number;
     }>>([]);
     const [exhibitorsLoading, setExhibitorsLoading] = useState(false);
-    const [exhibitorContacts, setExhibitorContacts] = useState<any[]>([]);
-    const [contactsLoading, setContactsLoading] = useState(false);
+    const showContacts = DEMO_SHOW_CONTACTS;
     const [isContactSelectMode, setIsContactSelectMode] = useState(false);
     const [selectedContactKeys, setSelectedContactKeys] = useState<string[]>([]);
     const [featureInfoModal, setFeatureInfoModal] = useState<{ isOpen: boolean; title: string; description: string }>({
@@ -169,17 +358,54 @@ export default function ShowDetailPage() {
         title: '',
         description: '',
     });
+    const [addLinkModal, setAddLinkModal] = useState(false);
+    const [linkForm, setLinkForm] = useState({ title: '', url: '' });
+    const [linkSaving, setLinkSaving] = useState(false);
+    const [uploadFloorplanModal, setUploadFloorplanModal] = useState(false);
+    const [pendingFloorplanFile, setPendingFloorplanFile] = useState<File | null>(null);
+    const [uploadFloorplanForm, setUploadFloorplanForm] = useState({ title: '' });
+    const [floorplanUploading, setFloorplanUploading] = useState(false);
+    const floorplanFileInputRef = useRef<HTMLInputElement>(null);
+    const tabsScrollRef = useRef<HTMLDivElement>(null);
+    const [tabsOverflow, setTabsOverflow] = useState(false);
+    const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
+    const [canScrollTabsRight, setCanScrollTabsRight] = useState(false);
+    const [currentUser, setCurrentUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
+    const [commentText, setCommentText] = useState('');
+    const [commentSaving, setCommentSaving] = useState(false);
+    const [commentAuthors, setCommentAuthors] = useState<Record<string, string>>({});
 
     const showId = params?.id as string;
-    const companyLogoByName = useMemo(() => {
-        const map = new Map<string, string>();
-        exhibitorCompanies.forEach((company) => {
-            const name = String(company.name || '').trim().toLowerCase();
-            const logo = String(company.logo_url || company.logo || '').trim();
-            if (name && logo) map.set(name, logo);
-        });
-        return map;
-    }, [exhibitorCompanies]);
+
+    const updateTabScrollState = useCallback(() => {
+        const el = tabsScrollRef.current;
+        if (!el) return;
+        const overflow = el.scrollWidth > el.clientWidth + 1;
+        setTabsOverflow(overflow);
+        setCanScrollTabsLeft(el.scrollLeft > 1);
+        setCanScrollTabsRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    }, []);
+
+    const scrollTabs = (direction: 'left' | 'right') => {
+        const el = tabsScrollRef.current;
+        if (!el) return;
+        el.scrollBy({ left: direction === 'left' ? -180 : 180, behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        const el = tabsScrollRef.current;
+        if (!el) return;
+        updateTabScrollState();
+        el.addEventListener('scroll', updateTabScrollState, { passive: true });
+        const observer = new ResizeObserver(updateTabScrollState);
+        observer.observe(el);
+        window.addEventListener('resize', updateTabScrollState);
+        return () => {
+            el.removeEventListener('scroll', updateTabScrollState);
+            observer.disconnect();
+            window.removeEventListener('resize', updateTabScrollState);
+        };
+    }, [updateTabScrollState, loading]);
 
     useEffect(() => {
         if (!showId) {
@@ -208,6 +434,271 @@ export default function ShowDetailPage() {
         };
         fetchShow();
     }, [showId, supabase]);
+
+    useEffect(() => {
+        const loadUser = async () => {
+            const { data: authData } = await supabase.auth.getUser();
+            if (!authData.user) return;
+            const { data: profile } = await supabase
+                .from('users')
+                .select('name')
+                .eq('uid', authData.user.id)
+                .single();
+            setCurrentUser({
+                id: authData.user.id,
+                email: authData.user.email ?? '',
+                name: String(profile?.name || authData.user.email || 'User'),
+            });
+        };
+        loadUser();
+    }, [supabase]);
+
+    useEffect(() => {
+        const commentList: any[] = Array.isArray(data?.comments) ? data.comments : [];
+        const uniqueIds = [...new Set(commentList.map((c: any) => c.user_id).filter(Boolean))] as string[];
+        if (uniqueIds.length === 0) return;
+        const fetchAuthors = async () => {
+            const { data: profiles } = await supabase
+                .from('users')
+                .select('uid, name')
+                .in('uid', uniqueIds);
+            if (!profiles) return;
+            const map: Record<string, string> = {};
+            profiles.forEach((p: any) => { if (p.uid && p.name) map[p.uid] = p.name; });
+            setCommentAuthors(map);
+        };
+        fetchAuthors();
+    }, [data?.comments, supabase]);
+
+    const handleAddNewLink = () => {
+        setLinkForm({ title: '', url: '' });
+        setAddLinkModal(true);
+    };
+
+    const handleSaveLink = async () => {
+        if (!linkForm.title.trim() || !linkForm.url.trim()) {
+            toast.error('Both title and URL are required.');
+            return;
+        }
+        setLinkSaving(true);
+        try {
+            const existing = parseLinksJson(data?.floorplan_link ?? null);
+            const updated: FloorplanLinkItem[] = [
+                ...existing,
+                {
+                    title: linkForm.title.trim(),
+                    url: normalizeExternalUrl(linkForm.url.trim()),
+                    added_by_id: currentUser?.id,
+                    added_by_name: currentUser?.name || currentUser?.email,
+                    created_at: new Date().toISOString(),
+                },
+            ];
+
+            const { error } = await supabase
+                .from('shows')
+                .update({ floorplan_link: updated })
+                .eq('id', showId);
+
+            if (error) throw error;
+
+            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
+            if (rows && rows.length > 0) setData(rows[0]);
+
+            setAddLinkModal(false);
+            toast.success('Link added');
+        } catch (err: any) {
+            console.error('Add link error:', err);
+            toast.error(err?.message || 'Failed to add link.');
+        } finally {
+            setLinkSaving(false);
+        }
+    };
+
+    const handleDeleteLink = async (indexToRemove: number) => {
+        try {
+            const existing = parseLinksJson(data?.floorplan_link ?? null);
+            const updated = existing.filter((_, i) => i !== indexToRemove);
+
+            const { error } = await supabase
+                .from('shows')
+                .update({ floorplan_link: updated.length ? updated : null })
+                .eq('id', showId);
+
+            if (error) throw error;
+
+            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
+            if (rows && rows.length > 0) setData(rows[0]);
+
+            toast.success('Link removed');
+        } catch (err: any) {
+            console.error('Delete link error:', err);
+            toast.error(err?.message || 'Failed to remove link.');
+        }
+    };
+
+    const handleFloorplanFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+
+        if (file.size > MAX_FLOORPLAN_BYTES) {
+            toast.error('File must be 25 MB or smaller.');
+            return;
+        }
+
+        const allowed = /\.(pdf|png|jpe?g|webp|gif)$/i.test(file.name) || file.type.startsWith('image/') || file.type === 'application/pdf';
+        if (!allowed) {
+            toast.error('Please upload a PDF or image file (PNG, JPG, WEBP, GIF).');
+            return;
+        }
+
+        setPendingFloorplanFile(file);
+        setUploadFloorplanForm({ title: titleFromFileName(file.name) });
+        setUploadFloorplanModal(true);
+    };
+
+    const handleUploadFloorplan = async () => {
+        if (!pendingFloorplanFile) return;
+        if (!currentUser) {
+            toast.error('You must be signed in to upload a floorplan.');
+            return;
+        }
+        const title = uploadFloorplanForm.title.trim() || titleFromFileName(pendingFloorplanFile.name);
+        setFloorplanUploading(true);
+        try {
+            const storagePath = `${showId}/${Date.now()}-${sanitizeStorageFileName(pendingFloorplanFile.name)}`;
+            const { error: uploadError } = await supabase.storage
+                .from(FLOORPLAN_STORAGE_BUCKET)
+                .upload(storagePath, pendingFloorplanFile, {
+                    contentType: pendingFloorplanFile.type || undefined,
+                    upsert: false,
+                });
+
+            if (uploadError) {
+                const msg = uploadError.message || '';
+                if (/row-level security/i.test(msg)) {
+                    throw new Error(
+                        'Storage access denied: add RLS policies for the "floorplans" bucket in Supabase (see supabase/storage-floorplans-policies.sql).',
+                    );
+                }
+                throw uploadError;
+            }
+
+            const { data: { publicUrl } } = supabase.storage
+                .from(FLOORPLAN_STORAGE_BUCKET)
+                .getPublicUrl(storagePath);
+
+            const newEntry: FloorplanFileItem = {
+                id: crypto.randomUUID(),
+                title,
+                url: publicUrl,
+                file_name: pendingFloorplanFile.name,
+                mime_type: pendingFloorplanFile.type || undefined,
+                storage_path: storagePath,
+                uploaded_by_id: currentUser.id,
+                uploaded_by_name: currentUser.name || currentUser.email || 'User',
+                created_at: new Date().toISOString(),
+            };
+
+            const existing = parseFloorplanFiles(data?.floorplan_file ?? null);
+            const updated = [...existing, newEntry];
+
+            const { error } = await supabase
+                .from('shows')
+                .update({ floorplan_file: updated })
+                .eq('id', showId);
+
+            if (error) throw error;
+
+            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
+            if (rows && rows.length > 0) setData(rows[0]);
+
+            setUploadFloorplanModal(false);
+            setPendingFloorplanFile(null);
+            setUploadFloorplanForm({ title: '' });
+            toast.success('Floorplan uploaded');
+        } catch (err: any) {
+            console.error('Floorplan upload error:', err);
+            toast.error(err?.message || 'Failed to upload floorplan.');
+        } finally {
+            setFloorplanUploading(false);
+        }
+    };
+
+    const handleDeleteFloorplanFile = async (fileId: string) => {
+        try {
+            const existing = parseFloorplanFiles(data?.floorplan_file ?? null);
+            const target = existing.find((f) => f.id === fileId);
+            const updated = existing.filter((f) => f.id !== fileId);
+
+            if (target?.storage_path) {
+                await supabase.storage.from(FLOORPLAN_STORAGE_BUCKET).remove([target.storage_path]);
+            }
+
+            const { error } = await supabase
+                .from('shows')
+                .update({ floorplan_file: updated.length ? updated : null })
+                .eq('id', showId);
+
+            if (error) throw error;
+
+            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
+            if (rows && rows.length > 0) setData(rows[0]);
+
+            toast.success('Floorplan removed');
+        } catch (err: any) {
+            console.error('Delete floorplan error:', err);
+            toast.error(err?.message || 'Failed to remove floorplan.');
+        }
+    };
+
+    const handleAddComment = async () => {
+        if (!commentText.trim()) return;
+        if (!currentUser) { toast.error('You must be signed in to comment.'); return; }
+        setCommentSaving(true);
+        try {
+            const existing: any[] = Array.isArray(data?.comments) ? data.comments : [];
+            const newComment = {
+                id: crypto.randomUUID(),
+                user_id: currentUser.id,
+                author: currentUser.name || currentUser.email || 'User',
+                text: commentText.trim(),
+                created_at: new Date().toISOString(),
+            };
+            const updated = [...existing, newComment];
+
+            const { error } = await supabase.from('shows').update({ comments: updated }).eq('id', showId);
+            if (error) throw error;
+
+            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
+            if (rows && rows.length > 0) setData(rows[0]);
+            setCommentText('');
+            toast.success('Comment added');
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to add comment.');
+        } finally {
+            setCommentSaving(false);
+        }
+    };
+
+    const handleDeleteComment = async (commentId: string) => {
+        try {
+            const existing: any[] = Array.isArray(data?.comments) ? data.comments : [];
+            const updated = existing.filter((c) => c.id !== commentId);
+
+            const { error } = await supabase
+                .from('shows')
+                .update({ comments: updated.length ? updated : null })
+                .eq('id', showId);
+            if (error) throw error;
+
+            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
+            if (rows && rows.length > 0) setData(rows[0]);
+            toast.success('Comment deleted');
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to delete comment.');
+        }
+    };
 
     useEffect(() => {
         const fetchCompanies = async () => {
@@ -245,38 +736,6 @@ export default function ShowDetailPage() {
             }
         };
         fetchCompanies();
-    }, [supabase]);
-
-    useEffect(() => {
-        const fetchAllContacts = async () => {
-            setContactsLoading(true);
-            try {
-                const { data: rows, error } = await supabase.from('people').select('*');
-                if (error) throw error;
-
-                const merged = rows || [];
-                const unique = new Map<string, any>();
-                merged.forEach((person: any, index: number) => {
-                    const key = String(
-                        person?.id
-                        || person?.email
-                        || person?.primary_email
-                        || `${person?.first_name || ''}-${person?.last_name || ''}-${person?.organization_name || ''}-${index}`,
-                    );
-                    unique.set(key, person);
-                });
-
-                setExhibitorContacts(Array.from(unique.values()));
-            } catch (err: any) {
-                console.error('Fetch exhibitor contacts error:', err);
-                toast.error(err?.message || 'Failed to load exhibitor contacts');
-                setExhibitorContacts([]);
-            } finally {
-                setContactsLoading(false);
-            }
-        };
-
-        fetchAllContacts();
     }, [supabase]);
 
     const handleDelete = async () => {
@@ -397,16 +856,12 @@ export default function ShowDetailPage() {
     const note = String(getValue(data, ['note', 'Note', 'Note1']) || '');
     const exhibitorList = String(getValue(data, ['exhibitor_list', 'Exhibitor_List', 'Last_edition_n_Exhibitors']) || '');
     const exhibitorListLink = String(getValue(data, ['exhibitor_list_link', 'Exhibitor_List_Link']) || '');
-    const floorplanLink = String(getValue(data, ['floorplan_link', 'Floorplan_Link']) || '');
-    const floorplanFileLink = String(getValue(data, ['floorplan_file_link', 'Floorplan_File_Link', 'file_link', 'File_Link']) || '');
-    const mapLink = String(getValue(data, ['map_link', 'Map_Link']) || '');
     const websiteHref = normalizeExternalUrl(showWebsite);
 
     const location = [city, country].filter(Boolean).join(', ');
+    const profile_img_link = String(getValue(data, ['profile_img_link', 'Profile_Img_Link', 'profile_image', 'Profile_Image', 'logo_url', 'Logo_URL', 'logo', 'Logo']) || '');
+    const cover_img_link = String(getValue(data, ['cover_img_link', 'Cover_Img_Link', 'cover_image', 'Cover_Image', 'banner', 'Banner', 'cover']) || '');
     const initials = initialsFromName(eventName);
-    const isIbc = eventName.toLowerCase().includes('ibc');
-    const ibcLogoImage = 'https://cdn.prod.website-files.com/686e72da8be0fd92280388b7/6970abf7af4eaf76f110b30a_689ca814a9cbd6ff03649c1a_Newsroom_events_template_IBC.webp';
-    const ibcCoverImage = 'https://cdn.prod.website-files.com/6641aa6384a3010ab6b735d7/679b179403837ff93b623af0_IBC2024-0915-Alex-105928-1-.webp';
 
     const detailRows = [
         startingDate && { label: 'Date', value: formatDate(startingDate), icon: <Calendar className="h-4 w-4" /> },
@@ -435,17 +890,8 @@ export default function ShowDetailPage() {
         tags && { label: 'Tags', value: tags, icon: <Tag className="h-4 w-4" /> },
     ].filter(Boolean) as { label: string; value: React.ReactNode; icon: React.ReactNode }[];
 
-    const demoGalleryImages = Array.from({ length: 10 }, (_, i) => ({
-        id: i + 1,
-        src: `https://picsum.photos/seed/exhibition-${i + 1}/1200/800`,
-    }));
-
-    const demoComments = [
-        { author: 'Sara M.', time: '2h ago', text: 'Traffic around Hall 4 peaked after 2 PM. We should keep two people at the demo station at all times.' },
-        { author: 'Dan K.', time: 'Yesterday', text: 'Strong interest from media-tech buyers. Follow up with three leads from Germany and one from UAE.' },
-        { author: 'Nora A.', time: 'Yesterday', text: 'Booth visuals worked well, but brochure stock ran low by late afternoon.' },
-        { author: 'Ali R.', time: '3 days ago', text: 'Competitors nearby had larger screens. Consider adding one center display next edition.' },
-    ];
+    const comments: Array<{ id: string; user_id: string; author: string; text: string; created_at: string }> =
+        Array.isArray(data?.comments) ? data.comments : [];
 
     return (
         <>
@@ -476,19 +922,183 @@ export default function ShowDetailPage() {
                 </>
             )}
 
+            {/* ── Add Link Modal ── */}
+            {addLinkModal && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="Close add link modal"
+                        onClick={() => setAddLinkModal(false)}
+                        className="fixed inset-0 z-140 bg-zinc-950/45 backdrop-blur-sm"
+                    />
+                    <div className="fixed inset-0 z-150 m-auto h-fit w-full max-w-lg rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-zinc-950/20">
+                        {/* Header */}
+                        <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+                            <div className="flex items-center gap-2">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50">
+                                    <Link2 className="h-4 w-4 text-orange-500" />
+                                </div>
+                                <h3 className="text-base font-semibold text-zinc-900">Manage Links</h3>
+                            </div>
+                            <button
+                                onClick={() => setAddLinkModal(false)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="p-5">
+                            <div className="space-y-3">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-zinc-600">Title</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Hall A Floorplan"
+                                            value={linkForm.title}
+                                            onChange={(e) => setLinkForm((prev) => ({ ...prev, title: e.target.value }))}
+                                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-zinc-600">URL</label>
+                                        <input
+                                            type="url"
+                                            placeholder="https://..."
+                                            value={linkForm.url}
+                                            onChange={(e) => setLinkForm((prev) => ({ ...prev, url: e.target.value }))}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveLink(); }}
+                                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
+                                        />
+                                    </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-end gap-2 border-t border-zinc-100 px-5 py-4">
+                            <Button size="sm" variant="secondary" onClick={() => setAddLinkModal(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={handleSaveLink}
+                                disabled={linkSaving || !linkForm.title.trim() || !linkForm.url.trim()}
+                                leftIcon={linkSaving ? undefined : <Plus className="h-4 w-4" />}
+                            >
+                                {linkSaving ? 'Saving…' : 'Add Link'}
+                            </Button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ── Upload Floorplan Modal ── */}
+            {uploadFloorplanModal && pendingFloorplanFile && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="Close upload floorplan modal"
+                        onClick={() => {
+                            if (floorplanUploading) return;
+                            setUploadFloorplanModal(false);
+                            setPendingFloorplanFile(null);
+                            setUploadFloorplanForm({ title: '' });
+                        }}
+                        className="fixed inset-0 z-140 bg-zinc-950/45 backdrop-blur-sm"
+                    />
+                    <div className="fixed inset-0 z-150 m-auto h-fit w-full max-w-lg rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-zinc-950/20">
+                        <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+                            <div className="flex items-center gap-2">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50">
+                                    <Upload className="h-4 w-4 text-orange-500" />
+                                </div>
+                                <h3 className="text-base font-semibold text-zinc-900">Upload floorplan</h3>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (floorplanUploading) return;
+                                    setUploadFloorplanModal(false);
+                                    setPendingFloorplanFile(null);
+                                    setUploadFloorplanForm({ title: '' });
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="space-y-4 p-5">
+                            <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-600">
+                                <p className="font-medium text-zinc-800">{pendingFloorplanFile.name}</p>
+                                <p className="mt-0.5 text-xs text-zinc-500">
+                                    {(pendingFloorplanFile.size / (1024 * 1024)).toFixed(2)} MB
+                                    {currentUser ? ` · will be saved as ${currentUser.name || currentUser.email}` : ''}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-zinc-600">Display name</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Hall A Floorplan"
+                                    value={uploadFloorplanForm.title}
+                                    onChange={(e) => setUploadFloorplanForm({ title: e.target.value })}
+                                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 border-t border-zinc-100 px-5 py-4">
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={floorplanUploading}
+                                onClick={() => {
+                                    setUploadFloorplanModal(false);
+                                    setPendingFloorplanFile(null);
+                                    setUploadFloorplanForm({ title: '' });
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={handleUploadFloorplan}
+                                disabled={floorplanUploading}
+                                isLoading={floorplanUploading}
+                                leftIcon={floorplanUploading ? undefined : <Upload className="h-4 w-4" />}
+                            >
+                                {floorplanUploading ? 'Uploading…' : 'Upload'}
+                            </Button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            <input
+                ref={floorplanFileInputRef}
+                type="file"
+                accept={FLOORPLAN_ACCEPT}
+                className="hidden"
+                onChange={handleFloorplanFileSelected}
+            />
+
             <div className="-m-4 h-[calc(100%+2rem)] lg:-m-6 lg:h-[calc(100%+3rem)] flex flex-col bg-white">
 
-                {/* ── Compact Header Banner ── */}
+                {/* ── Hero ── */}
                 <div
-                    className="shrink-0 bg-zinc-900 bg-cover bg-center"
-                    style={isIbc ? { backgroundImage: `linear-gradient(135deg, rgba(24,24,27,0.7), rgba(24,24,27,0.65)), url(${ibcCoverImage})` } : undefined}
+                    className="relative shrink-0 overflow-hidden bg-zinc-950"
+                    style={cover_img_link ? { backgroundImage: `url(${cover_img_link})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
                 >
-                    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-                        {/* Top bar */}
+                    {cover_img_link && (
+                        <div className="absolute inset-0 bg-linear-to-b from-zinc-950/60 via-zinc-950/55 to-zinc-950/80" />
+                    )}
+
+                    <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                        {/* Top nav */}
                         <div className="flex items-center justify-between py-4">
                             <button
                                 onClick={() => router.push('/shows')}
-                                className="group flex items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+                                className="group flex items-center gap-1.5 text-sm font-medium text-white/50 transition-colors hover:text-white"
                             >
                                 <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
                                 Shows
@@ -496,14 +1106,14 @@ export default function ShowDetailPage() {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setIsEditOpen(true)}
-                                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:bg-white/20 hover:text-white"
+                                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-medium text-white/70 backdrop-blur-sm transition-all hover:bg-white/10 hover:text-white"
                                 >
                                     <Edit2 className="h-3.5 w-3.5" />
                                     Edit
                                 </button>
                                 <button
                                     onClick={handleDelete}
-                                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-red-500/20 px-3 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 hover:text-red-300"
+                                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-xs font-medium text-red-400 backdrop-blur-sm transition-all hover:bg-red-500/20 hover:text-red-300"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />
                                     Delete
@@ -511,40 +1121,50 @@ export default function ShowDetailPage() {
                             </div>
                         </div>
 
-                        {/* Show identity */}
-                        <div className="flex items-center gap-4 pb-6 sm:gap-5 sm:pb-8">
-                            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 text-lg font-bold text-white sm:h-16 sm:w-16 sm:text-xl">
-                                {isIbc ? (
+                        {/* Identity */}
+                        <div className="flex items-end gap-4 pb-7 pt-2 sm:gap-5">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/10 text-lg font-bold text-white backdrop-blur-sm sm:h-20 sm:w-20 sm:text-xl">
+                                {profile_img_link ? (
                                     <img
-                                        src={ibcLogoImage}
-                                        alt="IBC logo"
+                                        src={profile_img_link}
+                                        alt={eventName}
                                         className="h-full w-full object-cover"
                                         loading="lazy"
+                                        onError={(e) => {
+                                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                            (e.currentTarget.parentElement as HTMLElement).textContent = initials;
+                                        }}
                                     />
                                 ) : (
                                     initials
                                 )}
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 pb-0.5">
                                 {eventType && (
-                                    <span className="mb-1 inline-block rounded bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-orange-300">
+                                    <span className="mb-2 inline-flex items-center rounded-full bg-orange-500/20 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-orange-300">
                                         {eventType}
                                     </span>
                                 )}
-                                <h1 className="truncate text-xl font-bold text-white sm:text-2xl">
+                                <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
                                     {eventName}
                                 </h1>
-                                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
                                     {location && (
-                                        <span className="flex items-center gap-1">
-                                            <MapPin className="h-3 w-3" />
+                                        <span className="flex items-center gap-1.5 text-sm text-white/55">
+                                            <MapPin className="h-3.5 w-3.5 text-white/35" />
                                             {location}
                                         </span>
                                     )}
                                     {startingDate && (
-                                        <span className="flex items-center gap-1">
-                                            <Calendar className="h-3 w-3" />
+                                        <span className="flex items-center gap-1.5 text-sm text-white/55">
+                                            <Calendar className="h-3.5 w-3.5 text-white/35" />
                                             {formatDate(startingDate)}
+                                        </span>
+                                    )}
+                                    {industry && (
+                                        <span className="flex items-center gap-1.5 text-sm text-white/55">
+                                            <Building2 className="h-3.5 w-3.5 text-white/35" />
+                                            {industry}
                                         </span>
                                     )}
                                 </div>
@@ -556,29 +1176,56 @@ export default function ShowDetailPage() {
                 {/* ── Tab Navigation ── */}
                 <div className="shrink-0 border-b border-zinc-200 bg-white">
                     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-                        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-                            {TABS.map((tab) => (
+                        <div className="relative flex items-center">
+                            {tabsOverflow && (
                                 <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
+                                    type="button"
+                                    onClick={() => scrollTabs('left')}
+                                    disabled={!canScrollTabsLeft}
+                                    aria-label="Scroll tabs left"
+                                    className={`absolute left-0 z-10 flex h-11 w-8 shrink-0 items-center justify-center rounded-md bg-white text-zinc-600 shadow-[8px_0_12px_-4px_rgba(255,255,255,1)] transition-opacity lg:hidden ${canScrollTabsLeft ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                            )}
+                            <div
+                                ref={tabsScrollRef}
+                                className={`flex min-w-0 flex-1 items-center gap-1 overflow-x-hidden lg:overflow-x-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${tabsOverflow ? 'px-8 lg:px-0' : ''}`}
+                            >
+                                {TABS.map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
                                             ? 'text-zinc-900'
                                             : 'text-zinc-400 hover:text-zinc-600'
-                                        }`}
+                                            }`}
+                                    >
+                                        {tab.icon}
+                                        {tab.label}
+                                        {activeTab === tab.id && (
+                                            <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-orange-500" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                            {tabsOverflow && (
+                                <button
+                                    type="button"
+                                    onClick={() => scrollTabs('right')}
+                                    disabled={!canScrollTabsRight}
+                                    aria-label="Scroll tabs right"
+                                    className={`absolute right-0 z-10 flex h-11 w-8 shrink-0 items-center justify-center rounded-md bg-white text-zinc-600 shadow-[-8px_0_12px_-4px_rgba(255,255,255,1)] transition-opacity lg:hidden ${canScrollTabsRight ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
                                 >
-                                    {tab.icon}
-                                    {tab.label}
-                                    {activeTab === tab.id && (
-                                        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-orange-500" />
-                                    )}
+                                    <ChevronRight className="h-4 w-4" />
                                 </button>
-                            ))}
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* ── Content ── */}
-                <div className="flex-1 overflow-y-auto flex flex-col">
+                < div className="flex-1 overflow-y-auto flex flex-col" >
 
                     {activeTab !== 'exhibitors' && activeTab !== 'floorplans' && (
                         <div className="w-full py-6 sm:py-8 flex flex-col">
@@ -615,18 +1262,31 @@ export default function ShowDetailPage() {
                                         <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                             <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3.5">
                                                 <h2 className="text-sm font-semibold text-zinc-900">Comments</h2>
-                                                <span className="text-xs font-medium text-zinc-400">{demoComments.length} recent</span>
+                                                <span className="text-xs font-medium text-zinc-400">{comments.length} recent</span>
                                             </div>
                                             <div className="divide-y divide-zinc-100">
-                                                {demoComments.slice(0, 3).map((comment, idx) => (
-                                                    <div key={`${comment.author}-ov-${idx}`} className="px-5 py-4">
-                                                        <div className="mb-1.5 flex items-center justify-between gap-3">
-                                                            <p className="text-sm font-semibold text-zinc-900">{comment.author}</p>
-                                                            <p className="text-xs text-zinc-400">{comment.time}</p>
+                                                {comments.length === 0 ? (
+                                                    <p className="px-5 py-6 text-center text-sm text-zinc-400">No comments yet.</p>
+                                                ) : comments.slice(0, 3).map((comment) => {
+                                                    const previewName = commentAuthors[comment.user_id] || comment.author;
+                                                    return (
+                                                        <div key={comment.id} className="flex items-start gap-3 px-5 py-4">
+                                                            <div
+                                                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                                                                style={{ backgroundColor: avatarColor(previewName) }}
+                                                            >
+                                                                {initialsFromName(previewName)}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-semibold text-zinc-900">{previewName}</span>
+                                                                    <span className="text-xs text-zinc-400">{formatRelativeTime(comment.created_at)}</span>
+                                                                </div>
+                                                                <p className="mt-0.5 text-sm leading-relaxed text-zinc-600 line-clamp-2">{comment.text}</p>
+                                                            </div>
                                                         </div>
-                                                        <p className="text-sm leading-relaxed text-zinc-600">{comment.text}</p>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                             {note ? (
                                                 <div className="border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
@@ -646,7 +1306,10 @@ export default function ShowDetailPage() {
                                 {activeTab === 'contacts' && (
                                     <div className="flex flex-1 min-h-0 flex-col gap-5">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <h2 className="text-lg font-semibold text-zinc-900">Contacts</h2>
+                                            <div>
+                                                <h2 className="text-lg font-semibold text-zinc-900">Contacts</h2>
+                                                <p className="mt-1 text-sm text-zinc-500">Show organisers and venue contacts for this event.</p>
+                                            </div>
                                             <div className="flex items-center gap-2">
                                                 <Button
                                                     size="sm"
@@ -667,78 +1330,63 @@ export default function ShowDetailPage() {
                                             </div>
                                         </div>
                                         {isContactSelectMode && (
-                                        <div className="flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
-                                            <span className="text-xs font-medium text-zinc-600">{selectedContactKeys.length} selected</span>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="h-8 rounded-md"
-                                                disabled={selectedContactKeys.length === 0}
-                                                onClick={() =>
-                                                    openFeatureInfoModal(
-                                                        'Bulk Send Email (Coming Soon)',
-                                                        `You selected ${selectedContactKeys.length} contacts. This will send personalized email campaigns to all selected contacts with delivery and response tracking.`,
-                                                    )
-                                                }
-                                            >
-                                                Bulk Send Email
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="h-8 rounded-md"
-                                                disabled={selectedContactKeys.length === 0}
-                                                onClick={() =>
-                                                    openFeatureInfoModal(
-                                                        'Email Auto Generation (Coming Soon)',
-                                                        `You selected ${selectedContactKeys.length} contacts. This feature will auto-generate tailored outreach copy based on each contact and company profile.`,
-                                                    )
-                                                }
-                                            >
-                                                Email Auto Generation
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="h-8 rounded-md"
-                                                disabled={selectedContactKeys.length === 0}
-                                                onClick={() =>
-                                                    openFeatureInfoModal(
-                                                        'Bulk Enrich (Coming Soon)',
-                                                        `You selected ${selectedContactKeys.length} contacts. This will enrich selected contacts with verified emails, phones, and updated profile data.`,
-                                                    )
-                                                }
-                                            >
-                                                Bulk Enrich
-                                            </Button>
-                                        </div>
+                                            <div className="flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+                                                <span className="text-xs font-medium text-zinc-600">{selectedContactKeys.length} selected</span>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="h-8 rounded-md"
+                                                    disabled={selectedContactKeys.length === 0}
+                                                    onClick={() =>
+                                                        openFeatureInfoModal(
+                                                            'Bulk Send Email (Coming Soon)',
+                                                            `You selected ${selectedContactKeys.length} contacts. This will send personalized email campaigns to all selected contacts with delivery and response tracking.`,
+                                                        )
+                                                    }
+                                                >
+                                                    Bulk Send Email
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="h-8 rounded-md"
+                                                    disabled={selectedContactKeys.length === 0}
+                                                    onClick={() =>
+                                                        openFeatureInfoModal(
+                                                            'Email Auto Generation (Coming Soon)',
+                                                            `You selected ${selectedContactKeys.length} contacts. This feature will auto-generate tailored outreach copy based on each contact and company profile.`,
+                                                        )
+                                                    }
+                                                >
+                                                    Email Auto Generation
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="h-8 rounded-md"
+                                                    disabled={selectedContactKeys.length === 0}
+                                                    onClick={() =>
+                                                        openFeatureInfoModal(
+                                                            'Bulk Enrich (Coming Soon)',
+                                                            `You selected ${selectedContactKeys.length} contacts. This will enrich selected contacts with verified emails, phones, and updated profile data.`,
+                                                        )
+                                                    }
+                                                >
+                                                    Bulk Enrich
+                                                </Button>
+                                            </div>
                                         )}
                                         <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                             <div className="border-b border-zinc-100 px-5 py-3.5">
-                                                <p className="text-sm font-semibold text-zinc-900">{exhibitorContacts.length} contacts</p>
+                                                <p className="text-sm font-semibold text-zinc-900">{showContacts.length} show contacts</p>
                                             </div>
                                             <div className="divide-y divide-zinc-100">
-                                                {contactsLoading ? (
-                                                    <div className="px-5 py-8 text-center text-sm text-zinc-500">Loading contacts...</div>
-                                                ) : exhibitorContacts.length > 0 ? (
-                                                    exhibitorContacts.map((contact, index) => {
-                                                        const fullName = String(
-                                                            contact?.name
-                                                            || [contact?.first_name, contact?.last_name].filter(Boolean).join(' ')
-                                                            || contact?.full_name
-                                                            || 'Unknown Contact',
-                                                        );
-                                                        const role = String(contact?.title || contact?.job_title || contact?.role || 'Contact');
-                                                        const companyName = String(contact?.organization_name || contact?.company || '');
-                                                        const email = String(contact?.email || contact?.primary_email || '');
-                                                        const phone = String(contact?.phone || contact?.mobile_phone || contact?.work_phone || '');
-                                                        const avatar = String(contact?.photo_url || contact?.image || '');
-                                                        const companyLogo = companyLogoByName.get(companyName.trim().toLowerCase()) || '';
-                                                        const key = String(contact?.id || email || `${fullName}-${index}`);
-                                                        const isSelected = selectedContactKeys.includes(key);
+                                                {showContacts.length > 0 ? (
+                                                    showContacts.map((contact) => {
+                                                        const isSelected = selectedContactKeys.includes(contact.id);
 
                                                         return (
-                                                            <div key={key} className="px-5 py-4">
+                                                            <div key={contact.id} className="px-5 py-4">
                                                                 <div className={`rounded-xl border p-3 ${isSelected ? 'border-orange-200 bg-orange-50/40' : 'border-zinc-100 bg-zinc-50/40'}`}>
                                                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                                         <div className="flex min-w-0 items-start gap-3">
@@ -748,40 +1396,33 @@ export default function ShowDetailPage() {
                                                                                     checked={isSelected}
                                                                                     onChange={() => {
                                                                                         setSelectedContactKeys((prev) =>
-                                                                                            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+                                                                                            prev.includes(contact.id) ? prev.filter((k) => k !== contact.id) : [...prev, contact.id],
                                                                                         );
                                                                                     }}
                                                                                     className="mt-1 h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
-                                                                                    title={`Select ${fullName}`}
+                                                                                    title={`Select ${contact.name}`}
                                                                                 />
                                                                             )}
-                                                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
-                                                                                {avatar ? (
-                                                                                    <img src={avatar} alt={fullName} className="h-full w-full object-cover" />
-                                                                                ) : (
-                                                                                    initialsFromName(fullName)
-                                                                                )}
+                                                                            <div
+                                                                                className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-bold text-white"
+                                                                                style={{ backgroundColor: avatarColor(contact.name) }}
+                                                                            >
+                                                                                {initialsFromName(contact.name)}
                                                                             </div>
                                                                             <div className="min-w-0">
-                                                                                <p className="truncate text-sm font-semibold text-zinc-900">{fullName}</p>
-                                                                                <p className="mt-0.5 text-xs text-zinc-500">{role}</p>
-                                                                                {companyName && (
-                                                                                    <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1">
-                                                                                        {companyLogo ? (
-                                                                                            <img src={companyLogo} alt={`${companyName} logo`} className="h-4 w-4 shrink-0 object-contain" />
-                                                                                        ) : (
-                                                                                            <Building2 className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                                                                                        )}
-                                                                                        <span className="truncate text-xs font-medium text-zinc-700">{companyName}</span>
-                                                                                    </div>
-                                                                                )}
+                                                                                <p className="truncate text-sm font-semibold text-zinc-900">{contact.name}</p>
+                                                                                <p className="mt-0.5 text-xs text-zinc-500">{contact.role}</p>
+                                                                                <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1">
+                                                                                    <Users className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                                                    <span className="truncate text-xs font-medium text-zinc-700">{contact.department}</span>
+                                                                                </div>
                                                                             </div>
                                                                         </div>
                                                                         <div className="text-sm text-zinc-600 sm:text-right">
                                                                             <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Email</p>
-                                                                            <p className="text-sm">{email || 'No email'}</p>
+                                                                            <p className="text-sm break-all">{contact.email}</p>
                                                                             <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Phone</p>
-                                                                            <p className="text-xs text-zinc-500">{phone || 'No phone'}</p>
+                                                                            <p className="text-xs text-zinc-500">{contact.phone}</p>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -790,7 +1431,7 @@ export default function ShowDetailPage() {
                                                     })
                                                 ) : (
                                                     <div className="px-5 py-8 text-center text-sm text-zinc-500">
-                                                        No contacts found.
+                                                        No show contacts yet.
                                                     </div>
                                                 )}
                                             </div>
@@ -804,467 +1445,715 @@ export default function ShowDetailPage() {
 
                                 {/* Comments Tab */}
                                 {activeTab === 'comments' && (
-                                    <div className="flex flex-1 flex-col gap-5">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex flex-1 flex-col gap-6">
+
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between">
                                             <div>
                                                 <h2 className="text-lg font-semibold text-zinc-900">Comments</h2>
-                                                <p className="mt-1 text-sm text-zinc-500">Keep team comments and follow-ups in one stream.</p>
+                                                <p className="mt-0.5 text-sm text-zinc-500">Team notes and follow-ups for this show.</p>
                                             </div>
-                                            <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
-                                                Add Comment
+                                            {comments.length > 0 && (
+                                                <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-500">
+                                                    {comments.length} comment{comments.length !== 1 ? 's' : ''}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Compose box */}
+                                        <div className="flex items-start gap-3">
+                                            {currentUser ? (
+                                                <div
+                                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                                                    style={{ backgroundColor: avatarColor(currentUser.name || currentUser.email || 'U') }}
+                                                >
+                                                    {initialsFromName(currentUser.name || currentUser.email || 'U')}
+                                                </div>
+                                            ) : (
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-500">?</div>
+                                            )}
+                                            <div className="flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5 transition-all focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100">
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Write a comment… (Ctrl+Enter to post)"
+                                                    value={commentText}
+                                                    onChange={(e) => setCommentText(e.target.value)}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddComment(); }}
+                                                    className="w-full resize-none bg-transparent px-4 py-3 text-sm text-zinc-800 placeholder-zinc-400 outline-none"
+                                                />
+                                                <div className="flex items-center justify-between border-t border-zinc-100 bg-zinc-50/70 px-4 py-2.5">
+                                                    <span className="text-[11px] text-zinc-400">
+                                                        {currentUser?.name || currentUser?.email || 'Not signed in'}
+                                                    </span>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="primary"
+                                                        onClick={handleAddComment}
+                                                        disabled={commentSaving || !commentText.trim()}
+                                                    >
+                                                        {commentSaving ? 'Posting…' : 'Post'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Comments list */}
+                                        {comments.length === 0 ? (
+                                            <EmptyState
+                                                icon={<FileText className="h-6 w-6 text-zinc-400" />}
+                                                title="No comments yet"
+                                                description="Be the first to leave a note or follow-up for this show."
+                                            />
+                                        ) : (
+                                            <div className="flex flex-col gap-3">
+                                                {[...comments].reverse().map((comment) => {
+                                                    const isOwn = currentUser?.id === comment.user_id;
+                                                    const displayName = commentAuthors[comment.user_id] || comment.author;
+                                                    const color = avatarColor(displayName);
+                                                    return (
+                                                        <div
+                                                            key={comment.id}
+                                                            className={`group relative rounded-2xl border bg-white p-4 shadow-sm shadow-zinc-950/5 transition-colors ${isOwn ? 'border-orange-100 bg-orange-50/20' : 'border-zinc-200'}`}
+                                                        >
+                                                            <div className="flex items-start gap-3">
+                                                                <div
+                                                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                                                                    style={{ backgroundColor: color }}
+                                                                >
+                                                                    {initialsFromName(displayName)}
+                                                                </div>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <span className="text-sm font-semibold text-zinc-900">{displayName}</span>
+                                                                            {isOwn && (
+                                                                                <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-600">You</span>
+                                                                            )}
+                                                                            <span className="text-xs text-zinc-400">{formatRelativeTime(comment.created_at)}</span>
+                                                                        </div>
+                                                                        {isOwn && (
+                                                                            <button
+                                                                                onClick={() => handleDeleteComment(comment.id)}
+                                                                                className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+                                                                                title="Delete comment"
+                                                                            >
+                                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="mt-2 text-sm leading-relaxed text-zinc-700">{comment.text}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Images Tab */}
+                                {activeTab === 'images' && (
+                                    <div className="flex flex-col gap-5">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <h2 className="text-lg font-semibold text-zinc-900">Images</h2>
+                                                <p className="mt-1 text-sm text-zinc-500">Profile photo, cover banner, and event imagery.</p>
+                                            </div>
+                                            <Button size="sm" variant="primary" leftIcon={<Camera className="h-4 w-4" />} onClick={() => toast.info('Image upload coming soon')}>
+                                                Upload Image
                                             </Button>
                                         </div>
 
-                                        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                            {/* Profile image */}
                                             <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
-                                                <div className="border-b border-zinc-100 px-5 py-3.5">
-                                                    <p className="text-sm font-semibold text-zinc-900">Team comments</p>
+                                                <div className="border-b border-zinc-100 px-4 py-3">
+                                                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Profile Photo</p>
                                                 </div>
-                                                <div className="divide-y divide-zinc-100">
-                                                    {demoComments.map((comment, idx) => (
-                                                        <div key={`${comment.author}-${idx}`} className="px-5 py-4">
-                                                            <div className="mb-1.5 flex items-center justify-between gap-3">
-                                                                <p className="text-sm font-semibold text-zinc-900">{comment.author}</p>
-                                                                <p className="text-xs text-zinc-400">{comment.time}</p>
-                                                            </div>
-                                                            <p className="text-sm leading-relaxed text-zinc-600">{comment.text}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col gap-4">
-                                                <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-950/5">
-                                                    <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Comment stats</p>
-                                                    <p className="mt-2 text-sm font-medium text-zinc-700">{demoComments.length} recent comments</p>
-                                                </div>
-                                                {note && (
-                                                    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
-                                                        <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-3">
-                                                            <p className="text-xs font-bold uppercase tracking-wider text-orange-700">Imported note</p>
-                                                        </div>
-                                                        <div className="px-4 py-3.5">
-                                                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{note}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                <button
-                                                    onClick={() => toast.info('Coming soon')}
-                                                    className="group flex min-h-[140px] flex-1 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-white p-6 text-center transition-colors hover:border-orange-300 hover:bg-orange-50/30"
-                                                >
-                                                    <div className="mb-3 rounded-full bg-zinc-100 p-3 text-zinc-400 transition-colors group-hover:bg-orange-100 group-hover:text-orange-600">
-                                                        <Plus className="h-5 w-5" />
-                                                    </div>
-                                                    <p className="text-sm font-semibold text-zinc-700">Add another comment</p>
-                                                    <p className="mt-1 text-xs text-zinc-400">Save meeting updates, blockers, and decisions.</p>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Floorplans Tab */}
-                    {activeTab === 'floorplans' && (
-                        <div className="w-full py-6 sm:py-8 flex flex-col">
-                            <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-                                <div className="flex flex-col gap-3 pb-5 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <h2 className="text-lg font-semibold text-zinc-900">Floorplans & Maps</h2>
-                                        <p className="mt-1 text-sm text-zinc-500">Upload PDFs, image files, or save external map links.</p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            leftIcon={<LayoutGrid className="h-4 w-4" />}
-                                            onClick={() => toast.info('Upload floorplan (coming soon)')}
-                                        >
-                                            Upload floorplan
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="primary"
-                                            leftIcon={<Plus className="h-4 w-4" />}
-                                            onClick={() => toast.info('Add map link (coming soon)')}
-                                        >
-                                            Add map link
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
-                                    {(() => {
-                                        const toType = (url: string): 'pdf' | 'link' | 'image' => {
-                                            const lower = url.toLowerCase();
-                                            if (lower.includes('.pdf')) return 'pdf';
-                                            if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) return 'image';
-                                            return 'link';
-                                        };
-
-                                        const floorplanItems = [
-                                            ...extractLinks(floorplanLink).map((url, idx) => ({
-                                                id: `floorplan-${idx}-${url}`,
-                                                name: `${eventName} — Floorplan ${idx + 1}`,
-                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                type: toType(url),
-                                                source: 'Floorplan Link',
-                                                url: normalizeExternalUrl(url),
-                                            })),
-                                            ...extractLinks(floorplanFileLink).map((url, idx) => ({
-                                                id: `file-${idx}-${url}`,
-                                                name: `${eventName} — Floorplan File ${idx + 1}`,
-                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                type: toType(url),
-                                                source: 'File Link',
-                                                url: normalizeExternalUrl(url),
-                                            })),
-                                            ...extractLinks(mapLink).map((url, idx) => ({
-                                                id: `map-${idx}-${url}`,
-                                                name: `${eventName} — Venue Map ${idx + 1}`,
-                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                type: 'link' as const,
-                                                source: 'Map Link',
-                                                url: normalizeExternalUrl(url),
-                                            })),
-                                        ];
-
-                                        const typeBadge = (type: 'pdf' | 'link' | 'image') => {
-                                            const styles = {
-                                                pdf: 'bg-red-50 text-red-600 border-red-100',
-                                                link: 'bg-blue-50 text-blue-600 border-blue-100',
-                                                image: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-                                            };
-                                            const icons = {
-                                                pdf: <FileText className="h-3.5 w-3.5" />,
-                                                link: <Link2 className="h-3.5 w-3.5" />,
-                                                image: <Camera className="h-3.5 w-3.5" />,
-                                            };
-                                            return (
-                                                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles[type]}`}>
-                                                    {icons[type]}
-                                                    {type}
-                                                </span>
-                                            );
-                                        };
-
-                                        return (
-                                            <div className="divide-y divide-zinc-100">
-                                                {floorplanItems.length > 0 ? floorplanItems.map((fp) => (
-                                                    <div
-                                                        key={fp.id}
-                                                        className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-zinc-50/80"
-                                                    >
-                                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500">
-                                                            {fp.type === 'pdf' ? <FileText className="h-4 w-4" /> : fp.type === 'link' ? <Globe className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className="truncate text-sm font-medium text-zinc-900">{fp.name}</p>
-                                                            <p className="mt-0.5 text-xs text-zinc-400">{fp.source} · {fp.year}</p>
-                                                        </div>
-                                                        <div className="hidden sm:block">
-                                                            {typeBadge(fp.type)}
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <a
-                                                                href={fp.url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
-                                                            >
-                                                                {fp.type === 'link' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                                                                {fp.type === 'link' ? 'Open' : 'Download'}
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                )) : (
-                                                    <div className="px-5 py-12 text-center">
-                                                        <p className="text-sm text-zinc-400">No floorplan or file links available for this show.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Exhibitors Tab — full width */}
-                    {activeTab === 'exhibitors' && (
-                        <div className="w-full py-4 sm:py-6 flex min-h-0 flex-1 flex-col">
-                            <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col px-4 sm:px-6 lg:px-8">
-                                <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <h2 className="text-lg font-semibold text-zinc-900">Exhibitors</h2>
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                        <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 sm:w-56">
-                                            <Search className="h-4 w-4 text-zinc-400" />
-                                            <input
-                                                type="text"
-                                                placeholder="Search exhibitors..."
-                                                className="w-full bg-transparent text-sm outline-none"
-                                                value={exSearch}
-                                                onChange={(e) => setExSearch(e.target.value)}
-                                            />
-                                        </div>
-                                        <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
-                                            Add Exhibitor
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="h-9 rounded-md"
-                                            onClick={() => {
-                                                setIsExhibitorSelectMode((prev) => {
-                                                    if (prev) setSelectedExhibitorIds([]);
-                                                    return !prev;
-                                                });
-                                            }}
-                                        >
-                                            {isExhibitorSelectMode ? 'Cancel Selection' : 'Select'}
-                                        </Button>
-                                    </div>
-                                </div>
-                                {isExhibitorSelectMode && (
-                                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
-                                    <span className="text-xs font-medium text-zinc-600">{selectedExhibitorIds.length} selected</span>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() =>
-                                            openFeatureInfoModal(
-                                                'Bulk Delete (Coming Soon)',
-                                                `You selected ${selectedExhibitorIds.length} exhibitors. Soon you will be able to delete selected exhibitors in one confirmed action.`,
-                                            )
-                                        }
-                                        className="h-8 rounded-md"
-                                        disabled={selectedExhibitorIds.length === 0}
-                                    >
-                                        Bulk Delete
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() =>
-                                            openFeatureInfoModal(
-                                                'Bulk Enrich Data (Coming Soon)',
-                                                `You selected ${selectedExhibitorIds.length} exhibitors. This will enrich selected companies with additional firmographic and profile details.`,
-                                            )
-                                        }
-                                        className="h-8 rounded-md"
-                                        disabled={selectedExhibitorIds.length === 0}
-                                    >
-                                        Bulk Enrich Data
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() =>
-                                            openFeatureInfoModal(
-                                                'Get Contacts (Coming Soon)',
-                                                `You selected ${selectedExhibitorIds.length} exhibitors. This will fetch relevant decision-maker contacts for the selected companies.`,
-                                            )
-                                        }
-                                        className="h-8 rounded-md"
-                                        disabled={selectedExhibitorIds.length === 0}
-                                    >
-                                        Get Contacts
-                                    </Button>
-                                </div>
-                                )}
-                                <div className="flex h-[calc(100vh-320px)] min-h-[500px] max-h-[760px] min-w-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
-                                    {(() => {
-                                        const demoExhibitors = exhibitorCompanies.map((company) => {
-                                            const meta = randomExhibitorMeta(`${company.id}-${company.name}`);
-                                            return {
-                                                id: company.id,
-                                                company: company.name,
-                                                year: meta.year,
-                                                booth: meta.booth,
-                                                size: meta.size,
-                                                logoUrl: company.logo_url || company.logo || '',
-                                                location: [company.city, company.country].filter(Boolean).join(', '),
-                                                industry: company.industry || '',
-                                                domain: company.primary_domain || '',
-                                                employees: Number(company.estimated_num_employees || 0),
-                                            };
-                                        });
-
-                                        // Filter by search
-                                        const q = exSearch.toLowerCase();
-                                        const filtered = q
-                                            ? demoExhibitors.filter(ex =>
-                                                ex.company.toLowerCase().includes(q) ||
-                                                ex.booth.toLowerCase().includes(q) ||
-                                                ex.year.includes(q)
-                                            )
-                                            : demoExhibitors;
-
-                                        // Sort
-                                        const sorted = exSort.key
-                                            ? [...filtered].sort((a, b) => {
-                                                const aVal = a[exSort.key as keyof typeof a];
-                                                const bVal = b[exSort.key as keyof typeof b];
-                                                // Extract numeric value for size column
-                                                if (exSort.key === 'size') {
-                                                    const aNum = parseInt(String(aVal), 10);
-                                                    const bNum = parseInt(String(bVal), 10);
-                                                    return exSort.dir === 'asc' ? aNum - bNum : bNum - aNum;
-                                                }
-                                                const cmp = String(aVal).localeCompare(String(bVal));
-                                                return exSort.dir === 'asc' ? cmp : -cmp;
-                                            })
-                                            : filtered;
-
-                                        const toggleSort = (key: string) => {
-                                            setExSort(prev =>
-                                                prev.key === key
-                                                    ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-                                                    : { key, dir: 'asc' }
-                                            );
-                                        };
-
-                                        const SortIcon = ({ col }: { col: string }) => {
-                                            if (exSort.key !== col) return <ArrowUpDown className="h-3 w-3 text-zinc-300" />;
-                                            return exSort.dir === 'asc'
-                                                ? <ChevronUp className="h-3 w-3 text-orange-500" />
-                                                : <ChevronDown className="h-3 w-3 text-orange-500" />;
-                                        };
-
-                                        const visibleIds = sorted.map((ex) => ex.id);
-                                        const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedExhibitorIds.includes(id));
-
-                                        const toggleSelectAllVisible = () => {
-                                            setSelectedExhibitorIds((prev) => {
-                                                if (allVisibleSelected) {
-                                                    return prev.filter((id) => !visibleIds.includes(id));
-                                                }
-                                                const next = new Set(prev);
-                                                visibleIds.forEach((id) => next.add(id));
-                                                return Array.from(next);
-                                            });
-                                        };
-
-                                        const toggleSelectOne = (id: string) => {
-                                            setSelectedExhibitorIds((prev) => (
-                                                prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-                                            ));
-                                        };
-
-                                        return (
-                                            <div className="h-full overflow-y-auto border-t border-zinc-100">
-                                                <div className="sticky top-0 z-20 border-b border-zinc-100 bg-zinc-50/95 px-4 py-2.5 backdrop-blur sm:px-5">
-                                                    <div className={`grid ${isExhibitorSelectMode ? 'grid-cols-[30px_minmax(0,1fr)_110px_120px_110px]' : 'grid-cols-[minmax(0,1fr)_110px_120px_110px]'} items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500`}>
-                                                        {isExhibitorSelectMode && (
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={allVisibleSelected}
-                                                                onChange={toggleSelectAllVisible}
-                                                                className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
-                                                                title="Select all visible"
-                                                            />
-                                                        )}
-                                                        <button onClick={() => toggleSort('company')} className="inline-flex items-center gap-1 hover:text-zinc-600">
-                                                            Company <SortIcon col="company" />
-                                                        </button>
-                                                        <button onClick={() => toggleSort('year')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                            Attended Year <SortIcon col="year" />
-                                                        </button>
-                                                        <button onClick={() => toggleSort('booth')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                            Booth Number <SortIcon col="booth" />
-                                                        </button>
-                                                        <button onClick={() => toggleSort('size')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                            Booth Size <SortIcon col="size" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {sorted.length > 0 ? (
-                                                    <div className="space-y-2.5 p-3 sm:p-4">
-                                                        {sorted.map((ex) => {
-                                                            const avatarText = initialsFromName(ex.company);
-                                                            return (
-                                                                <div
-                                                                    key={ex.id}
-                                                                    role="button"
-                                                                    tabIndex={0}
-                                                                    onClick={() => router.push(`/companies/${ex.id}`)}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                                            e.preventDefault();
-                                                                            router.push(`/companies/${ex.id}`);
-                                                                        }
-                                                                    }}
-                                                                    className="group cursor-pointer rounded-xl border border-zinc-200 bg-white px-3 py-2.5 transition-all duration-200 hover:border-orange-200 hover:shadow-sm hover:shadow-zinc-950/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-1"
-                                                                >
-                                                                    <div className={`grid ${isExhibitorSelectMode ? 'grid-cols-[30px_minmax(0,1fr)_110px_120px_110px]' : 'grid-cols-[minmax(0,1fr)_110px_120px_110px]'} items-center gap-2`}>
-                                                                        {isExhibitorSelectMode && (
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={selectedExhibitorIds.includes(ex.id)}
-                                                                                onChange={() => toggleSelectOne(ex.id)}
-                                                                                onClick={(event) => event.stopPropagation()}
-                                                                                className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
-                                                                                title={`Select ${ex.company}`}
-                                                                            />
-                                                                        )}
-                                                                        <div className="flex min-w-0 items-center gap-3">
-                                                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200">
-                                                                                {ex.logoUrl ? (
-                                                                                    <img
-                                                                                        src={ex.logoUrl}
-                                                                                        alt={`${ex.company} logo`}
-                                                                                        className="h-full w-full object-contain p-1"
-                                                                                        loading="lazy"
-                                                                                    />
-                                                                                ) : (
-                                                                                    <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: '#fb923c' }}>
-                                                                                        {avatarText}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-
-                                                                                <div className="min-w-0">
-                                                                                <p className="truncate text-[14px] font-semibold text-zinc-900 group-hover:text-orange-700">{ex.company}</p>
-                                                                                <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
-                                                                                    {ex.location ? (
-                                                                                        <span className="inline-flex min-w-0 items-center gap-1 truncate">
-                                                                                            <MapPin className="h-3 w-3 shrink-0 text-orange-500" />
-                                                                                            <span className="truncate">{ex.location}</span>
-                                                                                        </span>
-                                                                                    ) : (
-                                                                                        <span className="text-zinc-400">Location N/A</span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <span className="justify-self-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">{ex.year}</span>
-                                                                        <span className="justify-self-center rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">{ex.booth}</span>
-                                                                        <span className="justify-self-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">{ex.size}</span>
-                                                                        </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                ) : exhibitorsLoading ? (
-                                                    <div className="py-12 text-center">
-                                                        <p className="text-sm text-zinc-400">Loading exhibitors...</p>
+                                                {profile_img_link ? (
+                                                    <div className="group relative aspect-square overflow-hidden bg-zinc-50">
+                                                        <img
+                                                            src={profile_img_link}
+                                                            alt="Profile"
+                                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                        />
                                                     </div>
                                                 ) : (
-                                                    <div className="py-12 text-center">
-                                                        <p className="text-sm text-zinc-400">No exhibitors match &ldquo;{exSearch}&rdquo;</p>
+                                                    <div className="flex aspect-square flex-col items-center justify-center gap-2 bg-zinc-50 text-zinc-400">
+                                                        <Camera className="h-8 w-8" />
+                                                        <p className="text-xs">No profile photo</p>
                                                     </div>
                                                 )}
                                             </div>
-                                        );
-                                    })()}
-                                </div>
+
+                                            {/* Cover image */}
+                                            <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5 sm:col-span-1 lg:col-span-2">
+                                                <div className="border-b border-zinc-100 px-4 py-3">
+                                                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Cover Banner</p>
+                                                </div>
+                                                {cover_img_link ? (
+                                                    <div className="group relative aspect-video overflow-hidden bg-zinc-50">
+                                                        <img
+                                                            src={cover_img_link}
+                                                            alt="Cover"
+                                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-zinc-50 text-zinc-400">
+                                                        <Camera className="h-8 w-8" />
+                                                        <p className="text-xs">No cover banner</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Add more placeholder */}
+                                        <button
+                                            onClick={() => toast.info('Image upload coming soon')}
+                                            className="group flex min-h-[120px] items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-zinc-200 bg-white p-6 text-center transition-colors hover:border-orange-300 hover:bg-orange-50/30"
+                                        >
+                                            <div className="rounded-full bg-zinc-100 p-3 text-zinc-400 transition-colors group-hover:bg-orange-100 group-hover:text-orange-600">
+                                                <Plus className="h-5 w-5" />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-sm font-semibold text-zinc-700">Add more images</p>
+                                                <p className="mt-0.5 text-xs text-zinc-400">Upload event photos, booth shots, and more.</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                )}
+
                             </div>
                         </div>
-                    )}
+                    )
+                    }
+
+                    {/* Floorplans Tab */}
+                    {
+                        activeTab === 'floorplans' && (
+                            <div className="w-full py-6 sm:py-8 flex flex-col">
+                                <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+                                    <div className="flex flex-col gap-3 pb-5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-zinc-900">Floorplans & Maps</h2>
+                                            <p className="mt-1 text-sm text-zinc-500">Upload PDFs, image files, or save external map links.</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                leftIcon={<Upload className="h-4 w-4" />}
+                                                onClick={() => floorplanFileInputRef.current?.click()}
+                                            >
+                                                Upload floorplan
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="primary"
+                                                leftIcon={<Plus className="h-4 w-4" />}
+                                                onClick={handleAddNewLink}
+                                            >
+                                                Add map link
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {(() => {
+                                            const toType = (url: string): 'pdf' | 'link' | 'image' => {
+                                                const lower = url.toLowerCase();
+                                                if (lower.includes('.pdf')) return 'pdf';
+                                                if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) return 'image';
+                                                return 'link';
+                                            };
+
+                                            const floorplanItems = [
+                                                ...parseFloorplanFiles(data?.floorplan_file ?? null).map((item) => ({
+                                                    id: `file-${item.id}`,
+                                                    name: item.title,
+                                                    year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                    type: toType(item.url),
+                                                    source: 'Uploaded file',
+                                                    url: normalizeExternalUrl(item.url),
+                                                    attribution: floorplanAttribution(
+                                                        item.uploaded_by_name,
+                                                        item.created_at,
+                                                    ),
+                                                    fileName: item.file_name,
+                                                    kind: 'file' as const,
+                                                    fileId: item.id,
+                                                })),
+                                                ...parseLinksJson(data?.floorplan_link ?? null).map((item, idx) => ({
+                                                    id: `link-${idx}-${item.url}`,
+                                                    name: item.title || `${eventName} — Floorplan ${idx + 1}`,
+                                                    year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                    type: toType(item.url),
+                                                    source: 'Map link',
+                                                    url: normalizeExternalUrl(item.url),
+                                                    attribution: floorplanAttribution(
+                                                        item.added_by_name,
+                                                        item.created_at,
+                                                    ),
+                                                    kind: 'link' as const,
+                                                    linkIndex: idx,
+                                                })),
+                                            ];
+
+                                            const typeBadge = (type: 'pdf' | 'link' | 'image') => {
+                                                const styles = {
+                                                    pdf: 'bg-red-50 text-red-600 border-red-100',
+                                                    link: 'bg-blue-50 text-blue-600 border-blue-100',
+                                                    image: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+                                                };
+                                                const icons = {
+                                                    pdf: <FileText className="h-3.5 w-3.5" />,
+                                                    link: <Link2 className="h-3.5 w-3.5" />,
+                                                    image: <Camera className="h-3.5 w-3.5" />,
+                                                };
+                                                return (
+                                                    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles[type]}`}>
+                                                        {icons[type]}
+                                                        {type}
+                                                    </span>
+                                                );
+                                            };
+
+                                            return (
+                                                <div className={floorplanItems.length > 0 ? 'flex w-full flex-col gap-3' : 'w-full'}>
+                                                    {floorplanItems.length > 0 ? floorplanItems.map((fp) => (
+                                                        <div
+                                                            key={fp.id}
+                                                            className="flex w-full items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-3.5 shadow-sm shadow-zinc-950/5 transition-colors hover:border-zinc-300 hover:bg-zinc-50/80"
+                                                        >
+                                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500">
+                                                                {fp.type === 'pdf' ? <FileText className="h-4 w-4" /> : fp.type === 'link' ? <Globe className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="truncate text-sm font-medium text-zinc-900">{fp.name}</p>
+                                                                <p className="mt-0.5 text-xs text-zinc-400">
+                                                                    {fp.source} · {fp.year}
+                                                                </p>
+                                                                <p className="mt-0.5 truncate text-xs text-zinc-500">{fp.attribution}</p>
+                                                                {'fileName' in fp && fp.fileName ? (
+                                                                    <p className="mt-0.5 truncate text-[11px] text-zinc-400">{fp.fileName}</p>
+                                                                ) : null}
+                                                            </div>
+                                                            <div className="hidden sm:block">
+                                                                {typeBadge(fp.type)}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <a
+                                                                    href={fp.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
+                                                                >
+                                                                    {fp.type === 'link' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                                                                    {fp.type === 'link' ? 'Open' : 'View'}
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (fp.kind === 'file' && fp.fileId) {
+                                                                            handleDeleteFloorplanFile(fp.fileId);
+                                                                        } else if (fp.kind === 'link' && fp.linkIndex !== undefined) {
+                                                                            handleDeleteLink(fp.linkIndex);
+                                                                        }
+                                                                    }}
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                                                                    aria-label="Remove floorplan"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )) : (
+                                                        <div className="w-full py-12 text-center">
+                                                            <p className="text-sm text-zinc-400">No floorplan or file links available for this show.</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                </div>
+                            </div>
+                        )
+                    }
+
+                    {/* Exhibitors Tab — full width */}
+                    {
+                        activeTab === 'exhibitors' && (
+                            <div className="w-full py-4 sm:py-6 flex min-h-0 flex-1 flex-col">
+                                <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col px-4 sm:px-6 lg:px-8">
+                                    <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <h2 className="text-lg font-semibold text-zinc-900">Exhibitors</h2>
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                            <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 sm:w-56">
+                                                <Search className="h-4 w-4 text-zinc-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search exhibitors..."
+                                                    className="w-full bg-transparent text-sm outline-none"
+                                                    value={exSearch}
+                                                    onChange={(e) => setExSearch(e.target.value)}
+                                                />
+                                            </div>
+                                            <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
+                                                Add Exhibitor
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                className="h-9 rounded-md"
+                                                onClick={() => {
+                                                    setIsExhibitorSelectMode((prev) => {
+                                                        if (prev) setSelectedExhibitorIds([]);
+                                                        return !prev;
+                                                    });
+                                                }}
+                                            >
+                                                {isExhibitorSelectMode ? 'Cancel Selection' : 'Select'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {isExhibitorSelectMode && (
+                                        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+                                            <span className="text-xs font-medium text-zinc-600">{selectedExhibitorIds.length} selected</span>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() =>
+                                                    openFeatureInfoModal(
+                                                        'Bulk Delete (Coming Soon)',
+                                                        `You selected ${selectedExhibitorIds.length} exhibitors. Soon you will be able to delete selected exhibitors in one confirmed action.`,
+                                                    )
+                                                }
+                                                className="h-8 rounded-md"
+                                                disabled={selectedExhibitorIds.length === 0}
+                                            >
+                                                Bulk Delete
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() =>
+                                                    openFeatureInfoModal(
+                                                        'Bulk Enrich Data (Coming Soon)',
+                                                        `You selected ${selectedExhibitorIds.length} exhibitors. This will enrich selected companies with additional firmographic and profile details.`,
+                                                    )
+                                                }
+                                                className="h-8 rounded-md"
+                                                disabled={selectedExhibitorIds.length === 0}
+                                            >
+                                                Bulk Enrich Data
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() =>
+                                                    openFeatureInfoModal(
+                                                        'Get Contacts (Coming Soon)',
+                                                        `You selected ${selectedExhibitorIds.length} exhibitors. This will fetch relevant decision-maker contacts for the selected companies.`,
+                                                    )
+                                                }
+                                                className="h-8 rounded-md"
+                                                disabled={selectedExhibitorIds.length === 0}
+                                            >
+                                                Get Contacts
+                                            </Button>
+                                        </div>
+                                    )}
+                                    <div className="flex h-[calc(100vh-320px)] min-h-[500px] max-h-[760px] min-w-0 flex-col overflow-hidden">
+                                        {(() => {
+                                            const demoExhibitors = exhibitorCompanies.map((company) => {
+                                                const meta = randomExhibitorMeta(`${company.id}-${company.name}`);
+                                                const sqm = parseSqm(meta.size);
+                                                const categoryMeta = boothCategoryFromSqm(sqm);
+                                                return {
+                                                    id: company.id,
+                                                    company: company.name,
+                                                    year: meta.year,
+                                                    booth: meta.booth,
+                                                    size: meta.size,
+                                                    sqm,
+                                                    category: categoryMeta.label,
+                                                    categoryOrder: categoryMeta.order,
+                                                    logoUrl: company.logo_url || company.logo || '',
+                                                    location: [company.city, company.country].filter(Boolean).join(', '),
+                                                    industry: company.industry || '',
+                                                    domain: company.primary_domain || '',
+                                                    employees: Number(company.estimated_num_employees || 0),
+                                                };
+                                            });
+
+                                            // Filter by search
+                                            const q = exSearch.toLowerCase();
+                                            const filtered = q
+                                                ? demoExhibitors.filter(ex =>
+                                                    ex.company.toLowerCase().includes(q) ||
+                                                    ex.booth.toLowerCase().includes(q) ||
+                                                    ex.year.includes(q) ||
+                                                    ex.category.toLowerCase().includes(q) ||
+                                                    ex.size.toLowerCase().includes(q)
+                                                )
+                                                : demoExhibitors;
+
+                                            // Sort
+                                            const sorted = exSort.key
+                                                ? [...filtered].sort((a, b) => {
+                                                    const aVal = a[exSort.key as keyof typeof a];
+                                                    const bVal = b[exSort.key as keyof typeof b];
+                                                    // Extract numeric value for size column
+                                                    if (exSort.key === 'size' || exSort.key === 'sqm') {
+                                                        const aNum = exSort.key === 'sqm' ? a.sqm : parseSqm(String(aVal));
+                                                        const bNum = exSort.key === 'sqm' ? b.sqm : parseSqm(String(bVal));
+                                                        return exSort.dir === 'asc' ? aNum - bNum : bNum - aNum;
+                                                    }
+                                                    if (exSort.key === 'category') {
+                                                        return exSort.dir === 'asc'
+                                                            ? a.categoryOrder - b.categoryOrder
+                                                            : b.categoryOrder - a.categoryOrder;
+                                                    }
+                                                    const cmp = String(aVal).localeCompare(String(bVal));
+                                                    return exSort.dir === 'asc' ? cmp : -cmp;
+                                                })
+                                                : filtered;
+
+                                            const toggleSort = (key: string) => {
+                                                setExSort(prev =>
+                                                    prev.key === key
+                                                        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                                                        : { key, dir: 'asc' }
+                                                );
+                                            };
+
+                                            const SortIcon = ({ col }: { col: string }) => {
+                                                if (exSort.key !== col) return <ArrowUpDown className="h-3 w-3 text-zinc-300" />;
+                                                return exSort.dir === 'asc'
+                                                    ? <ChevronUp className="h-3 w-3 text-orange-500" />
+                                                    : <ChevronDown className="h-3 w-3 text-orange-500" />;
+                                            };
+
+                                            const visibleIds = sorted.map((ex) => ex.id);
+                                            const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedExhibitorIds.includes(id));
+
+                                            const toggleSelectAllVisible = () => {
+                                                setSelectedExhibitorIds((prev) => {
+                                                    if (allVisibleSelected) {
+                                                        return prev.filter((id) => !visibleIds.includes(id));
+                                                    }
+                                                    const next = new Set(prev);
+                                                    visibleIds.forEach((id) => next.add(id));
+                                                    return Array.from(next);
+                                                });
+                                            };
+
+                                            const toggleSelectOne = (id: string) => {
+                                                setSelectedExhibitorIds((prev) => (
+                                                    prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+                                                ));
+                                            };
+
+                                            const renderExhibitorLogo = (ex: (typeof sorted)[0], avatarText: string) => (
+                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200 sm:h-9 sm:w-9">
+                                                    {ex.logoUrl ? (
+                                                        <img
+                                                            src={ex.logoUrl}
+                                                            alt={`${ex.company} logo`}
+                                                            className="h-full w-full object-contain p-1"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: '#fb923c' }}>
+                                                            {avatarText}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+
+                                            return (
+                                                <div className="h-full overflow-y-auto">
+                                                    {/* Mobile: sort chips */}
+                                                    <div className="sticky top-0 z-20 mb-2.5 space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/95 p-3 backdrop-blur md:hidden">
+                                                        {isExhibitorSelectMode && (
+                                                            <label className="flex items-center gap-2 text-xs font-medium text-zinc-600">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={allVisibleSelected}
+                                                                    onChange={toggleSelectAllVisible}
+                                                                    className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                />
+                                                                Select all visible
+                                                            </label>
+                                                        )}
+                                                        <div className="flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                                            {EXHIBITOR_SORT_OPTIONS.map((opt) => (
+                                                                <button
+                                                                    key={opt.key}
+                                                                    type="button"
+                                                                    onClick={() => toggleSort(opt.key)}
+                                                                    className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${exSort.key === opt.key
+                                                                        ? 'border-orange-200 bg-orange-50 text-orange-700'
+                                                                        : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+                                                                        }`}
+                                                                >
+                                                                    {opt.label}
+                                                                    <SortIcon col={opt.key} />
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Desktop: table header */}
+                                                    <div className="sticky top-0 z-20 mb-2.5 hidden rounded-xl border border-zinc-200 bg-zinc-50/95 px-4 py-2.5 backdrop-blur md:block">
+                                                        <div className={`grid ${isExhibitorSelectMode ? EXHIBITOR_GRID_COLS.select : EXHIBITOR_GRID_COLS.default} items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500`}>
+                                                            {isExhibitorSelectMode && (
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={allVisibleSelected}
+                                                                    onChange={toggleSelectAllVisible}
+                                                                    className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                    title="Select all visible"
+                                                                />
+                                                            )}
+                                                            <button type="button" onClick={() => toggleSort('company')} className="inline-flex items-center gap-1 hover:text-zinc-600">
+                                                                Company <SortIcon col="company" />
+                                                            </button>
+                                                            <button type="button" onClick={() => toggleSort('year')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Attended Year <SortIcon col="year" />
+                                                            </button>
+                                                            <button type="button" onClick={() => toggleSort('booth')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Booth Number <SortIcon col="booth" />
+                                                            </button>
+                                                            <button type="button" onClick={() => toggleSort('size')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Booth Size <SortIcon col="size" />
+                                                            </button>
+                                                            <button type="button" onClick={() => toggleSort('category')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Category <SortIcon col="category" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {sorted.length > 0 ? (
+                                                        <div className="flex w-full flex-col gap-2.5">
+                                                            {sorted.map((ex) => {
+                                                                const avatarText = initialsFromName(ex.company);
+                                                                const openCompany = () => router.push(`/companies/${ex.id}`);
+                                                                return (
+                                                                    <div
+                                                                        key={ex.id}
+                                                                        role="button"
+                                                                        tabIndex={0}
+                                                                        onClick={openCompany}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                                e.preventDefault();
+                                                                                openCompany();
+                                                                            }
+                                                                        }}
+                                                                        className="group w-full cursor-pointer rounded-xl border border-zinc-200 bg-white px-3 py-3 shadow-sm shadow-zinc-950/5 transition-all duration-200 hover:border-orange-200 hover:shadow-md hover:shadow-zinc-950/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-1 sm:px-4 sm:py-2.5"
+                                                                    >
+                                                                        {/* Mobile card */}
+                                                                        <div className="md:hidden">
+                                                                            <div className="flex items-start gap-3">
+                                                                                {isExhibitorSelectMode && (
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={selectedExhibitorIds.includes(ex.id)}
+                                                                                        onChange={() => toggleSelectOne(ex.id)}
+                                                                                        onClick={(event) => event.stopPropagation()}
+                                                                                        className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                                        title={`Select ${ex.company}`}
+                                                                                    />
+                                                                                )}
+                                                                                {renderExhibitorLogo(ex, avatarText)}
+                                                                                <div className="min-w-0 flex-1">
+                                                                                    <p className="text-sm font-semibold leading-snug text-zinc-900 group-hover:text-orange-700">{ex.company}</p>
+                                                                                    <p className="mt-1 inline-flex min-w-0 items-start gap-1 text-xs text-zinc-500">
+                                                                                        <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-orange-500" />
+                                                                                        <span className="line-clamp-2">{ex.location || 'Location N/A'}</span>
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="mt-3 flex flex-wrap gap-1.5">
+                                                                                <span className="inline-flex flex-col rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1">
+                                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Year</span>
+                                                                                    <span className="text-[11px] font-semibold text-zinc-800">{ex.year}</span>
+                                                                                </span>
+                                                                                <span className="inline-flex flex-col rounded-lg border border-orange-200 bg-orange-50 px-2 py-1">
+                                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-orange-400">Booth</span>
+                                                                                    <span className="text-[11px] font-semibold text-orange-800">{ex.booth}</span>
+                                                                                </span>
+                                                                                <span className="inline-flex flex-col rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1">
+                                                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Size</span>
+                                                                                    <span className="text-[11px] font-semibold text-zinc-800">{ex.size}</span>
+                                                                                </span>
+                                                                                <span className={`inline-flex flex-col rounded-lg border px-2 py-1 ${boothCategoryBadgeClass(ex.category)}`}>
+                                                                                    <span className="text-[9px] font-bold uppercase tracking-wider opacity-70">Category</span>
+                                                                                    <span className="text-[11px] font-semibold">{ex.category}</span>
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Desktop table row */}
+                                                                        <div className={`hidden md:grid ${isExhibitorSelectMode ? EXHIBITOR_GRID_COLS.select : EXHIBITOR_GRID_COLS.default} items-center gap-2`}>
+                                                                            {isExhibitorSelectMode && (
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={selectedExhibitorIds.includes(ex.id)}
+                                                                                    onChange={() => toggleSelectOne(ex.id)}
+                                                                                    onClick={(event) => event.stopPropagation()}
+                                                                                    className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-orange-500 focus:ring-orange-400"
+                                                                                    title={`Select ${ex.company}`}
+                                                                                />
+                                                                            )}
+                                                                            <div className="flex min-w-0 items-center gap-3">
+                                                                                {renderExhibitorLogo(ex, avatarText)}
+                                                                                <div className="min-w-0">
+                                                                                    <p className="truncate text-[14px] font-semibold text-zinc-900 group-hover:text-orange-700">{ex.company}</p>
+                                                                                    <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
+                                                                                        {ex.location ? (
+                                                                                            <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                                                                                                <MapPin className="h-3 w-3 shrink-0 text-orange-500" />
+                                                                                                <span className="truncate">{ex.location}</span>
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className="text-zinc-400">Location N/A</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <span className="justify-self-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">{ex.year}</span>
+                                                                            <span className="justify-self-center rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700">{ex.booth}</span>
+                                                                            <span className="justify-self-center rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700">{ex.size}</span>
+                                                                            <span
+                                                                                className={`justify-self-center rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${boothCategoryBadgeClass(ex.category)}`}
+                                                                                title={`${ex.sqm} sqm`}
+                                                                            >
+                                                                                {ex.category}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : exhibitorsLoading ? (
+                                                        <div className="py-12 text-center">
+                                                            <p className="text-sm text-zinc-400">Loading exhibitors...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="py-12 text-center">
+                                                            <p className="text-sm text-zinc-400">No exhibitors match &ldquo;{exSearch}&rdquo;</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    }
 
                 </div>
             </div>

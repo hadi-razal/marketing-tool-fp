@@ -13,6 +13,7 @@ import {
     CalendarDays,
     Globe2,
     Building2,
+    School,
 } from 'lucide-react';
 import { FilterPopover, type FilterSelections, type FilterCategory } from './FilterPopover';
 import { ShowFormModal } from './ShowFormModal';
@@ -69,6 +70,7 @@ export const ShowsTable = () => {
         const worldArea = row?.world_area ?? row?.World_Area ?? '';
         const frequency = row?.frequency ?? row?.Frequency ?? '';
 
+
         return {
             ...row,
             ID: String(id ?? ''),
@@ -118,6 +120,8 @@ export const ShowsTable = () => {
                 .range(from, from + LIMIT - 1);
 
             if (fetchErr) throw fetchErr;
+
+            console.log('[ShowsTable] raw rows from Supabase:', rows);
 
             let normalized = (rows || []).map(normalizeShow);
 
@@ -232,20 +236,7 @@ export const ShowsTable = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure?')) return;
-        try {
-            const primaryDelete = await supabase.from('shows').delete().eq('id', id);
-            if (primaryDelete.error) {
-                const fallbackDelete = await supabase.from('shows').delete().eq('ID', id);
-                if (fallbackDelete.error) throw fallbackDelete.error;
-            }
-            setData((prev) => prev.filter((item) => item.ID !== id));
-            toast.success('Show deleted');
-        } catch (err: any) {
-            toast.error(err?.message || 'Failed to delete show');
-        }
-    };
+
 
     const handleEdit = (item: any) => {
         setSelectedItem(item);
@@ -484,10 +475,8 @@ export const ShowsTable = () => {
                                 const country = item.Country || '';
                                 const date = item.starting_date || item.Starting_Date || '';
                                 const location = [city, country].filter(Boolean).join(', ');
-                                const initials = initialsFromName(name);
-                                const isIbc = name.toLowerCase().includes('ibc');
-                                const ibcImage = 'https://cdn.prod.website-files.com/686e72da8be0fd92280388b7/6970abf7af4eaf76f110b30a_689ca814a9cbd6ff03649c1a_Newsroom_events_template_IBC.webp';
-                                const ibcCoverImage = 'https://cdn.prod.website-files.com/6641aa6384a3010ab6b735d7/679b179403837ff93b623af0_IBC2024-0915-Alex-105928-1-.webp';
+                                const profile_image_link = item.profile_img_link;
+                                const cover_img_link = item.cover_img_link;
 
                                 const RANDOM_COVERS = [
                                     'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80&w=800',
@@ -504,7 +493,7 @@ export const ShowsTable = () => {
                                 const nameSum = name.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
                                 const randomCover = RANDOM_COVERS[nameSum % RANDOM_COVERS.length];
 
-                                const coverImage = isIbc ? ibcCoverImage : randomCover;
+                                const coverImage = cover_img_link || randomCover;
 
                                 return (
                                     <button
@@ -540,15 +529,15 @@ export const ShowsTable = () => {
                                             <div className="relative flex h-full items-end justify-between px-4 pb-4">
                                                 {/* Initials avatar */}
                                                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white text-base font-bold tracking-tight text-zinc-900 shadow-2xl ring-2 ring-white/25">
-                                                    {isIbc ? (
+                                                    {profile_image_link ? (
                                                         <img
-                                                            src={ibcImage}
-                                                            alt={`${name} cover`}
+                                                            src={profile_image_link}
+                                                            alt={`${name} logo`}
                                                             className="h-full w-full object-cover"
                                                             loading="lazy"
                                                         />
                                                     ) : (
-                                                        initials
+                                                        <School className="h-7 w-7 text-zinc-400" />
                                                     )}
                                                 </div>
                                                 {eventType ? (

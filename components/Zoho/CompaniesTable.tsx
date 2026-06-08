@@ -14,7 +14,7 @@ import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase';
-import { getBrandColor } from '@/lib/utils';
+import { getBrandColor, formatCompanyLocation } from '@/lib/utils';
 import { CreateCompanyModal } from '@/components/CreateCompanyModal';
 
 const initialsFromName = (name: string) => {
@@ -45,7 +45,6 @@ export const CompaniesTable = () => {
 
     const [filterSelections, setFilterSelections] = useState<FilterSelections>({
         country: [],
-        city: [],
         industry: [],
     });
 
@@ -63,7 +62,6 @@ export const CompaniesTable = () => {
 
         return [
             { key: 'country', label: 'Country', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('country') },
-            { key: 'city', label: 'City', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('city') },
             { key: 'industry', label: 'Industry', icon: <Building2 className="h-3.5 w-3.5" />, options: unique('industry') },
         ].filter(c => c.options.length > 0);
     }, [allFetchedData]);
@@ -163,7 +161,6 @@ export const CompaniesTable = () => {
     const handleClearFilters = () => {
         setFilterSelections({
             country: [],
-            city: [],
             industry: [],
         });
     };
@@ -182,9 +179,8 @@ export const CompaniesTable = () => {
         try {
             const location = String(formData?.location || '').trim();
             const locationParts = location.split(',').map((v: string) => v.trim()).filter(Boolean);
-            const city = locationParts[0] || '';
-            const country = locationParts.length > 1 ? locationParts[locationParts.length - 1] : '';
-            const state = locationParts.length > 2 ? locationParts.slice(1, -1).join(', ') : '';
+            const country = locationParts.length > 0 ? locationParts[locationParts.length - 1] : '';
+            const worldArea = locationParts.length > 1 ? locationParts[0] : '';
             const websiteInput = String(formData?.website || '').trim();
             const websiteUrl = websiteInput
                 ? (/^https?:\/\//i.test(websiteInput) ? websiteInput : `https://${websiteInput}`)
@@ -200,14 +196,12 @@ export const CompaniesTable = () => {
                 .split(',')
                 .map((v: string) => v.trim())
                 .filter(Boolean);
-            const foundedYear = Number.parseInt(String(formData?.founded_year || '').trim(), 10);
 
             const row = {
                 id: crypto.randomUUID(),
                 name: String(formData?.name || '').trim(),
-                industry: String(formData?.industry || '').trim(),
+                industry: String(formData?.industry || '').trim() || null,
                 website_url: websiteUrl || null,
-                blog_url: null,
                 linkedin_url: String(formData?.linkedin || '').trim() || null,
                 twitter_url: String(formData?.twitter || '').trim() || null,
                 facebook_url: String(formData?.facebook || '').trim() || null,
@@ -215,15 +209,9 @@ export const CompaniesTable = () => {
                 primary_domain: websiteHost || null,
                 keywords: keywords.length > 0 ? keywords : null,
                 phone: String(formData?.phone || '').trim() || null,
-                street_address: null,
-                city,
-                state: state || null,
-                country,
-                postal_code: null,
-                founded_year: Number.isNaN(foundedYear) ? null : foundedYear,
+                country: country || null,
+                world_area: worldArea || null,
                 estimated_num_employees: null,
-                saved_uid: null,
-                desc: String(formData?.description || '').trim() || null,
             };
 
             if (!row.name) {
@@ -377,9 +365,7 @@ export const CompaniesTable = () => {
                             {data.map((item) => {
                                 const name = item.name || 'Unknown Company';
                                 const industry = item.industry || '';
-                                const city = item.city || '';
-                                const country = item.country || '';
-                                const location = [city, country].filter(Boolean).join(', ');
+                                const location = formatCompanyLocation(item);
                                 const initials = initialsFromName(name);
                                 const logoUrl = item.logo_url || item.logo;
                                 const domain = item.primary_domain || item.website_url || '';

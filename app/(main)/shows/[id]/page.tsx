@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { formatCompanyLocation } from '@/lib/utils';
+import type { ShowParticipation, ShowExhibitorRow } from '@/types/showParticipation';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
@@ -35,7 +37,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ShowFormModal } from '@/components/Zoho/ShowFormModal';
-import { ShowHeaderLogo, ShowProfilePhoto } from '@/components/Shows/ShowLogo';
+import { ShowImagesPanel } from '@/components/Shows/ShowImagesPanel';
+import { ShowHeaderLogo } from '@/components/Shows/ShowLogo';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 
@@ -91,18 +94,8 @@ const hashToNumber = (value: string) => {
     return Math.abs(hash);
 };
 
-const AVATAR_COLORS = ['#f97316','#8b5cf6','#06b6d4','#10b981','#f43f5e','#3b82f6','#eab308','#ec4899'];
+const AVATAR_COLORS = ['#f97316', '#8b5cf6', '#06b6d4', '#10b981', '#f43f5e', '#3b82f6', '#eab308', '#ec4899'];
 const avatarColor = (name: string) => AVATAR_COLORS[hashToNumber(name) % AVATAR_COLORS.length];
-
-const randomExhibitorMeta = (seed: string) => {
-    const hash = hashToNumber(seed);
-    const currentYear = new Date().getFullYear();
-    const year = String(currentYear - (hash % 3));
-    const hallLetter = String.fromCharCode(65 + (hash % 14)); // A-N
-    const booth = `${hallLetter}-${String((hash % 390) + 10)}`;
-    const size = `${(hash % 231) + 20} sqm`;
-    return { year, booth, size };
-};
 
 const parseSqm = (size: string) => {
     const match = String(size).match(/(\d+(?:\.\d+)?)/);
@@ -116,6 +109,27 @@ const boothCategoryFromSqm = (sqm: number): { label: BoothCategory; order: numbe
     if (sqm >= 100) return { label: 'Large', order: 3 };
     if (sqm >= 60) return { label: 'Medium', order: 2 };
     return { label: 'Small', order: 1 };
+};
+
+const BOOTH_CATEGORY_ORDER: Record<BoothCategory, number> = {
+    Small: 1,
+    Medium: 2,
+    Large: 3,
+    Enterprise: 4,
+};
+
+const boothCategoryFromDb = (raw?: string | null): { label: BoothCategory; order: number } | null => {
+    if (!raw?.trim()) return null;
+    const normalized = raw.trim().toLowerCase();
+    if (normalized.includes('enterprise')) return { label: 'Enterprise', order: 4 };
+    if (normalized.includes('large')) return { label: 'Large', order: 3 };
+    if (normalized.includes('medium')) return { label: 'Medium', order: 2 };
+    if (normalized.includes('small')) return { label: 'Small', order: 1 };
+    const titled = raw.trim() as BoothCategory;
+    if (titled in BOOTH_CATEGORY_ORDER) {
+        return { label: titled, order: BOOTH_CATEGORY_ORDER[titled] };
+    }
+    return null;
 };
 
 const boothCategoryBadgeClass = (label: BoothCategory) => {
@@ -241,7 +255,7 @@ const parseLinksJson = (raw: any): FloorplanLinkItem[] => {
         try {
             const parsed = JSON.parse(trimmed);
             if (Array.isArray(parsed)) return parsed.filter((item: any) => item?.url);
-        } catch {}
+        } catch { }
     }
     return extractLinks(trimmed).map((url, i) => ({ title: `Link ${i + 1}`, url }));
 };
@@ -268,7 +282,7 @@ const parseFloorplanFiles = (raw: any): FloorplanFileItem[] => {
     if (trimmed.startsWith('[')) {
         try {
             return parseFloorplanFiles(JSON.parse(trimmed));
-        } catch {}
+        } catch { }
     }
     return [{
         id: 'legacy-file',
@@ -344,17 +358,7 @@ export default function ShowDetailPage() {
     const [exSort, setExSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: '', dir: 'asc' });
     const [isExhibitorSelectMode, setIsExhibitorSelectMode] = useState(false);
     const [selectedExhibitorIds, setSelectedExhibitorIds] = useState<string[]>([]);
-    const [exhibitorCompanies, setExhibitorCompanies] = useState<Array<{
-        id: string;
-        name: string;
-        logo_url?: string;
-        logo?: string;
-        city?: string;
-        country?: string;
-        industry?: string;
-        primary_domain?: string;
-        estimated_num_employees?: number;
-    }>>([]);
+    const [participations, setParticipations] = useState<ShowParticipation[]>([]);
     const [exhibitorsLoading, setExhibitorsLoading] = useState(false);
     const showContacts = DEMO_SHOW_CONTACTS;
     const [isContactSelectMode, setIsContactSelectMode] = useState(false);
@@ -724,42 +728,97 @@ export default function ShowDetailPage() {
     };
 
     useEffect(() => {
-        const fetchCompanies = async () => {
+        if (!showId) return;
+
+        let cancelled = false;
+
+        const fetchParticipations = async () => {
             setExhibitorsLoading(true);
             try {
                 const { data: rows, error } = await supabase
-                    .from('companies')
-                    .select('*');
+                    .from('show_participation')
+                    .select('id, show_id, company_id, year, booth_number, booth_size, booth_size_category, created_at')
+                    .eq('show_id', showId)
+                    .order('year', { ascending: false });
+
                 if (error) throw error;
-                const normalized = (rows || []).map((row: any) => {
-                    const fallbackIdSeed = String(
-                        row?.name ?? row?.Name ?? row?.company_name ?? row?.primary_domain ?? row?.Primary_Domain ?? crypto.randomUUID(),
-                    );
-                    const id = String(row?.id ?? row?.ID ?? row?.company_id ?? `tmp-${hashToNumber(fallbackIdSeed)}`);
-                    const name = String(row?.name ?? row?.Name ?? row?.company_name ?? 'Unknown Company');
-                    return {
-                        id,
-                        name,
-                        logo_url: row?.logo_url ?? row?.Logo_URL ?? '',
-                        logo: row?.logo ?? row?.Logo ?? '',
-                        city: row?.city ?? row?.City ?? '',
-                        country: row?.country ?? row?.Country ?? '',
-                        industry: row?.industry ?? row?.Industry ?? '',
-                        primary_domain: row?.primary_domain ?? row?.Primary_Domain ?? row?.website ?? row?.Website ?? '',
-                        estimated_num_employees: Number(row?.estimated_num_employees ?? row?.Estimated_Num_Employees ?? row?.employees ?? 0),
-                    };
-                });
-                setExhibitorCompanies(normalized);
+
+                const participationRows = rows ?? [];
+                const companyIds = [...new Set(
+                    participationRows
+                        .map((row) => String(row.company_id ?? '').trim())
+                        .filter(Boolean),
+                )];
+
+                const companyMap = new Map<string, ShowParticipation['companies']>();
+                if (companyIds.length > 0) {
+                    const { data: companyRows, error: companyError } = await supabase
+                        .from('companies')
+                        .select('id, name, logo_url, country, world_area, industry, primary_domain, estimated_num_employees')
+                        .in('id', companyIds);
+
+                    if (companyError) throw companyError;
+
+                    for (const company of companyRows ?? []) {
+                        companyMap.set(String(company.id), company);
+                    }
+                }
+
+                const normalized = participationRows.map((row) => ({
+                    ...row,
+                    companies: row.company_id
+                        ? companyMap.get(String(row.company_id)) ?? null
+                        : null,
+                })) as ShowParticipation[];
+
+                if (!cancelled) setParticipations(normalized);
             } catch (err: any) {
-                console.error('Fetch exhibitors from companies error:', err);
-                toast.error(err?.message || 'Failed to load companies for exhibitors.');
-                setExhibitorCompanies([]);
+                console.error('Fetch show participations error:', err);
+                if (!cancelled) {
+                    toast.error(err?.message || 'Failed to load exhibitors.');
+                    setParticipations([]);
+                }
             } finally {
-                setExhibitorsLoading(false);
+                if (!cancelled) setExhibitorsLoading(false);
             }
         };
-        fetchCompanies();
-    }, [supabase]);
+
+        fetchParticipations();
+        return () => {
+            cancelled = true;
+        };
+    }, [showId, supabase]);
+
+    const exhibitorRows = useMemo<ShowExhibitorRow[]>(() => {
+        return participations.flatMap((row) => {
+            const companyId = String(row.company_id ?? row.companies?.id ?? '').trim();
+            if (!companyId) return [];
+
+            const company = row.companies;
+            const sqm = parseSqm(String(row.booth_size ?? ''));
+            const categoryMeta = boothCategoryFromDb(row.booth_size_category) ?? boothCategoryFromSqm(sqm);
+            const booth = String(row.booth_number ?? '').trim() || '—';
+            const sizeRaw = String(row.booth_size ?? '').trim();
+            const size = sizeRaw || (sqm > 0 ? `${sqm} sqm` : '—');
+
+            return [{
+                id: String(row.id),
+                companyId,
+                company: String(company?.name ?? 'Unknown Company'),
+                year: String(row.year ?? ''),
+                booth,
+                size,
+                sqm,
+                category: categoryMeta.label,
+                categoryOrder: categoryMeta.order,
+                logoUrl: String(company?.logo_url ?? ''),
+                location: formatCompanyLocation(company ?? {}),
+                industry: String(company?.industry ?? ''),
+                domain: String(company?.primary_domain ?? ''),
+                employees: Number(company?.estimated_num_employees ?? 0),
+            }];
+        });
+    }, [participations]);
 
     const handleDelete = async () => {
         if (!confirm('Delete this show permanently?')) return;
@@ -971,27 +1030,27 @@ export default function ShowDetailPage() {
 
                         <div className="p-5">
                             <div className="space-y-3">
-                                    <div>
-                                        <label className="mb-1 block text-xs font-medium text-zinc-600">Title</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Hall A Floorplan"
-                                            value={linkForm.title}
-                                            onChange={(e) => setLinkForm((prev) => ({ ...prev, title: e.target.value }))}
-                                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="mb-1 block text-xs font-medium text-zinc-600">URL</label>
-                                        <input
-                                            type="url"
-                                            placeholder="https://..."
-                                            value={linkForm.url}
-                                            onChange={(e) => setLinkForm((prev) => ({ ...prev, url: e.target.value }))}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveLink(); }}
-                                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                                        />
-                                    </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-zinc-600">Title</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Hall A Floorplan"
+                                        value={linkForm.title}
+                                        onChange={(e) => setLinkForm((prev) => ({ ...prev, title: e.target.value }))}
+                                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-zinc-600">URL</label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://..."
+                                        value={linkForm.url}
+                                        onChange={(e) => setLinkForm((prev) => ({ ...prev, url: e.target.value }))}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveLink(); }}
+                                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -1560,62 +1619,7 @@ export default function ShowDetailPage() {
 
                                 {/* Images Tab */}
                                 {activeTab === 'images' && (
-                                    <div className="flex flex-col gap-5">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <div>
-                                                <h2 className="text-lg font-semibold text-zinc-900">Images</h2>
-                                                <p className="mt-1 text-sm text-zinc-500">Profile photo, cover banner, and event imagery.</p>
-                                            </div>
-                                            <Button size="sm" variant="primary" leftIcon={<Camera className="h-4 w-4" />} onClick={() => toast.info('Image upload coming soon')}>
-                                                Upload Image
-                                            </Button>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                            {/* Profile image */}
-                                            <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
-                                                <div className="border-b border-zinc-100 px-4 py-3">
-                                                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Profile Photo</p>
-                                                </div>
-                                                <ShowProfilePhoto show={data} name={eventName} />
-                                            </div>
-
-                                            {/* Cover image */}
-                                            <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5 sm:col-span-1 lg:col-span-2">
-                                                <div className="border-b border-zinc-100 px-4 py-3">
-                                                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Cover Banner</p>
-                                                </div>
-                                                {cover_img_link ? (
-                                                    <div className="group relative aspect-video overflow-hidden bg-zinc-50">
-                                                        <img
-                                                            src={cover_img_link}
-                                                            alt="Cover"
-                                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-zinc-50 text-zinc-400">
-                                                        <Camera className="h-8 w-8" />
-                                                        <p className="text-xs">No cover banner</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Add more placeholder */}
-                                        <button
-                                            onClick={() => toast.info('Image upload coming soon')}
-                                            className="group flex min-h-[120px] items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-zinc-200 bg-white p-6 text-center transition-colors hover:border-orange-300 hover:bg-orange-50/30"
-                                        >
-                                            <div className="rounded-full bg-zinc-100 p-3 text-zinc-400 transition-colors group-hover:bg-orange-100 group-hover:text-orange-600">
-                                                <Plus className="h-5 w-5" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-sm font-semibold text-zinc-700">Add more images</p>
-                                                <p className="mt-0.5 text-xs text-zinc-400">Upload event photos, booth shots, and more.</p>
-                                            </div>
-                                        </button>
-                                    </div>
+                                    <ShowImagesPanel show={data} name={eventName} />
                                 )}
 
                             </div>
@@ -1653,121 +1657,121 @@ export default function ShowDetailPage() {
                                         </div>
                                     </div>
                                     {(() => {
-                                            const toType = (url: string): 'pdf' | 'link' | 'image' => {
-                                                const lower = url.toLowerCase();
-                                                if (lower.includes('.pdf')) return 'pdf';
-                                                if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) return 'image';
-                                                return 'link';
+                                        const toType = (url: string): 'pdf' | 'link' | 'image' => {
+                                            const lower = url.toLowerCase();
+                                            if (lower.includes('.pdf')) return 'pdf';
+                                            if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) return 'image';
+                                            return 'link';
+                                        };
+
+                                        const floorplanItems = [
+                                            ...parseFloorplanFiles(data?.floorplan_file ?? null).map((item) => ({
+                                                id: `file-${item.id}`,
+                                                name: item.title,
+                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                type: toType(item.url),
+                                                source: 'Uploaded file',
+                                                url: normalizeExternalUrl(item.url),
+                                                attribution: floorplanAttribution(
+                                                    item.uploaded_by_name,
+                                                    item.created_at,
+                                                ),
+                                                fileName: item.file_name,
+                                                kind: 'file' as const,
+                                                fileId: item.id,
+                                            })),
+                                            ...parseLinksJson(data?.floorplan_link ?? null).map((item, idx) => ({
+                                                id: `link-${idx}-${item.url}`,
+                                                name: item.title || `${eventName} — Floorplan ${idx + 1}`,
+                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
+                                                type: toType(item.url),
+                                                source: 'Map link',
+                                                url: normalizeExternalUrl(item.url),
+                                                attribution: floorplanAttribution(
+                                                    item.added_by_name,
+                                                    item.created_at,
+                                                ),
+                                                kind: 'link' as const,
+                                                linkIndex: idx,
+                                            })),
+                                        ];
+
+                                        const typeBadge = (type: 'pdf' | 'link' | 'image') => {
+                                            const styles = {
+                                                pdf: 'bg-red-50 text-red-600 border-red-100',
+                                                link: 'bg-blue-50 text-blue-600 border-blue-100',
+                                                image: 'bg-emerald-50 text-emerald-600 border-emerald-100',
                                             };
-
-                                            const floorplanItems = [
-                                                ...parseFloorplanFiles(data?.floorplan_file ?? null).map((item) => ({
-                                                    id: `file-${item.id}`,
-                                                    name: item.title,
-                                                    year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                    type: toType(item.url),
-                                                    source: 'Uploaded file',
-                                                    url: normalizeExternalUrl(item.url),
-                                                    attribution: floorplanAttribution(
-                                                        item.uploaded_by_name,
-                                                        item.created_at,
-                                                    ),
-                                                    fileName: item.file_name,
-                                                    kind: 'file' as const,
-                                                    fileId: item.id,
-                                                })),
-                                                ...parseLinksJson(data?.floorplan_link ?? null).map((item, idx) => ({
-                                                    id: `link-${idx}-${item.url}`,
-                                                    name: item.title || `${eventName} — Floorplan ${idx + 1}`,
-                                                    year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                    type: toType(item.url),
-                                                    source: 'Map link',
-                                                    url: normalizeExternalUrl(item.url),
-                                                    attribution: floorplanAttribution(
-                                                        item.added_by_name,
-                                                        item.created_at,
-                                                    ),
-                                                    kind: 'link' as const,
-                                                    linkIndex: idx,
-                                                })),
-                                            ];
-
-                                            const typeBadge = (type: 'pdf' | 'link' | 'image') => {
-                                                const styles = {
-                                                    pdf: 'bg-red-50 text-red-600 border-red-100',
-                                                    link: 'bg-blue-50 text-blue-600 border-blue-100',
-                                                    image: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-                                                };
-                                                const icons = {
-                                                    pdf: <FileText className="h-3.5 w-3.5" />,
-                                                    link: <Link2 className="h-3.5 w-3.5" />,
-                                                    image: <Camera className="h-3.5 w-3.5" />,
-                                                };
-                                                return (
-                                                    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles[type]}`}>
-                                                        {icons[type]}
-                                                        {type}
-                                                    </span>
-                                                );
+                                            const icons = {
+                                                pdf: <FileText className="h-3.5 w-3.5" />,
+                                                link: <Link2 className="h-3.5 w-3.5" />,
+                                                image: <Camera className="h-3.5 w-3.5" />,
                                             };
-
                                             return (
-                                                <div className={floorplanItems.length > 0 ? 'flex w-full flex-col gap-3' : 'w-full'}>
-                                                    {floorplanItems.length > 0 ? floorplanItems.map((fp) => (
-                                                        <div
-                                                            key={fp.id}
-                                                            className="flex w-full items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-3.5 shadow-sm shadow-zinc-950/5 transition-colors hover:border-zinc-300 hover:bg-zinc-50/80"
-                                                        >
-                                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500">
-                                                                {fp.type === 'pdf' ? <FileText className="h-4 w-4" /> : fp.type === 'link' ? <Globe className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
-                                                            </div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <p className="truncate text-sm font-medium text-zinc-900">{fp.name}</p>
-                                                                <p className="mt-0.5 text-xs text-zinc-400">
-                                                                    {fp.source} · {fp.year}
-                                                                </p>
-                                                                <p className="mt-0.5 truncate text-xs text-zinc-500">{fp.attribution}</p>
-                                                                {'fileName' in fp && fp.fileName ? (
-                                                                    <p className="mt-0.5 truncate text-[11px] text-zinc-400">{fp.fileName}</p>
-                                                                ) : null}
-                                                            </div>
-                                                            <div className="hidden sm:block">
-                                                                {typeBadge(fp.type)}
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <a
-                                                                    href={fp.url}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
-                                                                >
-                                                                    {fp.type === 'link' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                                                                    {fp.type === 'link' ? 'Open' : 'View'}
-                                                                </a>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (fp.kind === 'file' && fp.fileId) {
-                                                                            handleDeleteFloorplanFile(fp.fileId);
-                                                                        } else if (fp.kind === 'link' && fp.linkIndex !== undefined) {
-                                                                            handleDeleteLink(fp.linkIndex);
-                                                                        }
-                                                                    }}
-                                                                    className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                                                                    aria-label="Remove floorplan"
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )) : (
-                                                        <div className="w-full py-12 text-center">
-                                                            <p className="text-sm text-zinc-400">No floorplan or file links available for this show.</p>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles[type]}`}>
+                                                    {icons[type]}
+                                                    {type}
+                                                </span>
                                             );
-                                        })()}
+                                        };
+
+                                        return (
+                                            <div className={floorplanItems.length > 0 ? 'flex w-full flex-col gap-3' : 'w-full'}>
+                                                {floorplanItems.length > 0 ? floorplanItems.map((fp) => (
+                                                    <div
+                                                        key={fp.id}
+                                                        className="flex w-full items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-3.5 shadow-sm shadow-zinc-950/5 transition-colors hover:border-zinc-300 hover:bg-zinc-50/80"
+                                                    >
+                                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500">
+                                                            {fp.type === 'pdf' ? <FileText className="h-4 w-4" /> : fp.type === 'link' ? <Globe className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="truncate text-sm font-medium text-zinc-900">{fp.name}</p>
+                                                            <p className="mt-0.5 text-xs text-zinc-400">
+                                                                {fp.source} · {fp.year}
+                                                            </p>
+                                                            <p className="mt-0.5 truncate text-xs text-zinc-500">{fp.attribution}</p>
+                                                            {'fileName' in fp && fp.fileName ? (
+                                                                <p className="mt-0.5 truncate text-[11px] text-zinc-400">{fp.fileName}</p>
+                                                            ) : null}
+                                                        </div>
+                                                        <div className="hidden sm:block">
+                                                            {typeBadge(fp.type)}
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <a
+                                                                href={fp.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
+                                                            >
+                                                                {fp.type === 'link' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                                                                {fp.type === 'link' ? 'Open' : 'View'}
+                                                            </a>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (fp.kind === 'file' && fp.fileId) {
+                                                                        handleDeleteFloorplanFile(fp.fileId);
+                                                                    } else if (fp.kind === 'link' && fp.linkIndex !== undefined) {
+                                                                        handleDeleteLink(fp.linkIndex);
+                                                                    }
+                                                                }}
+                                                                className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                                                                aria-label="Remove floorplan"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )) : (
+                                                    <div className="w-full py-12 text-center">
+                                                        <p className="text-sm text-zinc-400">No floorplan or file links available for this show.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )
@@ -1858,38 +1862,16 @@ export default function ShowDetailPage() {
                                     )}
                                     <div className="flex h-[calc(100vh-320px)] min-h-[500px] max-h-[760px] min-w-0 flex-col overflow-hidden">
                                         {(() => {
-                                            const demoExhibitors = exhibitorCompanies.map((company) => {
-                                                const meta = randomExhibitorMeta(`${company.id}-${company.name}`);
-                                                const sqm = parseSqm(meta.size);
-                                                const categoryMeta = boothCategoryFromSqm(sqm);
-                                                return {
-                                                    id: company.id,
-                                                    company: company.name,
-                                                    year: meta.year,
-                                                    booth: meta.booth,
-                                                    size: meta.size,
-                                                    sqm,
-                                                    category: categoryMeta.label,
-                                                    categoryOrder: categoryMeta.order,
-                                                    logoUrl: company.logo_url || company.logo || '',
-                                                    location: [company.city, company.country].filter(Boolean).join(', '),
-                                                    industry: company.industry || '',
-                                                    domain: company.primary_domain || '',
-                                                    employees: Number(company.estimated_num_employees || 0),
-                                                };
-                                            });
-
-                                            // Filter by search
                                             const q = exSearch.toLowerCase();
                                             const filtered = q
-                                                ? demoExhibitors.filter(ex =>
+                                                ? exhibitorRows.filter(ex =>
                                                     ex.company.toLowerCase().includes(q) ||
                                                     ex.booth.toLowerCase().includes(q) ||
                                                     ex.year.includes(q) ||
                                                     ex.category.toLowerCase().includes(q) ||
                                                     ex.size.toLowerCase().includes(q)
                                                 )
-                                                : demoExhibitors;
+                                                : exhibitorRows;
 
                                             // Sort
                                             const sorted = exSort.key
@@ -2037,7 +2019,7 @@ export default function ShowDetailPage() {
                                                                         showName: eventName,
                                                                         fromTab: activeTab,
                                                                     });
-                                                                    router.push(`/companies/${ex.id}?${query.toString()}`);
+                                                                    router.push(`/companies/${ex.companyId}?${query.toString()}`);
                                                                 };
                                                                 return (
                                                                     <div
@@ -2143,7 +2125,11 @@ export default function ShowDetailPage() {
                                                         </div>
                                                     ) : (
                                                         <div className="py-12 text-center">
-                                                            <p className="text-sm text-zinc-400">No exhibitors match &ldquo;{exSearch}&rdquo;</p>
+                                                            <p className="text-sm text-zinc-400">
+                                                                {exSearch.trim()
+                                                                    ? <>No exhibitors match &ldquo;{exSearch}&rdquo;</>
+                                                                    : 'No exhibitors recorded for this show yet.'}
+                                                            </p>
                                                         </div>
                                                     )}
                                                 </div>

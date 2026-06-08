@@ -25,7 +25,7 @@ import {
     ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getBrandColor } from '@/lib/utils';
+import { getBrandColor, formatCompanyLocation } from '@/lib/utils';
 import { ProfileCard } from '@/components/ProfileCard';
 
 /* ─── helpers ─────────────────────────────────────────────── */
@@ -65,10 +65,12 @@ const boothCategoryBadgeClass = (label: BoothCategory) => {
 };
 
 type ShowEdition = {
+    id: string;
     year: number;
+    yearLabel: string;
     booth: string;
     sqm: number;
-    hall?: string;
+    category?: BoothCategory;
 };
 
 type ResolvedShowParticipation = {
@@ -77,7 +79,24 @@ type ResolvedShowParticipation = {
     location: string;
     coverImage: string;
     profileImage: string;
-    editions: (ShowEdition & { id: string })[];
+    editions: ShowEdition[];
+};
+
+const parseSqm = (size: string) => {
+    const match = String(size).match(/(\d+(?:\.\d+)?)/);
+    return match ? Number(match[1]) : 0;
+};
+
+const boothCategoryFromDb = (raw?: string | null): BoothCategory | null => {
+    if (!raw?.trim()) return null;
+    const normalized = raw.trim().toLowerCase();
+    if (normalized.includes('enterprise')) return 'Enterprise';
+    if (normalized.includes('large')) return 'Large';
+    if (normalized.includes('medium')) return 'Medium';
+    if (normalized.includes('small')) return 'Small';
+    const titled = raw.trim() as BoothCategory;
+    if (['Small', 'Medium', 'Large', 'Enterprise'].includes(titled)) return titled;
+    return null;
 };
 
 const SHOW_COVER_FALLBACKS = [
@@ -88,20 +107,6 @@ const SHOW_COVER_FALLBACKS = [
     'https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?auto=format&fit=crop&q=80&w=800',
 ];
 
-const HARDCODED_EDITION_TEMPLATES: ShowEdition[][] = [
-    [
-        { year: 2024, booth: 'C18', hall: 'Hall 4.2', sqm: 84 },
-        { year: 2023, booth: 'B12', hall: 'Hall 4.1', sqm: 72 },
-    ],
-    [
-        { year: 2024, booth: 'F08', hall: 'Hall 6', sqm: 135 },
-        { year: 2022, booth: 'E42', hall: 'Hall 5', sqm: 120 },
-    ],
-    [
-        { year: 2023, booth: 'B07', hall: 'Salone del Mobile', sqm: 48 },
-    ],
-];
-
 const getShowCoverImage = (show: any, showName: string) => {
     const cover = show?.cover_img_link ?? show?.Cover_Img_Link ?? show?.cover_image ?? '';
     if (cover) return String(cover);
@@ -109,30 +114,67 @@ const getShowCoverImage = (show: any, showName: string) => {
     return SHOW_COVER_FALLBACKS[nameSum % SHOW_COVER_FALLBACKS.length];
 };
 
-const buildShowParticipations = (shows: any[]): ResolvedShowParticipation[] => {
-    return shows.slice(0, HARDCODED_EDITION_TEMPLATES.length).map((show, index) => {
-        const showId = String(show?.id ?? show?.ID ?? '');
-        const showName = String(show?.name ?? show?.Event_Name ?? show?.Event ?? show?.Name ?? 'Untitled show');
-        const city = String(show?.city ?? show?.City ?? '');
-        const country = String(show?.country ?? show?.Country ?? '');
-        const location = [city, country].filter(Boolean).join(', ') || 'Location TBC';
-        const profileImage = String(show?.profile_img_link ?? show?.Profile_Img_Link ?? '');
-        const editions = HARDCODED_EDITION_TEMPLATES[index]
-            .map(edition => ({
-                ...edition,
-                id: `${showId}-${edition.year}`,
-            }))
-            .sort((a, b) => b.year - a.year);
+const getShowLocation = (show: any) => {
+    const city = String(show?.city ?? show?.City ?? '').trim();
+    const country = String(show?.country ?? show?.Country ?? '').trim();
+    const worldArea = String(show?.world_area ?? show?.World_Area ?? '').trim();
+    return [city, country].filter(Boolean).join(', ') || [country, worldArea].filter(Boolean).join(', ') || 'Location TBC';
+};
 
-        return {
-            showId,
-            showName,
-            location,
-            coverImage: getShowCoverImage(show, showName),
-            profileImage,
-            editions,
-        };
-    });
+const buildShowParticipations = (
+    participations: Array<{
+        id: number | string;
+        show_id?: string | null;
+        year?: string | null;
+        booth_number?: string | null;
+        booth_size?: string | null;
+        booth_size_category?: string | null;
+    }>,
+    showsById: Record<string, any>,
+): ResolvedShowParticipation[] => {
+    const grouped = new Map<string, typeof participations>();
+
+    for (const row of participations) {
+        const showId = String(row.show_id ?? '').trim();
+        if (!showId) continue;
+        const existing = grouped.get(showId) ?? [];
+        existing.push(row);
+        grouped.set(showId, existing);
+    }
+
+    return Array.from(grouped.entries())
+        .map(([showId, rows]) => {
+            const show = showsById[showId];
+            const showName = String(show?.name ?? show?.Event_Name ?? 'Untitled show');
+            const editions = rows
+                .map((row) => {
+                    const yearLabel = String(row.year ?? '').trim() || '—';
+                    const year = Number.parseInt(yearLabel, 10);
+                    const sqm = parseSqm(String(row.booth_size ?? ''));
+                    return {
+                        id: String(row.id),
+                        year: Number.isFinite(year) ? year : 0,
+                        yearLabel,
+                        booth: String(row.booth_number ?? '').trim() || '—',
+                        sqm,
+                        category: boothCategoryFromDb(row.booth_size_category) ?? boothCategoryFromSqm(sqm),
+                    };
+                })
+                .sort((a, b) => {
+                    if (a.year !== b.year) return b.year - a.year;
+                    return b.yearLabel.localeCompare(a.yearLabel);
+                });
+
+            return {
+                showId,
+                showName,
+                location: getShowLocation(show),
+                coverImage: getShowCoverImage(show, showName),
+                profileImage: String(show?.profile_img_link ?? show?.Profile_Img_Link ?? ''),
+                editions,
+            };
+        })
+        .sort((a, b) => a.showName.localeCompare(b.showName));
 };
 
 const StatPill = ({ label, value, accent }: { label: string; value: string; accent?: boolean }) => (
@@ -246,7 +288,7 @@ const ShowParticipationBars = ({
 
                     <div className="divide-y divide-zinc-100">
                         {group.editions.map((edition, index) => {
-                            const category = boothCategoryFromSqm(edition.sqm);
+                            const category = edition.category ?? boothCategoryFromSqm(edition.sqm);
                             return (
                                 <div
                                     key={edition.id}
@@ -259,13 +301,12 @@ const ShowParticipationBars = ({
                                     />
                                     <div className="flex w-14 shrink-0 flex-col justify-center sm:w-16">
                                         <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Year</span>
-                                        <span className="text-base font-bold tabular-nums text-zinc-900">{edition.year}</span>
+                                        <span className="text-base font-bold tabular-nums text-zinc-900">{edition.yearLabel}</span>
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                            {edition.hall && <StatPill label="Hall" value={edition.hall} />}
                                             <StatPill label="Booth" value={edition.booth} accent />
-                                            <StatPill label="Size" value={`${edition.sqm} sqm`} />
+                                            <StatPill label="Size" value={edition.sqm > 0 ? `${edition.sqm} sqm` : '—'} />
                                             <span className={`inline-flex min-w-[4.5rem] flex-col rounded-lg border px-2.5 py-1.5 ${boothCategoryBadgeClass(category)}`}>
                                                 <span className="text-[9px] font-bold uppercase tracking-wider opacity-70">Category</span>
                                                 <span className="text-[11px] font-semibold">{category}</span>
@@ -284,10 +325,11 @@ const ShowParticipationBars = ({
 
 /* ─── tabs ────────────────────────────────────────────────── */
 
-type Tab = 'overview' | 'contacts' | 'comments';
+type Tab = 'overview' | 'shows' | 'contacts' | 'comments';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <LayoutGrid className="h-4 w-4" /> },
+    { id: 'shows', label: 'Shows', icon: <Calendar className="h-4 w-4" /> },
     { id: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
     { id: 'comments', label: 'Comments', icon: <FileText className="h-4 w-4" /> },
 ];
@@ -330,12 +372,16 @@ export default function CompanyDetailPage() {
     const [currentUserProfileUrl, setCurrentUserProfileUrl] = useState('');
     const [savingComment, setSavingComment] = useState(false);
     const [deletingCommentId, setDeletingCommentId] = useState('');
-    const [shows, setShows] = useState<any[]>([]);
+    const [participations, setParticipations] = useState<any[]>([]);
+    const [showsById, setShowsById] = useState<Record<string, any>>({});
     const [showsLoading, setShowsLoading] = useState(true);
 
     const companyId = params?.id as string;
 
-    const showParticipations = useMemo(() => buildShowParticipations(shows), [shows]);
+    const showParticipations = useMemo(
+        () => buildShowParticipations(participations, showsById),
+        [participations, showsById],
+    );
     const totalEditions = useMemo(
         () => showParticipations.reduce((sum, group) => sum + group.editions.length, 0),
         [showParticipations],
@@ -379,26 +425,62 @@ export default function CompanyDetailPage() {
     }, [companyId, supabase]);
 
     useEffect(() => {
-        const fetchShows = async () => {
+        if (!companyId) return;
+
+        let cancelled = false;
+
+        const fetchParticipations = async () => {
             setShowsLoading(true);
             try {
-                const { data, error } = await supabase
-                    .from('shows')
-                    .select('*')
-                    .order('id', { ascending: false })
-                    .limit(HARDCODED_EDITION_TEMPLATES.length);
+                const { data: rows, error } = await supabase
+                    .from('show_participation')
+                    .select('id, show_id, company_id, year, booth_number, booth_size, booth_size_category')
+                    .eq('company_id', companyId)
+                    .order('year', { ascending: false });
 
                 if (error) throw error;
-                setShows(data || []);
+
+                const participationRows = rows ?? [];
+                const showIds = [...new Set(
+                    participationRows
+                        .map((row) => String(row.show_id ?? '').trim())
+                        .filter(Boolean),
+                )];
+
+                const nextShowsById: Record<string, any> = {};
+                if (showIds.length > 0) {
+                    const { data: showRows, error: showError } = await supabase
+                        .from('shows')
+                        .select('*')
+                        .in('id', showIds);
+
+                    if (showError) throw showError;
+
+                    for (const show of showRows ?? []) {
+                        nextShowsById[String(show.id)] = show;
+                    }
+                }
+
+                if (!cancelled) {
+                    setParticipations(participationRows);
+                    setShowsById(nextShowsById);
+                }
             } catch (err) {
-                console.error('Failed to fetch shows:', err);
-                setShows([]);
+                console.error('Failed to fetch show participations:', err);
+                if (!cancelled) {
+                    setParticipations([]);
+                    setShowsById({});
+                }
             } finally {
-                setShowsLoading(false);
+                if (!cancelled) setShowsLoading(false);
             }
         };
-        fetchShows();
-    }, [supabase]);
+
+        fetchParticipations();
+        return () => {
+            cancelled = true;
+        };
+    }, [companyId, supabase]);
 
     useEffect(() => {
         const fetchCurrentUser = async () => {
@@ -517,7 +599,7 @@ export default function CompanyDetailPage() {
                 <div className="shrink-0 border-b border-zinc-200 bg-white">
                     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
                         <div className="flex items-center gap-2 py-2">
-                            {Array.from({ length: 3 }).map((_, i) => (
+                            {Array.from({ length: 4 }).map((_, i) => (
                                 <Skeleton key={i} className="h-8 w-24 rounded-md" />
                             ))}
                         </div>
@@ -570,15 +652,13 @@ export default function CompanyDetailPage() {
 
     /* ── data ── */
     const name = company.name || 'Unknown Company';
-    const industry = company.industry || company.industries?.[0] || '';
+    const industry = company.industry || '';
     const website = company.website_url || company.primary_domain || '';
-    const phone = company.sanitized_phone || company.phone || '';
-    const location = [company.city, company.country].filter(Boolean).join(', ') || company.raw_address || '';
+    const phone = company.phone || '';
+    const location = formatCompanyLocation(company);
     const initials = initialsFromName(name);
     const logoUrl = company.logo_url;
     const employees = company.estimated_num_employees || 0;
-    const revenue = company.organization_revenue_printed || formatMoney(company.organization_revenue) || '';
-    const founded = company.founded_year || '';
 
     const handleBack = () => {
         if (fromShowId) {
@@ -595,8 +675,6 @@ export default function CompanyDetailPage() {
         industry && { label: 'Industry', value: industry, icon: <Building2 className="h-4 w-4" /> },
         location && { label: 'Location', value: location, icon: <MapPin className="h-4 w-4" /> },
         employees > 0 && { label: 'Employees', value: employees.toLocaleString(), icon: <Users className="h-4 w-4" /> },
-        revenue && { label: 'Revenue', value: revenue, icon: <Activity className="h-4 w-4" /> },
-        founded && { label: 'Founded', value: String(founded), icon: <Calendar className="h-4 w-4" /> },
         phone && { label: 'Phone', value: phone, icon: <Phone className="h-4 w-4" /> },
         website && {
             label: 'Website',
@@ -768,14 +846,25 @@ export default function CompanyDetailPage() {
                                 <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
                                     <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3.5">
                                         <h2 className="text-sm font-semibold text-zinc-900">Show Participations</h2>
-                                        <span className="text-xs font-medium text-zinc-400">
-                                            {showsLoading
-                                                ? 'Loading...'
-                                                : `${showParticipations.length} exhibitions · ${totalEditions} editions`}
-                                        </span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-medium text-zinc-400">
+                                                {showsLoading
+                                                    ? 'Loading...'
+                                                    : `${showParticipations.length} exhibitions · ${totalEditions} editions`}
+                                            </span>
+                                            {!showsLoading && showParticipations.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setActiveTab('shows')}
+                                                    className="text-xs font-semibold text-orange-600 transition-colors hover:text-orange-700"
+                                                >
+                                                    View all
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <ShowParticipationBars
-                                        groups={showParticipations}
+                                        groups={showParticipations.slice(0, 2)}
                                         loading={showsLoading}
                                         onShowClick={(showId) => router.push(`/shows/${showId}`)}
                                     />
@@ -827,6 +916,33 @@ export default function CompanyDetailPage() {
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Shows Tab */}
+                        {activeTab === 'shows' && (
+                            <div className="flex flex-col gap-5">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-zinc-900">Shows</h2>
+                                        <p className="mt-1 text-sm text-zinc-500">
+                                            Exhibitions {name} has participated in, grouped by show and year.
+                                        </p>
+                                    </div>
+                                    {!showsLoading && (
+                                        <span className="text-xs font-medium text-zinc-400">
+                                            {showParticipations.length} show{showParticipations.length === 1 ? '' : 's'} · {totalEditions} edition{totalEditions === 1 ? '' : 's'}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
+                                    <ShowParticipationBars
+                                        groups={showParticipations}
+                                        loading={showsLoading}
+                                        onShowClick={(showId) => router.push(`/shows/${showId}`)}
+                                    />
+                                </div>
                             </div>
                         )}
 

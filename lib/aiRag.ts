@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isMiddleEastShow } from '@/lib/utils';
+import { isMiddleEastShow, formatCompanyLocation } from '@/lib/utils';
 
 const STOP_WORDS = new Set([
     'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
@@ -232,7 +232,7 @@ export async function retrieveSupabaseContext(
         searchTable(
             supabase,
             'companies',
-            ['name', 'industry', 'city', 'country', 'primary_domain', 'website_url', 'keywords'],
+            ['name', 'industry', 'country', 'world_area', 'primary_domain', 'website_url', 'keywords'],
             searchTerms,
         ),
         searchShows(supabase, message, searchTerms),
@@ -265,7 +265,7 @@ function formatPerson(p: Record<string, unknown>): string {
 function formatCompany(c: Record<string, unknown>): string {
     return `- ${c.name || 'Unknown'}
   Industry: ${c.industry || 'N/A'}
-  Location: ${[c.city, c.country].filter(Boolean).join(', ') || c.raw_address || 'N/A'}
+  Location: ${formatCompanyLocation(c) || 'N/A'}
   Website: ${c.website_url || c.primary_domain || 'N/A'}
   Phone: ${c.phone || 'N/A'}
   Employees: ${c.estimated_num_employees ?? 'N/A'}`;
@@ -321,7 +321,7 @@ export function buildRagSystemPrompt(
         : '';
 
     return `
-You are FairPlatz AI, the internal assistant of FairPlatz Designs. The company is a Dubai-based global exhibition stand design and fabrication firm working across the UAE, GCC, Europe, Asia, and Africa. FairPlatz builds exhibition booths, provides design services, production, logistics, and now also sells carpets and exhibition accessories. You support all internal teams — sales, marketing, design, production, operations, procurement, and IT — by answering questions, giving guidance, and generating content. Never mention Gemini, Google, AI models, vector search, RAG, or technical details. Always act as FairPlatz AI only.
+You are FairPlatz AI, the internal assistant of FairPlatz Designs. The company is a Dubai-based global exhibition stand design and fabrication firm working across the UAE, GCC, Europe, Asia, and Africa. FairPlatz builds exhibition booths, provides design services, production, logistics, and now also sells carpets and exhibition accessories. You support all internal teams — sales, marketing, design, production, operations, procurement, and IT — by answering questions, giving guidance, and generating content. Never mention Claude, OpenAI, ChatGPT, Google, AI models, vector search, RAG, or technical details. Always act as FairPlatz AI only.
 
 USER CONTEXT:
 User's name: "${userName || 'User'}"

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase';
-import { normalizeOrganizationDomain } from '@/lib/utils';
+import { normalizeOrganizationDomain, formatCompanyLocation } from '@/lib/utils';
 
 const supabase = createClient();
 
@@ -13,27 +13,13 @@ export interface SavedCompany {
     logo_url?: string;
     primary_domain?: string;
     industry?: string;
-    industries?: string[];
     keywords?: string[];
     phone?: string;
-    sanitized_phone?: string;
-    street_address?: string;
-    city?: string;
-    state?: string;
     country?: string;
-    postal_code?: string;
-    founded_year?: number;
+    world_area?: string;
     estimated_num_employees?: number;
-    organization_revenue?: number;
-    organization_revenue_printed?: string;
-    sic_codes?: string[];
-    naics_codes?: string[];
-    alexa_ranking?: number;
-    retail_location_count?: number;
-    raw_address?: string;
-    publicly_traded_symbol?: string;
-    publicly_traded_exchange?: string;
     created_at?: string;
+    comments?: Comment[];
 }
 
 export interface SavedPerson {
@@ -98,35 +84,19 @@ export const databaseService = {
             .upsert({
                 id: company.id,
                 name: company.name,
-                website_url: company.website_url,
-                linkedin_url: company.linkedin_url,
-                twitter_url: company.twitter_url,
-                facebook_url: company.facebook_url,
-                logo_url: company.logo_url,
-                primary_domain: company.primary_domain,
-                industry: company.industry,
-                industries: company.industries || [],
-                keywords: company.keywords || [],
-                phone: company.phone,
-                sanitized_phone: company.sanitized_phone,
-                street_address: company.street_address,
-                city: company.city,
-                state: company.state,
-                country: company.country,
-                postal_code: company.postal_code,
-                founded_year: company.founded_year,
-                estimated_num_employees: company.estimated_num_employees,
-                organization_revenue: company.organization_revenue,
-                organization_revenue_printed: company.organization_revenue_printed,
-                sic_codes: company.sic_codes || [],
-                naics_codes: company.naics_codes || [],
-                alexa_ranking: company.alexa_ranking,
-                retail_location_count: company.retail_location_count,
-                raw_address: company.raw_address,
-                description: company.description,
-                publicly_traded_symbol: company.publicly_traded_symbol,
-                publicly_traded_exchange: company.publicly_traded_exchange,
-                saved_uid: user?.id,
+                website_url: company.website_url ?? company.website ?? null,
+                linkedin_url: company.linkedin_url ?? company.linkedin ?? null,
+                twitter_url: company.twitter_url ?? company.twitter ?? null,
+                facebook_url: company.facebook_url ?? company.facebook ?? null,
+                logo_url: company.logo_url ?? company.logo ?? null,
+                primary_domain: company.primary_domain ?? null,
+                industry: company.industry ?? null,
+                keywords: company.keywords?.length ? company.keywords : null,
+                phone: company.phone ?? null,
+                country: company.country ?? null,
+                world_area: company.world_area ?? null,
+                estimated_num_employees: company.estimated_num_employees ?? company.employees ?? null,
+                comments: company.comments ?? null,
             }, { onConflict: 'id' })
             .select()
             .single();
@@ -151,16 +121,7 @@ export const databaseService = {
             if (error && error.code !== 'PGRST116') console.error('Error fetching company:', error);
             return null;
         }
-        let savedByName: string | undefined;
-        let savedByProfileUrl: string | undefined;
-        if (row.saved_uid) {
-            const { data: u } = await supabase.from('users').select('name, profile_url').eq('uid', row.saved_uid).single();
-            if (u) {
-                savedByName = u.name;
-                savedByProfileUrl = u.profile_url;
-            }
-        }
-        return mapDbCompanyToAppCompany(row, savedByName, savedByProfileUrl);
+        return mapDbCompanyToAppCompany(row);
     },
 
     // Check if a company is already saved
@@ -192,25 +153,7 @@ export const databaseService = {
             throw error;
         }
 
-        // Manually fetch user details
-        const userIds = Array.from(new Set(companies.map(c => c.saved_uid).filter(Boolean)));
-        let userMap: Record<string, { name: string, profile_url: string }> = {};
-
-        if (userIds.length > 0) {
-            const { data: users } = await supabase
-                .from('users')
-                .select('uid, name, profile_url')
-                .in('uid', userIds);
-
-            if (users) {
-                userMap = users.reduce((acc, user) => ({
-                    ...acc,
-                    [user.uid]: { name: user.name, profile_url: user.profile_url }
-                }), {});
-            }
-        }
-
-        return companies.map(company => mapDbCompanyToAppCompany(company, userMap[company.saved_uid]?.name, userMap[company.saved_uid]?.profile_url));
+        return companies.map(company => mapDbCompanyToAppCompany(company));
     },
 
     // Get recent companies with limit
@@ -227,25 +170,7 @@ export const databaseService = {
             throw error;
         }
 
-        // Manually fetch user details
-        const userIds = Array.from(new Set(companies.map(c => c.saved_uid).filter(Boolean)));
-        let userMap: Record<string, { name: string, profile_url: string }> = {};
-
-        if (userIds.length > 0) {
-            const { data: users } = await supabase
-                .from('users')
-                .select('uid, name, profile_url')
-                .in('uid', userIds);
-
-            if (users) {
-                userMap = users.reduce((acc, user) => ({
-                    ...acc,
-                    [user.uid]: { name: user.name, profile_url: user.profile_url }
-                }), {});
-            }
-        }
-
-        return companies.map(company => mapDbCompanyToAppCompany(company, userMap[company.saved_uid]?.name, userMap[company.saved_uid]?.profile_url));
+        return companies.map(company => mapDbCompanyToAppCompany(company));
     },
 
     // Delete a company
@@ -1226,28 +1151,32 @@ export interface Comment {
 }
 
 // Helper to map DB structure back to App structure if needed
-function mapDbCompanyToAppCompany(dbCompany: any, savedByName?: string, savedByProfileUrl?: string) {
+function mapDbCompanyToAppCompany(dbCompany: any) {
+    const keywords = Array.isArray(dbCompany.keywords)
+        ? dbCompany.keywords
+        : typeof dbCompany.keywords === 'string'
+            ? dbCompany.keywords.split(',').map((k: string) => k.trim()).filter(Boolean)
+            : [];
     return {
         id: dbCompany.id,
         name: dbCompany.name,
         website: dbCompany.website_url || dbCompany.primary_domain,
+        website_url: dbCompany.website_url,
         logo: dbCompany.logo_url,
         industry: dbCompany.industry,
-        location: dbCompany.raw_address || `${dbCompany.city || ''}, ${dbCompany.country || ''}`,
+        location: formatCompanyLocation(dbCompany),
+        country: dbCompany.country,
+        world_area: dbCompany.world_area,
         employees: dbCompany.estimated_num_employees,
-        revenue: dbCompany.organization_revenue_printed,
-        description: dbCompany.description,
         linkedin: dbCompany.linkedin_url,
         twitter: dbCompany.twitter_url,
         facebook: dbCompany.facebook_url,
         phone: dbCompany.phone,
-        founded_year: dbCompany.founded_year,
-        keywords: dbCompany.keywords,
+        keywords,
+        primary_domain: dbCompany.primary_domain,
         isSaved: true,
-        saved_by: savedByName || dbCompany.users?.name,
-        saved_by_profile_url: savedByProfileUrl,
         comments: dbCompany.comments || [],
-        ...dbCompany
+        created_at: dbCompany.created_at,
     };
 }
 

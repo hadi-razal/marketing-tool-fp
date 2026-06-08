@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Filter,
@@ -195,6 +196,20 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
 }) => {
     const [tempSelections, setTempSelections] = useState<FilterSelections>(selections);
     const [tempDateFilter, setTempDateFilter] = useState<ShowDateFilter>(dateFilter);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen) {
@@ -238,7 +253,9 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
         onClose();
     };
 
-    return (
+    if (!mounted) return null;
+
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
                 <>
@@ -246,7 +263,7 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-40 bg-zinc-950/20 backdrop-blur-[2px]"
+                        className="fixed inset-0 z-100 bg-zinc-950/20 backdrop-blur-[2px]"
                         onClick={onClose}
                     />
                     <motion.div
@@ -254,7 +271,7 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed top-0 right-0 bottom-0 z-50 flex w-[min(400px,92vw)] flex-col overflow-hidden border-l border-zinc-200 bg-white shadow-2xl"
+                        className="fixed top-0 right-0 bottom-0 z-101 flex w-[min(400px,92vw)] flex-col overflow-hidden border-l border-zinc-200 bg-white shadow-2xl"
                     >
                         <div className="border-b border-zinc-200 px-5 py-4">
                             <div className="flex items-center justify-between">
@@ -387,7 +404,8 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
                     </motion.div>
                 </>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
     );
 };
 

@@ -87,7 +87,7 @@ export const FairplatzAIWidget: React.FC = () => {
                 content: msg.content,
             }));
 
-            const response = await fetch('/api/gemini', {
+            const response = await fetch('/api/ai', {
                 method: 'POST',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },

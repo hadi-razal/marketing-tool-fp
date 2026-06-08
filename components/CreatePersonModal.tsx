@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, User, Briefcase, Building2, Mail, Phone, MapPin, Loader2, Globe, Linkedin, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { databaseService, SavedCompany } from '@/services/databaseService';
+import { formatCompanyLocation } from '@/lib/utils';
 
 interface PersonFormData {
     full_name: string;
@@ -264,9 +265,9 @@ export const CreatePersonModal: React.FC<CreatePersonModalProps> = ({ isOpen, on
                                                                 className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
                                                             >
                                                                 <span className="block truncate font-medium">{company.name}</span>
-                                                                {(company.city || company.country) && (
+                                                                {formatCompanyLocation(company) && (
                                                                     <span className="block truncate text-[10px] text-zinc-500">
-                                                                        {[company.city, company.country].filter(Boolean).join(', ')}
+                                                                        {formatCompanyLocation(company)}
                                                                     </span>
                                                                 )}
                                                             </button>

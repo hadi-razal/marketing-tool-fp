@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Company } from './CompanyCard';
 import { formatDistanceToNow, format, isBefore, subHours } from 'date-fns';
 
-import { getBrandColor, normalizeOrganizationDomain } from '@/lib/utils';
+import { getBrandColor, normalizeOrganizationDomain, formatCompanyLocation } from '@/lib/utils';
 import { databaseService, Comment, SavedPerson } from '@/services/databaseService';
 import { createClient } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -41,27 +41,12 @@ function companyToSavePayload(c: Company) {
         logo_url: c.logo || null,
         primary_domain: c.primary_domain || null,
         industry: c.industry || null,
-        industries: (c as Company & { industries?: string[] }).industries || [],
-        keywords: kw,
+        keywords: kw.length ? kw : null,
         phone: c.phone || null,
-        sanitized_phone: c.sanitized_phone || null,
-        street_address: c.street_address || null,
-        city: c.city || null,
-        state: c.state || null,
         country: c.country || null,
-        postal_code: c.postal_code || null,
-        founded_year: c.founded_year ?? null,
+        world_area: (c as Company & { world_area?: string }).world_area || null,
         estimated_num_employees: typeof c.employees === 'number' ? c.employees : null,
-        organization_revenue: (c as Company & { organization_revenue?: number }).organization_revenue ?? null,
-        organization_revenue_printed: c.revenue || null,
-        sic_codes: c.sic_codes || [],
-        naics_codes: c.naics_codes || [],
-        alexa_ranking: c.alexa_ranking ?? null,
-        retail_location_count: c.retail_location_count ?? null,
-        raw_address: c.raw_address || c.location || null,
-        description: c.description || null,
-        publicly_traded_symbol: c.publicly_traded_symbol || null,
-        publicly_traded_exchange: c.publicly_traded_exchange || null,
+        comments: c.comments ?? null,
     };
 }
 
@@ -362,16 +347,8 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({
 
     const hasAdvancedCompanyFields = Boolean(
         displayCompany.primary_domain ||
-            displayCompany.street_address ||
-            displayCompany.city ||
-            displayCompany.state ||
             displayCompany.country ||
-            displayCompany.postal_code ||
-            (displayCompany.sic_codes && displayCompany.sic_codes.length) ||
-            (displayCompany.naics_codes && displayCompany.naics_codes.length) ||
-            displayCompany.publicly_traded_symbol ||
-            typeof displayCompany.alexa_ranking === 'number' ||
-            typeof displayCompany.retail_location_count === 'number'
+            displayCompany.world_area
     );
 
     const handleSave = async () => {
@@ -730,38 +707,6 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({
                                                             className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
                                                         />
                                                     </label>
-                                                    <label className="block md:col-span-2">
-                                                        <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Location / address</span>
-                                                        <input
-                                                            value={localCompany.location || localCompany.raw_address || ''}
-                                                            onChange={(e) =>
-                                                                setLocalCompany((p) =>
-                                                                    p ? { ...p, location: e.target.value, raw_address: e.target.value } : p,
-                                                                )
-                                                            }
-                                                            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                                                        />
-                                                    </label>
-                                                    <label className="block">
-                                                        <span className="mb-1 block text-[11px] font-semibold text-zinc-500">City</span>
-                                                        <input
-                                                            value={localCompany.city || ''}
-                                                            onChange={(e) =>
-                                                                setLocalCompany((p) => (p ? { ...p, city: e.target.value } : p))
-                                                            }
-                                                            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                                                        />
-                                                    </label>
-                                                    <label className="block">
-                                                        <span className="mb-1 block text-[11px] font-semibold text-zinc-500">State / region</span>
-                                                        <input
-                                                            value={localCompany.state || ''}
-                                                            onChange={(e) =>
-                                                                setLocalCompany((p) => (p ? { ...p, state: e.target.value } : p))
-                                                            }
-                                                            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                                                        />
-                                                    </label>
                                                     <label className="block">
                                                         <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Country</span>
                                                         <input
@@ -773,11 +718,11 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({
                                                         />
                                                     </label>
                                                     <label className="block">
-                                                        <span className="mb-1 block text-[11px] font-semibold text-zinc-500">Postal code</span>
+                                                        <span className="mb-1 block text-[11px] font-semibold text-zinc-500">World area</span>
                                                         <input
-                                                            value={localCompany.postal_code || ''}
+                                                            value={(localCompany as Company & { world_area?: string }).world_area || ''}
                                                             onChange={(e) =>
-                                                                setLocalCompany((p) => (p ? { ...p, postal_code: e.target.value } : p))
+                                                                setLocalCompany((p) => (p ? { ...p, world_area: e.target.value } : p))
                                                             }
                                                             className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
                                                         />
@@ -1025,11 +970,11 @@ export const CompanyDetailsModal: React.FC<CompanyDetailsModalProps> = ({
                                                                         <span className="font-medium text-zinc-950 text-right break-all">{displayCompany.primary_domain}</span>
                                                                     </div>
                                                                 )}
-                                                                {(displayCompany.street_address || displayCompany.city || displayCompany.state || displayCompany.postal_code || displayCompany.country) && (
+                                                                {(displayCompany.street_address || displayCompany.state || displayCompany.postal_code || displayCompany.country || displayCompany.raw_address) && (
                                                                     <div className="flex justify-between gap-4">
                                                                         <span className="text-zinc-500 shrink-0">Address</span>
                                                                         <span className="font-medium text-zinc-950 text-right">
-                                                                            {[displayCompany.street_address, [displayCompany.city, displayCompany.state].filter(Boolean).join(', '), displayCompany.postal_code, displayCompany.country].filter(Boolean).join(' · ')}
+                                                                            {[displayCompany.street_address, formatCompanyLocation(displayCompany), displayCompany.postal_code].filter(Boolean).join(' · ')}
                                                                         </span>
                                                                     </div>
                                                                 )}

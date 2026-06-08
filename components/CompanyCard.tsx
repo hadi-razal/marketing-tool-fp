@@ -1,6 +1,7 @@
 import React from 'react';
 import { Building2, MapPin } from 'lucide-react';
 import { Comment } from '@/services/databaseService';
+import { formatCompanyLocation } from '@/lib/utils';
 
 export interface Company {
     id: string;
@@ -9,37 +10,21 @@ export interface Company {
     logo?: string;
     industry?: string;
     location?: string;
+    country?: string;
+    world_area?: string;
     employees?: number;
-    revenue?: string;
-    description?: string;
     linkedin?: string;
     twitter?: string;
     facebook?: string;
     keywords?: string[];
     phone?: string;
-    founded_year?: number;
     isSaved?: boolean;
-    saved_by?: string;
-    saved_by_profile_url?: string;
     comments?: Comment[];
-    /** Extra DB fields merged in from `mapDbCompanyToAppCompany` */
     primary_domain?: string;
     website_url?: string;
-    street_address?: string;
-    city?: string;
-    state?: string;
-    country?: string;
-    postal_code?: string;
-    raw_address?: string;
-    sanitized_phone?: string;
-    sic_codes?: string[];
-    naics_codes?: string[];
-    publicly_traded_symbol?: string;
-    publicly_traded_exchange?: string;
-    alexa_ranking?: number;
-    retail_location_count?: number;
-    organization_revenue?: number;
-    organization_revenue_printed?: string;
+    logo_url?: string;
+    estimated_num_employees?: number;
+    created_at?: string;
 }
 
 interface CompanyCardProps {
@@ -50,9 +35,9 @@ interface CompanyCardProps {
 }
 
 export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAction, actionIcon: ActionIcon }) => {
-    const locationLabel = [company.city, company.country].filter(Boolean).join(', ') || company.location || '';
+    const locationLabel = formatCompanyLocation(company);
     const websiteLabel = (company.website || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const description = company.description?.trim() || 'Company profile available. Open details to edit and enrich this record.';
+    const description = 'Company profile available. Open details to edit and enrich this record.';
 
     return (
         <div

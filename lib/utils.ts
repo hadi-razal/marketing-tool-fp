@@ -73,3 +73,15 @@ export function normalizeOrganizationDomain(input?: string | null): string | nul
     if (s.startsWith('www.')) s = s.slice(4);
     return s || null;
 }
+
+/** Display location for a company row. */
+export function formatCompanyLocation(company: {
+    country?: string | null;
+    world_area?: string | null;
+    location?: string | null;
+}): string {
+    return (
+        [company.country, company.world_area].filter(Boolean).join(', ') ||
+        String(company.location || '').trim()
+    );
+}

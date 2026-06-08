@@ -133,7 +133,7 @@ export async function POST(request: Request) {
 
             website: org.website_url || org.primary_domain,
             logo: org.logo_url,
-            location: org.raw_address || `${org.city}, ${org.country}`,
+            location: org.raw_address || [org.state, org.country].filter(Boolean).join(', '),
             employees: org.estimated_num_employees,
             revenue: org.organization_revenue_printed,
             description: org.short_description || org.seo_description,

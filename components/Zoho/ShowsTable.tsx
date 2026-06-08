@@ -44,7 +44,7 @@ export const ShowsTable = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any>(null);
     const [search, setSearch] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
 
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(0);
@@ -180,15 +180,20 @@ export const ShowsTable = () => {
         setFetchError('');
         try {
             const from = reset ? 0 : page * LIMIT;
-            const { data: rows, error: fetchErr } = await supabase
+            const trimmedSearch = searchTerm.trim();
+
+            let query = supabase
                 .from('shows')
                 .select('*')
-                .order('id', { ascending: false })
-                .range(from, from + LIMIT - 1);
+                .order('id', { ascending: false });
+
+            if (trimmedSearch) {
+                query = query.ilike('name', `%${trimmedSearch}%`);
+            }
+
+            const { data: rows, error: fetchErr } = await query.range(from, from + LIMIT - 1);
 
             if (fetchErr) throw fetchErr;
-
-            console.log('[ShowsTable] raw rows from Supabase:', rows);
 
             let normalized = (rows || []).map(normalizeShow);
 
@@ -201,13 +206,6 @@ export const ShowsTable = () => {
                     normalized.forEach(item => uniqueItems.set(item.ID, item));
                     return Array.from(uniqueItems.values());
                 });
-            }
-
-            const trimmedSearch = searchTerm.trim().toLowerCase();
-            if (trimmedSearch) {
-                normalized = normalized.filter((item) =>
-                    String(item.Event_Name || '').toLowerCase().includes(trimmedSearch),
-                );
             }
 
             /* Apply quick region filter */
@@ -279,16 +277,19 @@ export const ShowsTable = () => {
     }, [page, filterSelections, dateFilter, quickRegion, supabase, fetchTotalShowsCount, fetchUpcomingShows]);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(search);
-        }, 500);
-        return () => clearTimeout(timer);
-    }, [search]);
-
-    useEffect(() => {
         setPage(0);
-        fetchData(true, debouncedSearch);
-    }, [debouncedSearch, filterSelections, dateFilter, quickRegion]);
+        fetchData(true, appliedSearch);
+    }, [appliedSearch, filterSelections, dateFilter, quickRegion]);
+
+    const handleSearch = () => {
+        const term = search.trim();
+        if (term === appliedSearch) {
+            setPage(0);
+            fetchData(true, term);
+            return;
+        }
+        setAppliedSearch(term);
+    };
 
     const handleApplyFilters = (selections: FilterSelections, nextDateFilter: ShowDateFilter) => {
         setFilterSelections(selections);
@@ -322,9 +323,9 @@ export const ShowsTable = () => {
 
     const loadMore = useCallback(() => {
         if (!loadingRef.current && hasMoreRef.current) {
-            fetchData(false, debouncedSearch);
+            fetchData(false, appliedSearch);
         }
-    }, [fetchData, debouncedSearch]);
+    }, [fetchData, appliedSearch]);
 
     useEffect(() => {
         const sentinel = loadMoreSentinelRef.current;
@@ -356,10 +357,10 @@ export const ShowsTable = () => {
 
     const hasListFilters = useMemo(
         () =>
-            Boolean(debouncedSearch.trim()) ||
+            Boolean(appliedSearch.trim()) ||
             totalActiveFilters > 0 ||
             quickRegion !== 'All',
-        [debouncedSearch, totalActiveFilters, quickRegion],
+        [appliedSearch, totalActiveFilters, quickRegion],
     );
 
     const exhibitionsCountLabel = useMemo(() => {
@@ -383,7 +384,7 @@ export const ShowsTable = () => {
     };
 
     const handleUpdateSuccess = async () => {
-        await fetchData(true, debouncedSearch);
+        await fetchData(true, appliedSearch);
     };
 
     const handleAdd = () => {
@@ -428,7 +429,7 @@ export const ShowsTable = () => {
             }
             onProgress?.({ current: i + 1, total: payloads.length });
         }
-        await fetchData(true, debouncedSearch);
+        await fetchData(true, appliedSearch);
         await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
         toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
@@ -496,15 +497,32 @@ export const ShowsTable = () => {
             <div className="sticky top-0 z-20 flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-sm shadow-zinc-950/5 backdrop-blur-md">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                     {/* Search */}
-                    <div className="relative lg:min-w-0 lg:flex-1">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                        <input
-                            type="text"
-                            placeholder="Search by show name..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-2 pl-9 pr-3 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
-                        />
+                    <div className="flex gap-2 lg:min-w-0 lg:flex-1">
+                        <div className="relative min-w-0 flex-1">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                            <input
+                                type="text"
+                                placeholder="Search by show name..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleSearch();
+                                    }
+                                }}
+                                className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-2 pl-9 pr-3 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                            />
+                        </div>
+                        <Button
+                            type="button"
+                            onClick={handleSearch}
+                            isLoading={loading}
+                            className="h-10 shrink-0 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
+                            leftIcon={<Search className="h-4 w-4" />}
+                        >
+                            Search
+                        </Button>
                     </div>
                     {/* Actions */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-0.5 lg:overflow-visible">
@@ -518,19 +536,10 @@ export const ShowsTable = () => {
                                 <span className="hidden sm:inline">Filters</span>
                                 {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
                             </Button>
-                            <ShowsFilterDrawer
-                                isOpen={isFilterOpen}
-                                onClose={() => setIsFilterOpen(false)}
-                                categories={filterCategories}
-                                selections={filterSelections}
-                                dateFilter={dateFilter}
-                                onApply={handleApplyFilters}
-                                onClear={handleClearFilters}
-                            />
                         </div>
                         <Button
                             variant="secondary"
-                            onClick={() => fetchData(true, debouncedSearch)}
+                            onClick={() => fetchData(true, appliedSearch)}
                             isLoading={loading}
                             className="h-9 w-9 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
                         >
@@ -643,9 +652,15 @@ export const ShowsTable = () => {
                                 <CalendarDays className="h-9 w-9 text-orange-500" />
                             </div>
                             <div>
-                                <p className="text-lg font-semibold text-zinc-900">No shows yet</p>
+                                <p className="text-lg font-semibold text-zinc-900">
+                                    {appliedSearch.trim() ? 'No matching shows' : 'No shows yet'}
+                                </p>
                                 <p className="mt-1 max-w-md text-sm text-zinc-500">
-                                    {fetchError ? fetchError : 'Add a show or import a spreadsheet to populate this list.'}
+                                    {fetchError
+                                        ? fetchError
+                                        : appliedSearch.trim()
+                                            ? `No shows found for "${appliedSearch}". Try a different name or clear the search.`
+                                            : 'Add a show or import a spreadsheet to populate this list.'}
                                 </p>
                             </div>
                             <Button onClick={handleAdd} leftIcon={<Plus className="h-4 w-4" />} className="mt-2 rounded-xl">
@@ -786,6 +801,16 @@ export const ShowsTable = () => {
                     />
                 )}
             </section>
+
+            <ShowsFilterDrawer
+                isOpen={isFilterOpen}
+                onClose={() => setIsFilterOpen(false)}
+                categories={filterCategories}
+                selections={filterSelections}
+                dateFilter={dateFilter}
+                onApply={handleApplyFilters}
+                onClear={handleClearFilters}
+            />
         </div>
     );
 };

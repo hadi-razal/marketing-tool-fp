@@ -1,6 +1,54 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { createClient } from '@supabase/supabase-js';
+import { buildRagSystemPrompt, retrieveSupabaseContext } from '@/lib/aiRag';
+import { createServiceSupabaseClient } from '@/lib/supabase-server';
+
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'];
+
+function isRetryableGeminiError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /503|429|high demand|unavailable|overloaded/i.test(message);
+}
+
+async function generateGeminiResponse(
+    apiKey: string,
+    systemPrompt: string,
+    history: { role: string; content: string }[],
+    message: string,
+): Promise<string> {
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const contents = [
+        ...(history || []).map((msg) => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }],
+        })),
+        {
+            role: 'user' as const,
+            parts: [{ text: message }],
+        },
+    ];
+
+    let lastError: unknown;
+
+    for (const modelName of GEMINI_MODELS) {
+        try {
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                systemInstruction: systemPrompt,
+            });
+
+            const result = await model.generateContent({ contents });
+            return result.response.text();
+        } catch (error) {
+            lastError = error;
+            console.error(`[gemini] ${modelName} failed:`, error);
+            if (!isRetryableGeminiError(error)) break;
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to generate response');
+}
 
 export async function POST(request: Request) {
     try {
@@ -15,104 +63,28 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Message is required' }, { status: 400 });
         }
 
-        // Supabase client
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
+        const supabase = createServiceSupabaseClient();
+        const ragContext = await retrieveSupabaseContext(supabase, message);
+        const systemPrompt = buildRagSystemPrompt(ragContext, userName, userRole, message);
 
-        // Fetch saved people
-        const { data: people } = await supabase
-            .from('people')
-            .select('name, title, organization_name, city, country, email, phone, linkedin_url')
-            .limit(50);
+        const text = await generateGeminiResponse(apiKey, systemPrompt, history || [], message);
 
-        // Fetch saved companies
-        const { data: companies } = await supabase
-            .from('companies')
-            .select('name, industry, location, website, phone, description')
-            .limit(20);
-
-        // Format people context
-        const peopleContext = people?.map(p =>
-            `- NAME: ${p.name}
-  TITLE: ${p.title} at ${p.organization_name}
-  LOCATION: ${p.city}, ${p.country}
-  EMAIL: ${p.email || 'N/A'}
-  PHONE: ${p.phone || 'N/A'}
-  LINKEDIN: ${p.linkedin_url || 'N/A'}`
-        ).join('\n\n') || 'No saved people.';
-
-        // Format company context
-        const companiesContext = companies?.map(c =>
-            `- COMPANY: ${c.name}
-  INDUSTRY: ${c.industry}
-  LOCATION: ${c.location}
-  WEBSITE: ${c.website || 'N/A'}
-  PHONE: ${c.phone || 'N/A'}
-  DESC: ${c.description || 'N/A'}`
-        ).join('\n\n') || 'No saved companies.';
-
-        // System prompt
-        // System prompt
-        const systemPrompt = `
-You are FairPlatz AI, the internal assistant of FairPlatz Designs. The company is a Dubai-based global exhibition stand design and fabrication firm working across the UAE, GCC, Europe, Asia, and Africa. FairPlatz builds exhibition booths, provides design services, production, logistics, and now also sells carpets and exhibition accessories. You support all internal teams — sales, marketing, design, production, operations, procurement, and IT — by answering questions, giving guidance, and generating content. Never mention Gemini, Google, AI models, or technical details. Always act as FairPlatz AI only.
-
-USER CONTEXT:
-User's name: "${userName || 'User'}"
-User's Role: "${userRole || 'Team Member'}"
-
-YOUR ROLE:
-You can use the saved data below about People and Companies, but you can also answer general questions with your full knowledge.
-
-=== SAVED PEOPLE ===
-${peopleContext}
-
-=== SAVED COMPANIES ===
-${companiesContext}
-
-RULES:
-1. If user asks about someone/company in saved data → answer using saved data.
-2. If user asks general question → answer normally.
-3. Be clear, helpful, and professional.
-4. IMPORTANT: Keep your answers as short and concise as possible. Avoid fluff.
-`;
-
-
-        // Format conversation properly
-        const finalConversation = [
-            {
-                role: "model",
-                parts: [{ text: systemPrompt }]
+        return NextResponse.json({
+            response: text,
+            sources: {
+                searchTerms: ragContext.searchTerms,
+                people: ragContext.people.length,
+                companies: ragContext.companies.length,
+                shows: ragContext.shows.length,
+                tasks: ragContext.tasks.length,
             },
-            ...(history || []).map((msg: any) => ({
-                role: msg.role === "assistant" ? "model" : "user",
-                parts: [{ text: msg.content }]
-            })),
-            {
-                role: "user",
-                parts: [{ text: message }]
-            }
-        ];
-
-        // Initialize Gemini
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-        // Get AI response
-        const result = await model.generateContent({
-            contents: finalConversation
         });
-
-        const text = result.response.text();
-
-        return NextResponse.json({ response: text });
-
     } catch (error) {
         console.error('Gemini API Error:', error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Failed to generate response' },
-            { status: 500 }
-        );
+        const message = error instanceof Error ? error.message : 'Failed to generate response';
+        const friendly = /503|high demand|unavailable/i.test(message)
+            ? 'Fairplatz AI is busy right now. Please try again in a moment.'
+            : message;
+        return NextResponse.json({ error: friendly }, { status: 500 });
     }
 }

@@ -32,6 +32,39 @@ export function isPersonSavedFromLinkedInSearch(savedFrom?: string | null): bool
     return v === 'linkedin' || v === 'apollo' || v.includes('linkedin');
 }
 
+const MIDDLE_EAST_AREA_KEYWORDS = ['middle east', 'mena', 'gcc', 'middle-east'];
+
+const MIDDLE_EAST_COUNTRY_KEYWORDS = [
+    'united arab emirates',
+    'uae',
+    'saudi arabia',
+    'ksa',
+    'qatar',
+    'bahrain',
+    'oman',
+    'kuwait',
+    'jordan',
+    'lebanon',
+    'iraq',
+    'egypt',
+];
+
+/** Whether a show is in the Middle East / MENA / GCC (world area or country). */
+export function isMiddleEastShow(item: {
+    World_Area?: string;
+    world_area?: string;
+    Country?: string;
+    country?: string;
+}): boolean {
+    const area = String(item.World_Area || item.world_area || '').toLowerCase();
+    if (MIDDLE_EAST_AREA_KEYWORDS.some((keyword) => area.includes(keyword))) return true;
+
+    const country = String(item.Country || item.country || '').toLowerCase();
+    return MIDDLE_EAST_COUNTRY_KEYWORDS.some(
+        (keyword) => country.includes(keyword) || country === keyword,
+    );
+}
+
 /** Host-only domain for matching `people.organization_domain` (lowercase, no path, no `www.`). */
 export function normalizeOrganizationDomain(input?: string | null): string | null {
     if (input == null || String(input).trim() === '') return null;

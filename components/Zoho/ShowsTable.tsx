@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     RefreshCw,
@@ -9,13 +9,20 @@ import {
     MapPin,
     Calendar,
     Layers,
-    ArrowRight,
     CalendarDays,
     Globe2,
     Building2,
-    School,
 } from 'lucide-react';
-import { FilterPopover, type FilterSelections, type FilterCategory } from './FilterPopover';
+import { ShowCardLogo } from '@/components/Shows/ShowLogo';
+import type { FilterSelections, FilterCategory } from './FilterPopover';
+import {
+    ShowsFilterDrawer,
+    EMPTY_SHOW_DATE_FILTER,
+    countShowFilters,
+    matchesShowDateFilter,
+    SHOW_DATE_PRESET_LABELS,
+    type ShowDateFilter,
+} from '@/components/Shows/ShowsFilterDrawer';
 import { ShowFormModal } from './ShowFormModal';
 import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
@@ -24,6 +31,9 @@ import { SpreadsheetImportModal, type SpreadsheetImportProgress } from '@/compon
 import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
 import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
 import { createClient } from '@/lib/supabase';
+import { startOfDay, isAfter, isSameDay, format } from 'date-fns';
+import { UpcomingShowsPanel, type UpcomingShowItem } from '@/components/Shows/UpcomingShowsPanel';
+import { isMiddleEastShow } from '@/lib/utils';
 
 export const ShowsTable = () => {
     const router = useRouter();
@@ -39,6 +49,11 @@ export const ShowsTable = () => {
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(0);
     const LIMIT = 100;
+    const UPCOMING_DISPLAY_LIMIT = 20;
+
+    const [totalShowsCount, setTotalShowsCount] = useState<number | null>(null);
+    const [upcomingShowsAll, setUpcomingShowsAll] = useState<UpcomingShowItem[]>([]);
+    const [upcomingLoading, setUpcomingLoading] = useState(true);
 
     const [importOpen, setImportOpen] = useState(false);
 
@@ -56,8 +71,9 @@ export const ShowsTable = () => {
         world_area: [],
         frequency: [],
     });
+    const [dateFilter, setDateFilter] = useState<ShowDateFilter>(EMPTY_SHOW_DATE_FILTER);
 
-    const totalActiveFilters = Object.values(filterSelections).reduce((s, a) => s + a.length, 0);
+    const totalActiveFilters = countShowFilters(filterSelections, dateFilter);
 
     const normalizeShow = (row: any) => {
         const id = row?.id ?? row?.ID ?? row?.show_id ?? row?.showId;
@@ -100,13 +116,64 @@ export const ShowsTable = () => {
         return [
             { key: 'country', label: 'Country', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('Country') },
             { key: 'city', label: 'City', icon: <MapPin className="h-3.5 w-3.5" />, options: unique('City') },
+            { key: 'world_area', label: 'World Area', icon: <Globe2 className="h-3.5 w-3.5" />, options: unique('World_Area') },
             { key: 'event_type', label: 'Event Type', icon: <Calendar className="h-3.5 w-3.5" />, options: unique('Event_Type') },
             { key: 'industry', label: 'Industry', icon: <Building2 className="h-3.5 w-3.5" />, options: unique('Industry') },
             { key: 'level', label: 'Level', icon: <Layers className="h-3.5 w-3.5" />, options: unique('Level') },
-            { key: 'world_area', label: 'World Area', icon: <Globe2 className="h-3.5 w-3.5" />, options: unique('World_Area') },
             { key: 'frequency', label: 'Frequency', icon: <RefreshCw className="h-3.5 w-3.5" />, options: unique('Frequency') },
-        ].filter(c => c.options.length > 0);
+        ];
     }, [allFetchedData]);
+
+    const fetchTotalShowsCount = useCallback(async () => {
+        const { count, error } = await supabase
+            .from('shows')
+            .select('*', { count: 'exact', head: true });
+        if (!error) setTotalShowsCount(count ?? 0);
+    }, [supabase]);
+
+    const fetchUpcomingShows = useCallback(async () => {
+        setUpcomingLoading(true);
+        try {
+            const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
+            const { data: rows, error } = await supabase
+                .from('shows')
+                .select('id, name, starting_date, city, country, world_area, industry')
+                .not('starting_date', 'is', null)
+                .gte('starting_date', today)
+                .order('starting_date', { ascending: true })
+                .limit(500);
+
+            if (error) throw error;
+
+            const items = (rows || [])
+                .filter((row) => isMiddleEastShow({
+                    world_area: String(row.world_area || ''),
+                    country: String(row.country || ''),
+                }))
+                .map((item) => {
+                    const parsed = new Date(item.starting_date);
+                    if (Number.isNaN(parsed.getTime())) return null;
+                    return {
+                        id: String(item.id),
+                        name: String(item.name || 'Untitled show'),
+                        date: parsed,
+                        location: [item.city, item.country].filter(Boolean).join(', '),
+                        industry: item.industry || '',
+                    } satisfies UpcomingShowItem;
+                })
+                .filter((item): item is UpcomingShowItem => {
+                    if (!item) return false;
+                    return isAfter(item.date, startOfDay(new Date())) || isSameDay(item.date, startOfDay(new Date()));
+                });
+
+            setUpcomingShowsAll(items);
+        } catch (err) {
+            console.error('Failed to fetch upcoming shows', err);
+            setUpcomingShowsAll([]);
+        } finally {
+            setUpcomingLoading(false);
+        }
+    }, [supabase]);
 
     const fetchData = useCallback(async (reset = false, searchTerm = '') => {
         setLoading(true);
@@ -177,6 +244,10 @@ export const ShowsTable = () => {
                 }
             }
 
+            normalized = normalized.filter((item) =>
+                matchesShowDateFilter(item.starting_date || item.Starting_Date, dateFilter),
+            );
+
             if (reset) {
                 setData(normalized);
                 setPage(1);
@@ -190,6 +261,11 @@ export const ShowsTable = () => {
             }
 
             setHasMore((rows || []).length === LIMIT);
+
+            if (reset) {
+                void fetchTotalShowsCount();
+                void fetchUpcomingShows();
+            }
         } catch (err: any) {
             console.error(err);
             const message = err?.message || 'Failed to load shows from Supabase';
@@ -200,7 +276,7 @@ export const ShowsTable = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, filterSelections, quickRegion, supabase]);
+    }, [page, filterSelections, dateFilter, quickRegion, supabase, fetchTotalShowsCount, fetchUpcomingShows]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -212,10 +288,11 @@ export const ShowsTable = () => {
     useEffect(() => {
         setPage(0);
         fetchData(true, debouncedSearch);
-    }, [debouncedSearch, filterSelections, quickRegion]);
+    }, [debouncedSearch, filterSelections, dateFilter, quickRegion]);
 
-    const handleApplyFilters = (selections: FilterSelections) => {
+    const handleApplyFilters = (selections: FilterSelections, nextDateFilter: ShowDateFilter) => {
         setFilterSelections(selections);
+        setDateFilter(nextDateFilter);
     };
 
     const handleClearFilters = () => {
@@ -228,15 +305,77 @@ export const ShowsTable = () => {
             world_area: [],
             frequency: [],
         });
+        setDateFilter(EMPTY_SHOW_DATE_FILTER);
     };
 
-    const loadMore = () => {
-        if (!loading && hasMore) {
+    const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+    const loadingRef = useRef(loading);
+    const hasMoreRef = useRef(hasMore);
+
+    useEffect(() => {
+        loadingRef.current = loading;
+    }, [loading]);
+
+    useEffect(() => {
+        hasMoreRef.current = hasMore;
+    }, [hasMore]);
+
+    const loadMore = useCallback(() => {
+        if (!loadingRef.current && hasMoreRef.current) {
             fetchData(false, debouncedSearch);
         }
-    };
+    }, [fetchData, debouncedSearch]);
 
+    useEffect(() => {
+        const sentinel = loadMoreSentinelRef.current;
+        if (!sentinel || !hasMore || data.length === 0) return;
 
+        let scrollRoot: HTMLElement | null = sentinel.parentElement;
+        while (scrollRoot) {
+            const { overflowY } = window.getComputedStyle(scrollRoot);
+            if (overflowY === 'auto' || overflowY === 'scroll') break;
+            scrollRoot = scrollRoot.parentElement;
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (!entries[0]?.isIntersecting) return;
+                loadMore();
+            },
+            { root: scrollRoot, rootMargin: '320px 0px', threshold: 0 },
+        );
+
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, data.length, loadMore]);
+
+    const upcomingShows = useMemo(
+        () => upcomingShowsAll.slice(0, UPCOMING_DISPLAY_LIMIT),
+        [upcomingShowsAll],
+    );
+
+    const hasListFilters = useMemo(
+        () =>
+            Boolean(debouncedSearch.trim()) ||
+            totalActiveFilters > 0 ||
+            quickRegion !== 'All',
+        [debouncedSearch, totalActiveFilters, quickRegion],
+    );
+
+    const exhibitionsCountLabel = useMemo(() => {
+        const showing = data.length;
+        if (loading && showing === 0) return 'Loading shows…';
+
+        const plus = hasMore ? '+' : '';
+        const total = totalShowsCount;
+        const matching = hasListFilters ? ' matching' : '';
+
+        if (total == null) {
+            return `Showing ${showing}${plus}${matching} show${showing === 1 ? '' : 's'}`;
+        }
+
+        return `Showing ${showing}${plus}${matching} of ${total.toLocaleString()} show${total === 1 ? '' : 's'}`;
+    }, [data.length, loading, hasListFilters, hasMore, totalShowsCount]);
 
     const handleEdit = (item: any) => {
         setSelectedItem(item);
@@ -314,7 +453,18 @@ export const ShowsTable = () => {
     };
 
     return (
-        <div className="h-full flex flex-col gap-6">
+        <div className="flex flex-col gap-6">
+            <div className="space-y-1">
+                <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Shows</h1>
+                <p className="text-sm text-zinc-500">Upcoming exhibitions at a glance, then your full show library.</p>
+            </div>
+
+            <UpcomingShowsPanel
+                shows={upcomingShows}
+                loading={upcomingLoading}
+                onShowClick={(id) => router.push(`/shows/${id}`)}
+            />
+
             {importOpen && (
                 <SpreadsheetImportModal
                     isOpen
@@ -342,8 +492,8 @@ export const ShowsTable = () => {
                 initialData={selectedItem}
             />
 
-            {/* Toolbar */}
-            <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm shadow-zinc-950/5">
+            {/* Toolbar — sticks below header/upcoming panel while scrolling exhibitions */}
+            <div className="sticky top-0 z-20 flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-sm shadow-zinc-950/5 backdrop-blur-md">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                     {/* Search */}
                     <div className="relative lg:min-w-0 lg:flex-1">
@@ -368,11 +518,12 @@ export const ShowsTable = () => {
                                 <span className="hidden sm:inline">Filters</span>
                                 {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
                             </Button>
-                            <FilterPopover
+                            <ShowsFilterDrawer
                                 isOpen={isFilterOpen}
                                 onClose={() => setIsFilterOpen(false)}
                                 categories={filterCategories}
                                 selections={filterSelections}
+                                dateFilter={dateFilter}
                                 onApply={handleApplyFilters}
                                 onClear={handleClearFilters}
                             />
@@ -420,11 +571,49 @@ export const ShowsTable = () => {
                         );
                     })}
                 </div>
+
+                {totalActiveFilters > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Active filters:</span>
+                        {dateFilter.preset !== 'all' && (
+                            <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                                {dateFilter.preset === 'custom'
+                                    ? `${SHOW_DATE_PRESET_LABELS.custom}${dateFilter.from || dateFilter.to ? ` · ${dateFilter.from || '…'} → ${dateFilter.to || '…'}` : ''}`
+                                    : SHOW_DATE_PRESET_LABELS[dateFilter.preset]}
+                            </span>
+                        )}
+                        {Object.entries(filterSelections).flatMap(([key, values]) =>
+                            values.map((value) => (
+                                <span
+                                    key={`${key}-${value}`}
+                                    className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-700"
+                                >
+                                    {value}
+                                </span>
+                            )),
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleClearFilters}
+                            className="cursor-pointer text-[10px] font-semibold text-orange-600 hover:text-orange-700"
+                        >
+                            Clear all
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Card grid */}
-            <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-xl shadow-zinc-950/5">
-                <div className="h-full overflow-y-auto custom-scrollbar p-4 md:p-6">
+            <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
+                <div className="flex flex-col gap-3 border-b border-zinc-100 bg-linear-to-r from-zinc-50/80 to-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <div>
+                        <h2 className="text-base font-semibold text-zinc-900">All exhibitions</h2>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                            {exhibitionsCountLabel}
+                        </p>
+                    </div>
+                </div>
+                <div className="p-4 md:p-6">
                     {loading && data.length === 0 ? (
                         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, i) => (
@@ -475,7 +664,6 @@ export const ShowsTable = () => {
                                 const country = item.Country || '';
                                 const date = item.starting_date || item.Starting_Date || '';
                                 const location = [city, country].filter(Boolean).join(', ');
-                                const profile_image_link = item.profile_img_link;
                                 const cover_img_link = item.cover_img_link;
 
                                 const RANDOM_COVERS = [
@@ -527,19 +715,7 @@ export const ShowsTable = () => {
                                                 </div>
                                             )}
                                             <div className="relative flex h-full items-end justify-between px-4 pb-4">
-                                                {/* Initials avatar */}
-                                                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white text-base font-bold tracking-tight text-zinc-900 shadow-2xl ring-2 ring-white/25">
-                                                    {profile_image_link ? (
-                                                        <img
-                                                            src={profile_image_link}
-                                                            alt={`${name} logo`}
-                                                            className="h-full w-full object-cover"
-                                                            loading="lazy"
-                                                        />
-                                                    ) : (
-                                                        <School className="h-7 w-7 text-zinc-400" />
-                                                    )}
-                                                </div>
+                                                <ShowCardLogo show={item} name={name} />
                                                 {eventType ? (
                                                     <span className="rounded-full bg-orange-500/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-orange-100 ring-1 ring-orange-400/30 backdrop-blur-sm">
                                                         {eventType}
@@ -577,13 +753,6 @@ export const ShowsTable = () => {
                                                     <span className="font-medium text-zinc-700">{formatCardDate(date)}</span>
                                                 </div>
                                             </div>
-
-                                            <div className="mt-auto flex items-center justify-end border-t border-zinc-100 pt-4">
-                                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 transition-all duration-200 group-hover:gap-2 group-hover:text-orange-500">
-                                                    View details
-                                                    <ArrowRight className="h-3.5 w-3.5" />
-                                                </span>
-                                            </div>
                                         </div>
                                     </button>
                                 );
@@ -593,19 +762,30 @@ export const ShowsTable = () => {
                 </div>
 
                 {loading && data.length > 0 && (
-                    <div className="border-t border-zinc-100 px-4 py-3 md:px-6">
-                        <Skeleton className="h-10 w-full rounded-xl" />
+                    <div className="border-t border-zinc-100 px-4 py-4 md:px-6">
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <div key={i} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                                    <Skeleton className="h-36 w-full rounded-none" />
+                                    <div className="space-y-3 p-5">
+                                        <Skeleton className="h-6 w-5/6 rounded-md" />
+                                        <Skeleton className="h-4 w-2/3 rounded" />
+                                        <Skeleton className="h-4 w-1/2 rounded" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 
-                {hasMore && !loading && data.length > 0 && (
-                    <div className="border-t border-zinc-100 p-4 md:p-6">
-                        <Button variant="secondary" onClick={loadMore} className="w-full rounded-xl border-zinc-200 md:w-auto md:min-w-[200px]">
-                            Load more
-                        </Button>
-                    </div>
+                {hasMore && data.length > 0 && (
+                    <div
+                        ref={loadMoreSentinelRef}
+                        className="h-px w-full"
+                        aria-hidden
+                    />
                 )}
-            </div>
+            </section>
         </div>
     );
 };

@@ -19,14 +19,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <div className="absolute inset-0 pointer-events-none z-0">
                     <div className="absolute top-[-18%] left-[-10%] w-[48%] h-[48%] bg-orange-400/18 rounded-full blur-[130px]" />
                     <div className="absolute bottom-[-20%] right-[-12%] w-[46%] h-[46%] bg-zinc-900/8 rounded-full blur-[120px]" />
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(17,17,17,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(17,17,17,0.035)_1px,transparent_1px)] bg-size-[44px_44px]"></div>
                 </div>
 
                 {/* Sidebar */}
                 <MainSidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
                 {/* Main Content Area */}
-                <main className="flex-1 h-full overflow-hidden relative flex flex-col z-10 lg:ml-20 transition-all duration-300">
+                <main className="relative z-10 flex h-full flex-1 flex-col overflow-hidden transition-all duration-300">
                     {/* Mobile Header */}
                     <div className="lg:hidden p-4 flex items-center justify-between bg-white/90 backdrop-blur-md border-b border-zinc-200 z-30">
                         <img src="/FP_black.png" alt="Fairplatz" className="h-8 w-auto object-contain" />

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ShowFormModal } from '@/components/Zoho/ShowFormModal';
+import { ShowHeaderLogo, ShowProfilePhoto } from '@/components/Shows/ShowLogo';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 
@@ -881,9 +882,7 @@ export default function ShowDetailPage() {
     const websiteHref = normalizeExternalUrl(showWebsite);
 
     const location = [city, country].filter(Boolean).join(', ');
-    const profile_img_link = String(getValue(data, ['profile_img_link', 'Profile_Img_Link', 'profile_image', 'Profile_Image', 'logo_url', 'Logo_URL', 'logo', 'Logo']) || '');
     const cover_img_link = String(getValue(data, ['cover_img_link', 'Cover_Img_Link', 'cover_image', 'Cover_Image', 'banner', 'Banner', 'cover']) || '');
-    const initials = initialsFromName(eventName);
 
     const detailRows = [
         startingDate && { label: 'Date', value: formatDate(startingDate), icon: <Calendar className="h-4 w-4" /> },
@@ -1145,22 +1144,7 @@ export default function ShowDetailPage() {
 
                         {/* Identity */}
                         <div className="flex items-end gap-4 pb-7 pt-2 sm:gap-5">
-                            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/10 text-lg font-bold text-white backdrop-blur-sm sm:h-20 sm:w-20 sm:text-xl">
-                                {profile_img_link ? (
-                                    <img
-                                        src={profile_img_link}
-                                        alt={eventName}
-                                        className="h-full w-full object-cover"
-                                        loading="lazy"
-                                        onError={(e) => {
-                                            (e.currentTarget as HTMLImageElement).style.display = 'none';
-                                            (e.currentTarget.parentElement as HTMLElement).textContent = initials;
-                                        }}
-                                    />
-                                ) : (
-                                    initials
-                                )}
-                            </div>
+                            <ShowHeaderLogo show={data} name={eventName} />
                             <div className="min-w-0 pb-0.5">
                                 {eventType && (
                                     <span className="mb-2 inline-flex items-center rounded-full bg-orange-500/20 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-orange-300">
@@ -1593,20 +1577,7 @@ export default function ShowDetailPage() {
                                                 <div className="border-b border-zinc-100 px-4 py-3">
                                                     <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Profile Photo</p>
                                                 </div>
-                                                {profile_img_link ? (
-                                                    <div className="group relative aspect-square overflow-hidden bg-zinc-50">
-                                                        <img
-                                                            src={profile_img_link}
-                                                            alt="Profile"
-                                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex aspect-square flex-col items-center justify-center gap-2 bg-zinc-50 text-zinc-400">
-                                                        <Camera className="h-8 w-8" />
-                                                        <p className="text-xs">No profile photo</p>
-                                                    </div>
-                                                )}
+                                                <ShowProfilePhoto show={data} name={eventName} />
                                             </div>
 
                                             {/* Cover image */}

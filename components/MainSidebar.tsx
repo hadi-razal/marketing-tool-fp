@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Database, LayoutDashboard, LogOut, Settings, X, Menu, CheckSquare, BarChart2, Sparkles, Calendar, Building2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { LayoutDashboard, LogOut, Settings, X, Calendar, ChevronRight, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/Button';
 import Link from 'next/link';
@@ -14,7 +14,7 @@ interface SidebarProps {
 export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = () => { } }) => {
     const pathname = usePathname();
     const router = useRouter();
-    const [isHovered, setIsHovered] = useState(false);
+    const [isDesktopOpen, setIsDesktopOpen] = useState(false);
     const [userName, setUserName] = useState('');
     const [userEmail, setUserEmail] = useState('');
     const [userProfileUrl, setUserProfileUrl] = useState<string | null>(null);
@@ -41,20 +41,111 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
         fetchUser();
     }, []);
 
+    const openDesktop = useCallback(() => setIsDesktopOpen(true), []);
+    const closeDesktop = useCallback(() => setIsDesktopOpen(false), []);
+
     const navItems = [
         { id: 'shows', icon: Calendar, label: 'Shows', href: '/shows' },
-        { id: 'companies', icon: Building2, label: 'Companies', href: '/companies' },
         { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-        { id: 'search', icon: Search, label: 'Search', href: '/search' },
-        { id: 'database', icon: Database, label: 'Database', href: '/database' },
-        { id: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/tasks' },
-        // { id: 'ai', icon: Sparkles, label: 'Fairplatz AI', href: '/ai' }, // Removed
     ];
 
     const bottomItems = [
         { id: 'settings', icon: Settings, label: 'Settings', href: '/settings' },
         { id: 'logout', icon: LogOut, label: 'Logout', href: '/login' },
     ];
+
+    const desktopSidebarContent = (
+        <>
+            <div className="flex items-center justify-between p-5">
+                <img src="/FP_black.png" alt="Fairplatz" className="h-9 object-contain" />
+                <button
+                    type="button"
+                    onClick={closeDesktop}
+                    className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-orange-50 hover:text-zinc-950"
+                    aria-label="Close sidebar"
+                >
+                    <ChevronLeft className="h-5 w-5" />
+                </button>
+            </div>
+
+            <div className="flex flex-1 flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2">
+                <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">Menu</p>
+                {navItems.map((item) => {
+                    const isActive = pathname.startsWith(item.href);
+                    return (
+                        <Link
+                            key={item.id}
+                            href={item.href}
+                            onClick={closeDesktop}
+                            className={cn(
+                                'relative flex w-full items-center gap-3 rounded-md p-3 transition-all duration-300 group/item',
+                                isActive
+                                    ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20'
+                                    : 'text-zinc-600 hover:bg-orange-50 hover:text-zinc-950',
+                            )}
+                        >
+                            <item.icon className={cn('h-5 w-5 shrink-0', isActive ? 'text-white' : 'text-zinc-500 group-hover/item:text-orange-500')} />
+                            <span className="text-sm font-medium">{item.label}</span>
+                            {isActive && (
+                                <motion.div layoutId="activeSidebarIndicator" className="absolute right-3 h-1.5 w-1.5 rounded-full bg-white" />
+                            )}
+                        </Link>
+                    );
+                })}
+            </div>
+
+            <div className="mt-auto border-t border-zinc-200 p-4">
+                <div className="flex cursor-pointer items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 transition-all hover:bg-orange-50">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-indigo-500 to-purple-600 text-xs font-bold text-white shadow-lg shadow-indigo-500/20">
+                        {userProfileUrl ? (
+                            <img src={userProfileUrl} alt={userName} className="h-full w-full object-cover" />
+                        ) : (
+                            userName.substring(0, 2).toUpperCase() || 'US'
+                        )}
+                    </div>
+                    <div className="min-w-0 overflow-hidden">
+                        <p className="truncate text-sm font-semibold text-zinc-950">{userName || 'Loading...'}</p>
+                        <p className="truncate text-xs text-zinc-500">{userEmail || 'Loading...'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-2 p-4 pt-2">
+                <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">General</p>
+                {bottomItems.map((item) => {
+                    if (item.id === 'logout') {
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={async () => {
+                                    const supabase = createClient();
+                                    await supabase.auth.signOut();
+                                    router.push('/login');
+                                    router.refresh();
+                                }}
+                                className="flex w-full items-center gap-3 rounded-md p-3 text-zinc-600 transition-all hover:bg-orange-50 hover:text-zinc-950"
+                            >
+                                <item.icon className="h-5 w-5 shrink-0 text-zinc-500" />
+                                <span className="text-sm font-medium">{item.label}</span>
+                            </button>
+                        );
+                    }
+                    return (
+                        <Link
+                            key={item.id}
+                            href={item.href}
+                            onClick={closeDesktop}
+                            className="flex w-full items-center gap-3 rounded-md p-3 text-zinc-600 transition-all hover:bg-orange-50 hover:text-zinc-950"
+                        >
+                            <item.icon className="h-5 w-5 shrink-0 text-zinc-500" />
+                            <span className="text-sm font-medium">{item.label}</span>
+                        </Link>
+                    );
+                })}
+            </div>
+        </>
+    );
 
     return (
         <>
@@ -66,150 +157,74 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+                        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
                     />
                 )}
             </AnimatePresence>
 
-            {/* Desktop Sidebar (Mini -> Expanded) */}
-            <div
-                className="hidden lg:block fixed inset-y-0 left-0 z-50 h-full transition-all duration-300 ease-in-out group"
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                style={{ width: isHovered ? '18rem' : '5rem' }} // w-72 vs w-20
-            >
-                {/* Sidebar Container */}
-                <div
-                    className={cn(
-                        "h-full flex flex-col bg-white/95 backdrop-blur-2xl border-r border-zinc-200 shadow-2xl shadow-zinc-950/10 transition-all duration-300 ease-in-out overflow-hidden",
-                        "w-full"
+            {/* Desktop — collapsed: click to open */}
+            <div className="hidden lg:block">
+                <AnimatePresence>
+                    {!isDesktopOpen && (
+                        <motion.button
+                            type="button"
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -8 }}
+                            onClick={openDesktop}
+                            className="fixed left-0 top-1/2 z-50 flex h-11 w-7 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-zinc-200/90 bg-white/95 shadow-lg shadow-zinc-950/10 backdrop-blur-md transition-colors hover:border-orange-200 hover:bg-orange-50/80"
+                            aria-label="Open menu"
+                        >
+                            <ChevronRight className="h-4 w-4 text-orange-600" />
+                        </motion.button>
                     )}
-                >
-                    {/* Header */}
-                    <div className={cn("p-6 flex items-center gap-3 transition-all duration-300", isHovered ? "justify-start" : "justify-center px-2")}>
-                        <div className={cn("w-10 h-10 flex items-center justify-center shrink-0 transition-opacity duration-300", isHovered ? "opacity-0 w-0 overflow-hidden hidden" : "opacity-100")}>
-                            <img src="/FPICON_black.png" alt="Fairplatz" className="w-8 h-8 object-contain" />
-                        </div>
-                        <div className={cn("transition-opacity duration-300 overflow-hidden whitespace-nowrap", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>
-                            <img src="/FP_black.png" alt="Fairplatz" className="h-10 object-contain" />
-                        </div>
-                    </div>
+                </AnimatePresence>
 
-                    {/* Navigation */}
-                    <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2">
-                        <p className={cn("text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wider transition-all duration-300", isHovered ? "px-4 opacity-100" : "px-0 text-center opacity-0 hidden")}>Menu</p>
-                        {navItems.map((item) => {
-                            const isActive = pathname.startsWith(item.href);
-                            return (
-                                <Link
-                                    key={item.id}
-                                    href={item.href}
-                                    className={cn(
-                                        "relative w-full flex items-center gap-3 p-3 rounded-md transition-all duration-300 group/item",
-                                        isActive
-                                            ? "bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20"
-                                            : "text-zinc-600 hover:bg-orange-50 hover:text-zinc-950",
-                                        isHovered ? "justify-start px-4" : "justify-center"
-                                    )}
-                                >
-                                    <item.icon className={cn("w-5 h-5 shrink-0", isActive ? "text-white" : "text-zinc-500 group-hover/item:text-orange-500")} />
-                                    <span className={cn("font-medium text-sm whitespace-nowrap transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>{item.label}</span>
-                                    {isActive && isHovered && (
-                                        <motion.div
-                                            layoutId="activeSidebarIndicator"
-                                            className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white"
-                                        />
-                                    )}
-                                </Link>
-                            );
-                        })}
-                    </div>
-
-                    {/* User Profile */}
-                    <div className="mt-auto p-4 border-t border-zinc-200">
-                        <div className={cn(
-                            "flex items-center gap-3 p-3 rounded-md bg-zinc-50 border border-zinc-200 transition-all duration-300 group/profile cursor-pointer hover:bg-orange-50",
-                            isHovered ? "justify-start px-3" : "justify-center px-0 w-10 h-10 mx-auto"
-                        )}>
-                            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 text-white font-bold text-xs overflow-hidden">
-                                {userProfileUrl ? (
-                                    <img src={userProfileUrl} alt={userName} className="w-full h-full object-cover" />
-                                ) : (
-                                    userName.substring(0, 2).toUpperCase() || 'US'
-                                )}
-                            </div>
-                            <div className={cn("overflow-hidden transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>
-                                <p className="text-sm font-semibold text-zinc-950 truncate">{userName || 'Loading...'}</p>
-                                <p className="text-xs text-zinc-500 truncate">{userEmail || 'Loading...'}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom Actions */}
-                    <div className="p-4 pt-2 flex flex-col gap-2">
-                        <p className={cn("text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wider transition-all duration-300", isHovered ? "px-4 opacity-100" : "px-0 text-center opacity-0 hidden")}>General</p>
-                        {bottomItems.map((item) => {
-                            if (item.id === 'logout') {
-                                return (
-                                    <button
-                                        key={item.id}
-                                        onClick={async () => {
-                                            const supabase = createClient();
-                                            await supabase.auth.signOut();
-                                            router.push('/login');
-                                            router.refresh();
-                                        }}
-                                        className={cn(
-                                            "w-full flex items-center gap-3 p-3 rounded-md text-zinc-600 hover:bg-orange-50 hover:text-zinc-950 transition-all duration-300",
-                                            isHovered ? "justify-start px-4" : "justify-center"
-                                        )}
-                                    >
-                                        <item.icon className="w-5 h-5 shrink-0 text-zinc-500 group-hover:text-orange-500" />
-                                        <span className={cn("font-medium text-sm whitespace-nowrap transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>{item.label}</span>
-                                    </button>
-                                );
-                            }
-                            return (
-                                <Link
-                                    key={item.id}
-                                    href={item.href}
-                                    className={cn(
-                                        "w-full flex items-center gap-3 p-3 rounded-md text-zinc-600 hover:bg-orange-50 hover:text-zinc-950 transition-all duration-300",
-                                        isHovered ? "justify-start px-4" : "justify-center"
-                                    )}
-                                >
-                                    <item.icon className="w-5 h-5 shrink-0 text-zinc-500 group-hover:text-orange-500" />
-                                    <span className={cn("font-medium text-sm whitespace-nowrap transition-all duration-300", isHovered ? "opacity-100 w-auto" : "opacity-0 w-0 hidden")}>{item.label}</span>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </div>
+                <AnimatePresence>
+                    {isDesktopOpen && (
+                        <>
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={closeDesktop}
+                                className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
+                            />
+                            <motion.aside
+                                initial={{ x: '-100%' }}
+                                animate={{ x: 0 }}
+                                exit={{ x: '-100%' }}
+                                transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                                className="fixed inset-y-0 left-0 z-50 flex h-full w-72 flex-col overflow-hidden border-r border-zinc-200 bg-white/95 shadow-2xl shadow-zinc-950/10 backdrop-blur-2xl"
+                            >
+                                {desktopSidebarContent}
+                            </motion.aside>
+                        </>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Mobile Sidebar (Drawer) */}
             <div
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 w-72 h-full flex flex-col bg-white/95 backdrop-blur-2xl border-r border-zinc-200 shadow-2xl transition-transform duration-300 ease-in-out lg:hidden",
-                    isOpen ? "translate-x-0" : "-translate-x-full"
+                    'fixed inset-y-0 left-0 z-50 flex h-full w-72 flex-col border-r border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-in-out lg:hidden',
+                    isOpen ? 'translate-x-0' : '-translate-x-full',
                 )}
             >
-                {/* Header */}
-                <div className="p-6 flex items-center justify-between">
+                <div className="flex items-center justify-between p-6">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 flex items-center justify-center">
-                            <img src="/FPICON_black.png" alt="Fairplatz" className="w-8 h-8 object-contain" />
+                        <div className="flex h-10 w-10 items-center justify-center">
+                            <img src="/FPICON_black.png" alt="Fairplatz" className="h-8 w-8 object-contain" />
                         </div>
                         <img src="/FP_black.png" alt="Fairplatz" className="h-9 w-auto object-contain" />
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-orange-50 rounded-lg text-zinc-500">
-                        <X className="w-6 h-6" />
+                    <button type="button" onClick={onClose} className="rounded-lg p-2 text-zinc-500 hover:bg-orange-50">
+                        <X className="h-6 w-6" />
                     </button>
                 </div>
 
-                {/* Navigation */}
-                <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2">
-                    <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">Menu</p>
+                <div className="flex flex-1 flex-col gap-2 overflow-y-auto custom-scrollbar px-4 py-2">
+                    <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">Menu</p>
                     {navItems.map((item) => {
                         const isActive = pathname.startsWith(item.href);
                         return (
@@ -218,41 +233,68 @@ export const MainSidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose = 
                                 href={item.href}
                                 onClick={onClose}
                                 className={cn(
-                                    "relative w-full flex items-center gap-3 px-4 py-3.5 rounded-md transition-all duration-300 group text-left",
+                                    'relative flex w-full items-center gap-3 rounded-md px-4 py-3.5 text-left transition-all duration-300 group',
                                     isActive
-                                        ? "bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20"
-                                        : "text-zinc-600 hover:bg-orange-50 hover:text-zinc-950"
+                                        ? 'bg-linear-to-r from-orange-600 to-orange-500 text-white shadow-lg shadow-orange-500/20'
+                                        : 'text-zinc-600 hover:bg-orange-50 hover:text-zinc-950',
                                 )}
                             >
-                                <item.icon className={cn("w-5 h-5", isActive ? "text-white" : "text-zinc-500 group-hover:text-orange-500")} />
-                                <span className="font-medium text-sm">{item.label}</span>
+                                <item.icon className={cn('h-5 w-5', isActive ? 'text-white' : 'text-zinc-500 group-hover:text-orange-500')} />
+                                <span className="text-sm font-medium">{item.label}</span>
                             </Link>
                         );
                     })}
                 </div>
 
-                {/* User Profile */}
-                <div className="mt-auto p-4 border-t border-zinc-200">
-                    <div className="flex items-center gap-3 p-3 rounded-md bg-zinc-50 border border-zinc-200">
-                        <div className="w-10 h-10 rounded-lg bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 text-white font-bold text-sm">
-                            HR
+                <div className="mt-auto border-t border-zinc-200 p-4">
+                    <div className="flex items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-purple-600 text-sm font-bold text-white shadow-lg shadow-indigo-500/20">
+                            {userProfileUrl ? (
+                                <img src={userProfileUrl} alt={userName} className="h-full w-full rounded-lg object-cover" />
+                            ) : (
+                                userName.substring(0, 2).toUpperCase() || 'US'
+                            )}
                         </div>
                         <div className="overflow-hidden">
-                            <p className="text-sm font-semibold text-zinc-950 truncate">Hadi Rasal</p>
-                            <p className="text-xs text-zinc-500 truncate">hadi@fairplatz.com</p>
+                            <p className="truncate text-sm font-semibold text-zinc-950">{userName || 'Loading...'}</p>
+                            <p className="truncate text-xs text-zinc-500">{userEmail || 'Loading...'}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Bottom Actions */}
-                <div className="p-4 pt-2 flex flex-col gap-2">
-                    <p className="text-xs font-semibold text-zinc-500 px-4 mb-2 uppercase tracking-wider">General</p>
-                    {bottomItems.map((item) => (
-                        <button key={item.id} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-md text-zinc-600 hover:bg-orange-50 hover:text-zinc-950 transition-colors text-left">
-                            <item.icon className="w-5 h-5" />
-                            <span className="font-medium text-sm">{item.label}</span>
-                        </button>
-                    ))}
+                <div className="flex flex-col gap-2 p-4 pt-2">
+                    <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">General</p>
+                    {bottomItems.map((item) => {
+                        if (item.id === 'logout') {
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={async () => {
+                                        const supabase = createClient();
+                                        await supabase.auth.signOut();
+                                        router.push('/login');
+                                        router.refresh();
+                                    }}
+                                    className="flex w-full items-center gap-3 rounded-md px-4 py-3.5 text-left text-zinc-600 transition-colors hover:bg-orange-50 hover:text-zinc-950"
+                                >
+                                    <item.icon className="h-5 w-5" />
+                                    <span className="text-sm font-medium">{item.label}</span>
+                                </button>
+                            );
+                        }
+                        return (
+                            <Link
+                                key={item.id}
+                                href={item.href}
+                                onClick={onClose}
+                                className="flex w-full items-center gap-3 rounded-md px-4 py-3.5 text-left text-zinc-600 transition-colors hover:bg-orange-50 hover:text-zinc-950"
+                            >
+                                <item.icon className="h-5 w-5" />
+                                <span className="text-sm font-medium">{item.label}</span>
+                            </Link>
+                        );
+                    })}
                 </div>
             </div>
         </>

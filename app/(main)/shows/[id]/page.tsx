@@ -947,7 +947,7 @@ export default function ShowDetailPage() {
     const city = String(getValue(data, ['city', 'City']) || '');
     const frequency = String(getValue(data, ['frequency', 'Frequency']) || '');
     const organiser = String(getValue(data, ['organiser', 'Organiser']) || '');
-    const showWebsite = String(getValue(data, ['show_website', 'Show_Website', 'website', 'Website', 'event_website', 'Event_Website']) || '');
+    const showWebsite = String(getValue(data, ['website', 'Website', 'show_website', 'Show_Website', 'event_website', 'Event_Website']) || '');
     const tags = String(getValue(data, ['tags', 'Tags']) || '');
     const note = String(getValue(data, ['note', 'Note', 'Note1']) || '');
     const exhibitorList = String(getValue(data, ['exhibitor_list', 'Exhibitor_List', 'Last_edition_n_Exhibitors']) || '');

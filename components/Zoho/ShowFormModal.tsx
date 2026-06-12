@@ -7,8 +7,6 @@ import {
     Link2,
     Building2,
     Tag,
-    Users,
-    Image as ImageIcon,
 } from 'lucide-react';
 import { SoftInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -16,6 +14,20 @@ import { Button } from '../ui/Button';
 import { createClient } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { INDUSTRIES } from '@/lib/industries';
+import { normalizeShowWebsiteUrl } from '@/lib/showWebsite';
+
+const textOrNull = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed || null;
+};
+
+const getErrorMessage = (error: unknown) => {
+    if (error && typeof error === 'object' && 'message' in error) {
+        return String((error as { message: string }).message);
+    }
+    if (error instanceof Error) return error.message;
+    return 'Failed to save show';
+};
 
 interface ShowFormModalProps {
     isOpen: boolean;
@@ -54,7 +66,6 @@ type ShowFormState = {
     Event_Name: string;
     Event_Type: string;
     Starting_Date: string;
-    Ending_Date: string;
     Industry: string;
     Level: string;
     World_Area: string;
@@ -65,17 +76,13 @@ type ShowFormState = {
     Show_Website: string;
     Tags: string;
     Note: string;
-    Exhibitor_List: string;
     Exhibitor_List_Link: string;
-    Profile_Img_Link: string;
-    Cover_Img_Link: string;
 };
 
 const EMPTY_FORM: ShowFormState = {
     Event_Name: '',
     Event_Type: '',
     Starting_Date: '',
-    Ending_Date: '',
     Industry: '',
     Level: '',
     World_Area: '',
@@ -86,10 +93,7 @@ const EMPTY_FORM: ShowFormState = {
     Show_Website: '',
     Tags: '',
     Note: '',
-    Exhibitor_List: '',
     Exhibitor_List_Link: '',
-    Profile_Img_Link: '',
-    Cover_Img_Link: '',
 };
 
 const extractValue = (val: unknown): string => {
@@ -131,7 +135,6 @@ const formFromData = (data?: Record<string, unknown>): ShowFormState => ({
     Event_Name: pick(data, 'name', 'Event_Name', 'event_name', 'Event', 'Name'),
     Event_Type: pick(data, 'event_type', 'Event_Type', 'type', 'Type'),
     Starting_Date: formatDateForInput(pick(data, 'starting_date', 'Starting_Date', 'date', 'Date')),
-    Ending_Date: formatDateForInput(pick(data, 'ending_date', 'Ending_Date', 'end_date', 'End_Date')),
     Industry: pick(data, 'industry', 'Industry'),
     Level: pick(data, 'level', 'Level'),
     World_Area: pick(data, 'world_area', 'World_Area', 'Area'),
@@ -139,13 +142,10 @@ const formFromData = (data?: Record<string, unknown>): ShowFormState => ({
     City: pick(data, 'city', 'City'),
     Frequency: pick(data, 'frequency', 'Frequency'),
     Organiser: pick(data, 'organiser', 'Organiser'),
-    Show_Website: pick(data, 'show_website', 'Show_Website', 'website', 'Website', 'event_website', 'Event_Website'),
+    Show_Website: pick(data, 'website', 'Website', 'show_website', 'Show_Website', 'event_website', 'Event_Website'),
     Tags: pick(data, 'tags', 'Tags'),
     Note: pick(data, 'note', 'Note', 'Note1'),
-    Exhibitor_List: pick(data, 'exhibitor_list', 'Exhibitor_List', 'Last_edition_n_Exhibitors'),
     Exhibitor_List_Link: pick(data, 'exhibitor_list_link', 'Exhibitor_List_Link'),
-    Profile_Img_Link: pick(data, 'profile_img_link', 'Profile_Img_Link', 'Event_logo', 'logo_url', 'Logo_URL'),
-    Cover_Img_Link: pick(data, 'cover_img_link', 'Cover_Img_Link', 'cover_image', 'Cover_Image', 'banner', 'Banner', 'cover'),
 });
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -229,22 +229,19 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
         try {
             const submitData = {
                 name: formData.Event_Name.trim(),
-                event_type: formData.Event_Type.trim(),
+                event_type: textOrNull(formData.Event_Type),
                 starting_date: formData.Starting_Date || null,
-                industry: formData.Industry.trim(),
-                level: formData.Level.trim(),
-                world_area: formData.World_Area.trim(),
-                country: formData.Country.trim(),
-                city: formData.City.trim(),
-                frequency: formData.Frequency.trim(),
-                organiser: formData.Organiser.trim(),
-                show_website: formData.Show_Website.trim(),
-                tags: formData.Tags.trim(),
-                note: formData.Note.trim(),
-                exhibitor_list: formData.Exhibitor_List.trim(),
-                exhibitor_list_link: formData.Exhibitor_List_Link.trim(),
-                profile_img_link: formData.Profile_Img_Link.trim(),
-                cover_img_link: formData.Cover_Img_Link.trim(),
+                industry: textOrNull(formData.Industry),
+                level: textOrNull(formData.Level),
+                world_area: textOrNull(formData.World_Area),
+                country: textOrNull(formData.Country),
+                city: textOrNull(formData.City),
+                frequency: textOrNull(formData.Frequency),
+                organiser: textOrNull(formData.Organiser),
+                website: textOrNull(normalizeShowWebsiteUrl(formData.Show_Website)),
+                tags: textOrNull(formData.Tags),
+                note: textOrNull(formData.Note),
+                exhibitor_list_link: textOrNull(normalizeShowWebsiteUrl(formData.Exhibitor_List_Link)),
             };
 
             const recordId = initialData?.id || initialData?.ID || null;
@@ -263,7 +260,7 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
             onSuccess();
             onClose();
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Failed to save show';
+            const message = getErrorMessage(error);
             toast.error(message);
             console.error('Show save error details:', error);
         } finally {
@@ -302,12 +299,6 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 type="date"
                                 value={formData.Starting_Date}
                                 onChange={(e) => setField('Starting_Date', e.target.value)}
-                            />
-                            <SoftInput
-                                label="Ending Date"
-                                type="date"
-                                value={formData.Ending_Date}
-                                onChange={(e) => setField('Ending_Date', e.target.value)}
                             />
                         </div>
                     </section>
@@ -425,37 +416,6 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 onChange={(e) => setField('Exhibitor_List_Link', e.target.value)}
                                 placeholder="https://example.com/exhibitors"
                                 icon={<Link2 className="h-4 w-4" />}
-                            />
-                        </div>
-                    </section>
-
-                    <section className="space-y-4">
-                        <SectionTitle>Exhibitors</SectionTitle>
-                        <SoftInput
-                            label="Exhibitor Count / List"
-                            value={formData.Exhibitor_List}
-                            onChange={(e) => setField('Exhibitor_List', e.target.value)}
-                            placeholder="e.g. 1,200 exhibitors"
-                            icon={<Users className="h-4 w-4" />}
-                        />
-                    </section>
-
-                    <section className="space-y-4">
-                        <SectionTitle>Images</SectionTitle>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <SoftInput
-                                label="Profile Image URL"
-                                value={formData.Profile_Img_Link}
-                                onChange={(e) => setField('Profile_Img_Link', e.target.value)}
-                                placeholder="https://example.com/logo.jpg"
-                                icon={<ImageIcon className="h-4 w-4" />}
-                            />
-                            <SoftInput
-                                label="Cover Image URL"
-                                value={formData.Cover_Img_Link}
-                                onChange={(e) => setField('Cover_Img_Link', e.target.value)}
-                                placeholder="https://example.com/cover.jpg"
-                                icon={<ImageIcon className="h-4 w-4" />}
                             />
                         </div>
                     </section>

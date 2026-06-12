@@ -1,14 +1,13 @@
 import { normalizeOrganizationDomain } from '@/lib/utils';
 
+/** Official show website only — not exhibitor lists or other links. */
 const WEBSITE_FIELDS = [
-    'show_website',
-    'Show_Website',
     'website',
     'Website',
+    'show_website',
+    'Show_Website',
     'event_website',
     'Event_Website',
-    'exhibitor_list_link',
-    'Exhibitor_List_Link',
 ] as const;
 
 export function normalizeShowWebsiteUrl(input?: string | null): string {
@@ -19,7 +18,7 @@ export function normalizeShowWebsiteUrl(input?: string | null): string {
     return '';
 }
 
-/** First usable website / event link on a show row. */
+/** Official show website URL on a show row. */
 export function getShowWebsiteUrl(item: Record<string, unknown>): string {
     for (const field of WEBSITE_FIELDS) {
         const url = normalizeShowWebsiteUrl(String(item[field] || ''));

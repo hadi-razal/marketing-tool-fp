@@ -61,6 +61,9 @@ export const ShowsTable = () => {
     const [allFetchedData, setAllFetchedData] = useState<any[]>([]);
 
     const [quickRegion, setQuickRegion] = useState<string>('All');
+    const [exhibitorShowIds, setExhibitorShowIds] = useState<Set<string>>(new Set());
+    const exhibitorShowIdsRef = useRef<Set<string>>(new Set());
+    const [showExhibitorsOnly, setShowExhibitorsOnly] = useState(false);
 
     const [filterSelections, setFilterSelections] = useState<FilterSelections>({
         country: [],
@@ -73,7 +76,7 @@ export const ShowsTable = () => {
     });
     const [dateFilter, setDateFilter] = useState<ShowDateFilter>(EMPTY_SHOW_DATE_FILTER);
 
-    const totalActiveFilters = countShowFilters(filterSelections, dateFilter);
+    const totalActiveFilters = countShowFilters(filterSelections, dateFilter, showExhibitorsOnly);
 
     const normalizeShow = (row: any) => {
         const id = row?.id ?? row?.ID ?? row?.show_id ?? row?.showId;
@@ -131,6 +134,40 @@ export const ShowsTable = () => {
         if (!error) setTotalShowsCount(count ?? 0);
     }, [supabase]);
 
+    const fetchAllExhibitorShowIds = useCallback(async (): Promise<Set<string>> => {
+        const withExhibitors = new Set<string>();
+        const pageSize = 1000;
+        let offset = 0;
+
+        while (true) {
+            const { data: rows, error } = await supabase
+                .from('show_participation')
+                .select('show_id')
+                .range(offset, offset + pageSize - 1);
+
+            if (error) {
+                console.error('Failed to load exhibitor participation:', error);
+                return exhibitorShowIdsRef.current;
+            }
+
+            for (const row of rows || []) {
+                const showId = String(row.show_id ?? '').trim();
+                if (showId) withExhibitors.add(showId);
+            }
+
+            if (!rows || rows.length < pageSize) break;
+            offset += pageSize;
+        }
+
+        exhibitorShowIdsRef.current = withExhibitors;
+        setExhibitorShowIds(withExhibitors);
+        return withExhibitors;
+    }, [supabase]);
+
+    useEffect(() => {
+        void fetchAllExhibitorShowIds();
+    }, [fetchAllExhibitorShowIds]);
+
     const fetchUpcomingShows = useCallback(async () => {
         setUpcomingLoading(true);
         try {
@@ -175,6 +212,10 @@ export const ShowsTable = () => {
         }
     }, [supabase]);
 
+    useEffect(() => {
+        void fetchUpcomingShows();
+    }, [fetchUpcomingShows]);
+
     const fetchData = useCallback(async (reset = false, searchTerm = '') => {
         setLoading(true);
         setFetchError('');
@@ -182,10 +223,26 @@ export const ShowsTable = () => {
             const from = reset ? 0 : page * LIMIT;
             const trimmedSearch = searchTerm.trim();
 
+            let exhibitorIds: string[] | null = null;
+            if (showExhibitorsOnly) {
+                const ids = await fetchAllExhibitorShowIds();
+                exhibitorIds = [...ids];
+                if (exhibitorIds.length === 0) {
+                    setData([]);
+                    setHasMore(false);
+                    if (reset) setPage(1);
+                    return;
+                }
+            }
+
             let query = supabase
                 .from('shows')
                 .select('*')
                 .order('id', { ascending: false });
+
+            if (exhibitorIds) {
+                query = query.in('id', exhibitorIds);
+            }
 
             if (trimmedSearch) {
                 query = query.ilike('name', `%${trimmedSearch}%`);
@@ -262,7 +319,7 @@ export const ShowsTable = () => {
 
             if (reset) {
                 void fetchTotalShowsCount();
-                void fetchUpcomingShows();
+                void fetchAllExhibitorShowIds();
             }
         } catch (err: any) {
             console.error(err);
@@ -274,12 +331,12 @@ export const ShowsTable = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, filterSelections, dateFilter, quickRegion, supabase, fetchTotalShowsCount, fetchUpcomingShows]);
+    }, [page, filterSelections, dateFilter, quickRegion, showExhibitorsOnly, supabase, fetchTotalShowsCount, fetchAllExhibitorShowIds]);
 
     useEffect(() => {
         setPage(0);
         fetchData(true, appliedSearch);
-    }, [appliedSearch, filterSelections, dateFilter, quickRegion]);
+    }, [appliedSearch, filterSelections, dateFilter, quickRegion, showExhibitorsOnly]);
 
     const handleSearch = () => {
         const term = search.trim();
@@ -291,9 +348,14 @@ export const ShowsTable = () => {
         setAppliedSearch(term);
     };
 
-    const handleApplyFilters = (selections: FilterSelections, nextDateFilter: ShowDateFilter) => {
+    const handleApplyFilters = (
+        selections: FilterSelections,
+        nextDateFilter: ShowDateFilter,
+        exhibitorsOnly: boolean,
+    ) => {
         setFilterSelections(selections);
         setDateFilter(nextDateFilter);
+        setShowExhibitorsOnly(exhibitorsOnly);
     };
 
     const handleClearFilters = () => {
@@ -307,6 +369,7 @@ export const ShowsTable = () => {
             frequency: [],
         });
         setDateFilter(EMPTY_SHOW_DATE_FILTER);
+        setShowExhibitorsOnly(false);
     };
 
     const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
@@ -430,6 +493,7 @@ export const ShowsTable = () => {
             onProgress?.({ current: i + 1, total: payloads.length });
         }
         await fetchData(true, appliedSearch);
+        void fetchUpcomingShows();
         await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
         toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
@@ -539,7 +603,10 @@ export const ShowsTable = () => {
                         </div>
                         <Button
                             variant="secondary"
-                            onClick={() => fetchData(true, appliedSearch)}
+                            onClick={() => {
+                                fetchData(true, appliedSearch);
+                                void fetchUpcomingShows();
+                            }}
                             isLoading={loading}
                             className="h-9 w-9 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
                         >
@@ -584,6 +651,11 @@ export const ShowsTable = () => {
                 {totalActiveFilters > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Active filters:</span>
+                        {showExhibitorsOnly && (
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                Exhibitor list available
+                            </span>
+                        )}
                         {dateFilter.preset !== 'all' && (
                             <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-semibold text-orange-700">
                                 {dateFilter.preset === 'custom'
@@ -697,13 +769,14 @@ export const ShowsTable = () => {
                                 const randomCover = RANDOM_COVERS[nameSum % RANDOM_COVERS.length];
 
                                 const coverImage = cover_img_link || randomCover;
+                                const hasExhibitorList = exhibitorShowIds.has(String(item.ID).trim());
 
                                 return (
                                     <button
                                         key={item.ID}
                                         type="button"
                                         onClick={() => handleRowClick(item)}
-                                        className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left shadow-sm shadow-zinc-950/5 outline-none transition-all duration-300 cursor-pointer hover:border-orange-200 hover:shadow-2xl hover:shadow-orange-950/15 focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2"
+                                        className={`group flex flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-sm shadow-zinc-950/5 outline-none transition-all duration-300 cursor-pointer hover:shadow-2xl focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 ${hasExhibitorList ? 'border-emerald-200 hover:border-emerald-300 hover:shadow-emerald-950/10' : 'border-zinc-200 hover:border-orange-200 hover:shadow-orange-950/15'}`}
                                     >
                                         {/* Visual header */}
                                         <div className="relative h-36 overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
@@ -754,6 +827,12 @@ export const ShowsTable = () => {
                                                     <span className="inline-flex items-center gap-1 rounded-lg border border-orange-100 bg-orange-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-700">
                                                         <Layers className="h-2.5 w-2.5" />
                                                         {level}
+                                                    </span>
+                                                ) : null}
+                                                {hasExhibitorList ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                                        <Building2 className="h-2.5 w-2.5" />
+                                                        Exhibitor list available
                                                     </span>
                                                 ) : null}
                                             </div>
@@ -808,6 +887,7 @@ export const ShowsTable = () => {
                 categories={filterCategories}
                 selections={filterSelections}
                 dateFilter={dateFilter}
+                exhibitorsOnly={showExhibitorsOnly}
                 onApply={handleApplyFilters}
                 onClear={handleClearFilters}
             />

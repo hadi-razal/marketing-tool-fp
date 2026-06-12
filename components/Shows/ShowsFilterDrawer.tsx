@@ -10,6 +10,7 @@ import {
     Calendar,
     MapPin,
     Building2,
+    Users,
     ChevronDown,
     ChevronRight,
     Search,
@@ -64,7 +65,8 @@ type ShowsFilterDrawerProps = {
     categories: FilterCategory[];
     selections: FilterSelections;
     dateFilter: ShowDateFilter;
-    onApply: (selections: FilterSelections, dateFilter: ShowDateFilter) => void;
+    exhibitorsOnly: boolean;
+    onApply: (selections: FilterSelections, dateFilter: ShowDateFilter, exhibitorsOnly: boolean) => void;
     onClear: () => void;
 };
 
@@ -191,11 +193,13 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
     categories,
     selections,
     dateFilter,
+    exhibitorsOnly,
     onApply,
     onClear,
 }) => {
     const [tempSelections, setTempSelections] = useState<FilterSelections>(selections);
     const [tempDateFilter, setTempDateFilter] = useState<ShowDateFilter>(dateFilter);
+    const [tempExhibitorsOnly, setTempExhibitorsOnly] = useState(exhibitorsOnly);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -215,8 +219,9 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
         if (isOpen) {
             setTempSelections(selections);
             setTempDateFilter(dateFilter);
+            setTempExhibitorsOnly(exhibitorsOnly);
         }
-    }, [isOpen, selections, dateFilter]);
+    }, [isOpen, selections, dateFilter, exhibitorsOnly]);
 
     const categoryMap = useMemo(
         () => new Map(categories.map((c) => [c.key, c])),
@@ -237,10 +242,10 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
 
     const categoryCount = Object.values(tempSelections).reduce((sum, arr) => sum + arr.length, 0);
     const dateActive = tempDateFilter.preset !== 'all' || !!tempDateFilter.from || !!tempDateFilter.to;
-    const totalActive = categoryCount + (dateActive ? 1 : 0);
+    const totalActive = categoryCount + (dateActive ? 1 : 0) + (tempExhibitorsOnly ? 1 : 0);
 
     const handleApply = () => {
-        onApply(tempSelections, tempDateFilter);
+        onApply(tempSelections, tempDateFilter, tempExhibitorsOnly);
         onClose();
     };
 
@@ -249,6 +254,7 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
             Object.fromEntries(categories.map((c) => [c.key, []])) as FilterSelections,
         );
         setTempDateFilter(EMPTY_SHOW_DATE_FILTER);
+        setTempExhibitorsOnly(false);
         onClear();
         onClose();
     };
@@ -292,10 +298,38 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-                            <p className="mt-1 text-xs text-zinc-500">Narrow by date, location, or event type.</p>
+                            <p className="mt-1 text-xs text-zinc-500">Narrow by date, location, event type, or exhibitor data.</p>
                         </div>
 
                         <div className="flex-1 space-y-5 overflow-y-auto custom-scrollbar px-5 py-4">
+                            <section>
+                                <div className="mb-2.5 flex items-center gap-2">
+                                    <Users className="h-3.5 w-3.5 text-orange-500" />
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Exhibitors</h4>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setTempExhibitorsOnly((prev) => !prev)}
+                                    className={`flex w-full items-center justify-between rounded-xl border px-3.5 py-3 text-left transition-all ${
+                                        tempExhibitorsOnly
+                                            ? 'border-emerald-300 bg-emerald-50 shadow-sm shadow-emerald-500/10'
+                                            : 'border-zinc-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40'
+                                    }`}
+                                >
+                                    <div>
+                                        <p className={`text-xs font-semibold ${tempExhibitorsOnly ? 'text-emerald-800' : 'text-zinc-800'}`}>
+                                            Exhibitor list available
+                                        </p>
+                                        <p className="mt-0.5 text-[10px] text-zinc-500">
+                                            Shows with exhibitors in participation data
+                                        </p>
+                                    </div>
+                                    {tempExhibitorsOnly ? (
+                                        <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+                                    ) : null}
+                                </button>
+                            </section>
+
                             <section>
                                 <div className="mb-2.5 flex items-center gap-2">
                                     <Calendar className="h-3.5 w-3.5 text-orange-500" />
@@ -409,10 +443,14 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
     );
 };
 
-export const countShowFilters = (selections: FilterSelections, dateFilter: ShowDateFilter) => {
+export const countShowFilters = (
+    selections: FilterSelections,
+    dateFilter: ShowDateFilter,
+    exhibitorsOnly = false,
+) => {
     const categoryCount = Object.values(selections).reduce((sum, arr) => sum + arr.length, 0);
     const dateActive = dateFilter.preset !== 'all' || !!dateFilter.from || !!dateFilter.to;
-    return categoryCount + (dateActive ? 1 : 0);
+    return categoryCount + (dateActive ? 1 : 0) + (exhibitorsOnly ? 1 : 0);
 };
 
 export const matchesShowDateFilter = (rawDate: string | null | undefined, dateFilter: ShowDateFilter) => {

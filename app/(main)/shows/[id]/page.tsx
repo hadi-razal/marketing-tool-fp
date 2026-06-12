@@ -160,50 +160,6 @@ type ShowContact = {
     phone: string;
 };
 
-/** Placeholder show contacts — replace with show.people JSONB when wired to DB */
-const DEMO_SHOW_CONTACTS: ShowContact[] = [
-    {
-        id: 'show-contact-1',
-        name: 'Sarah Mitchell',
-        role: 'Event Director',
-        department: 'Organiser Team',
-        email: 'sarah.mitchell@eventorganiser.com',
-        phone: '+971 2 555 0101',
-    },
-    {
-        id: 'show-contact-2',
-        name: 'Omar Al-Hassan',
-        role: 'Registration Manager',
-        department: 'Visitor Services',
-        email: 'omar.alhassan@eventorganiser.com',
-        phone: '+971 2 555 0102',
-    },
-    {
-        id: 'show-contact-3',
-        name: 'Elena Petrova',
-        role: 'Exhibitor Relations Lead',
-        department: 'Sales & Exhibitors',
-        email: 'elena.petrova@eventorganiser.com',
-        phone: '+971 2 555 0103',
-    },
-    {
-        id: 'show-contact-4',
-        name: 'James Whitfield',
-        role: 'Marketing Coordinator',
-        department: 'Communications',
-        email: 'james.whitfield@eventorganiser.com',
-        phone: '+971 2 555 0104',
-    },
-    {
-        id: 'show-contact-5',
-        name: 'Fatima Al-Qasimi',
-        role: 'Venue Operations',
-        department: 'ADNEC Operations',
-        email: 'fatima.alqasimi@adnec.ae',
-        phone: '+971 2 555 0199',
-    },
-];
-
 const EXHIBITOR_SORT_OPTIONS: { key: string; label: string }[] = [
     { key: 'company', label: 'Company' },
     { key: 'year', label: 'Year' },
@@ -315,7 +271,7 @@ export default function ShowDetailPage() {
     const [exhibitorFacets, setExhibitorFacets] = useState<ExhibitorFacets | null>(null);
     const exhibitorListRef = useRef<HTMLDivElement>(null);
     const exhibitorFetchKeyRef = useRef('');
-    const showContacts = DEMO_SHOW_CONTACTS;
+    const showContacts: ShowContact[] = [];
     const [isContactSelectMode, setIsContactSelectMode] = useState(false);
     const [selectedContactKeys, setSelectedContactKeys] = useState<string[]>([]);
     const [featureInfoModal, setFeatureInfoModal] = useState<{ isOpen: boolean; title: string; description: string }>({

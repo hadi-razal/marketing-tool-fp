@@ -150,20 +150,20 @@ export const ShowsTable = () => {
                     world_area: String(row.world_area || ''),
                     country: String(row.country || ''),
                 }))
-                .map((item) => {
+                .flatMap((item) => {
                     const parsed = new Date(item.starting_date);
-                    if (Number.isNaN(parsed.getTime())) return null;
-                    return {
+                    if (Number.isNaN(parsed.getTime())) return [];
+                    const upcoming: UpcomingShowItem = {
                         id: String(item.id),
                         name: String(item.name || 'Untitled show'),
                         date: parsed,
                         location: [item.city, item.country].filter(Boolean).join(', '),
-                        industry: item.industry || '',
-                    } satisfies UpcomingShowItem;
-                })
-                .filter((item): item is UpcomingShowItem => {
-                    if (!item) return false;
-                    return isAfter(item.date, startOfDay(new Date())) || isSameDay(item.date, startOfDay(new Date()));
+                        ...(item.industry ? { industry: String(item.industry) } : {}),
+                    };
+                    if (!isAfter(upcoming.date, startOfDay(new Date())) && !isSameDay(upcoming.date, startOfDay(new Date()))) {
+                        return [];
+                    }
+                    return [upcoming];
                 });
 
             setUpcomingShowsAll(items);

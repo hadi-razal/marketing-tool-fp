@@ -3,8 +3,9 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
-import { formatCompanyLocation } from '@/lib/utils';
+import { EXHIBITOR_PAGE_SIZE, mapParticipationToExhibitorRow, type ExhibitorFacets } from '@/lib/showExhibitors';
 import type { ShowParticipation, ShowExhibitorRow } from '@/types/showParticipation';
+import type { Floorplan } from '@/types/floorplan';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
@@ -34,9 +35,12 @@ import {
     Download,
     Link2,
     Upload,
+    Filter,
+    X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ShowFormModal } from '@/components/Zoho/ShowFormModal';
+import { FilterPopover, type FilterCategory, type FilterSelections } from '@/components/Zoho/FilterPopover';
 import { ShowImagesPanel } from '@/components/Shows/ShowImagesPanel';
 import { ShowHeaderLogo } from '@/components/Shows/ShowLogo';
 
@@ -208,32 +212,13 @@ const EXHIBITOR_SORT_OPTIONS: { key: string; label: string }[] = [
     { key: 'category', label: 'Category' },
 ];
 
-const extractLinks = (raw: string) => {
-    if (!raw) return [];
-    return raw
-        .split(/[\n,;]+/)
-        .map((v) => v.trim())
-        .filter(Boolean);
-};
-
-type FloorplanLinkItem = {
-    title: string;
-    url: string;
-    added_by_id?: string;
-    added_by_name?: string;
-    created_at?: string;
-};
-
-type FloorplanFileItem = {
-    id: string;
-    title: string;
-    url: string;
-    file_name?: string;
-    mime_type?: string;
-    storage_path?: string;
-    uploaded_by_id?: string;
-    uploaded_by_name?: string;
-    created_at?: string;
+const EMPTY_EXHIBITOR_FILTERS: FilterSelections = {
+    year: [],
+    category: [],
+    industry: [],
+    country: [],
+    worldArea: [],
+    employees: [],
 };
 
 const FLOORPLAN_STORAGE_BUCKET = 'floorplans';
@@ -247,55 +232,16 @@ const titleFromFileName = (name: string) => {
     return base.replace(/[_-]+/g, ' ').trim() || name;
 };
 
-const parseLinksJson = (raw: any): FloorplanLinkItem[] => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.filter((item: any) => item?.url);
-    const trimmed = String(raw).trim();
-    if (trimmed.startsWith('[')) {
-        try {
-            const parsed = JSON.parse(trimmed);
-            if (Array.isArray(parsed)) return parsed.filter((item: any) => item?.url);
-        } catch { }
-    }
-    return extractLinks(trimmed).map((url, i) => ({ title: `Link ${i + 1}`, url }));
+const storagePathFromFloorplanLink = (url: string): string | null => {
+    const marker = '/floorplans/';
+    const idx = url.indexOf(marker);
+    if (idx === -1) return null;
+    return decodeURIComponent(url.slice(idx + marker.length).split('?')[0]);
 };
 
-const parseFloorplanFiles = (raw: any): FloorplanFileItem[] => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) {
-        return raw
-            .filter((item: any) => item?.url)
-            .map((item: any, idx: number) => ({
-                id: String(item.id || `file-${idx}`),
-                title: String(item.title || item.file_name || 'Floorplan'),
-                url: String(item.url),
-                file_name: item.file_name ? String(item.file_name) : undefined,
-                mime_type: item.mime_type ? String(item.mime_type) : undefined,
-                storage_path: item.storage_path ? String(item.storage_path) : undefined,
-                uploaded_by_id: item.uploaded_by_id ? String(item.uploaded_by_id) : undefined,
-                uploaded_by_name: item.uploaded_by_name ? String(item.uploaded_by_name) : undefined,
-                created_at: item.created_at ? String(item.created_at) : undefined,
-            }));
-    }
-    const trimmed = String(raw).trim();
-    if (!trimmed) return [];
-    if (trimmed.startsWith('[')) {
-        try {
-            return parseFloorplanFiles(JSON.parse(trimmed));
-        } catch { }
-    }
-    return [{
-        id: 'legacy-file',
-        title: 'Floorplan',
-        url: trimmed,
-    }];
-};
-
-const floorplanAttribution = (name?: string, createdAt?: string) => {
-    const parts: string[] = [];
-    if (name) parts.push(`Added by ${name}`);
-    if (createdAt) parts.push(formatRelativeTime(createdAt));
-    return parts.join(' · ') || '—';
+const floorplanAttribution = (createdAt?: string) => {
+    if (createdAt) return formatRelativeTime(createdAt);
+    return '—';
 };
 
 /* ─── tabs ────────────────────────────────────────────────── */
@@ -355,11 +301,20 @@ export default function ShowDetailPage() {
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>('overview');
     const [exSearch, setExSearch] = useState('');
-    const [exSort, setExSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: '', dir: 'asc' });
+    const [appliedExSearch, setAppliedExSearch] = useState('');
+    const [exSort, setExSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'year', dir: 'desc' });
+    const [isExhibitorFilterOpen, setIsExhibitorFilterOpen] = useState(false);
+    const [exhibitorFilterSelections, setExhibitorFilterSelections] = useState<FilterSelections>(EMPTY_EXHIBITOR_FILTERS);
     const [isExhibitorSelectMode, setIsExhibitorSelectMode] = useState(false);
     const [selectedExhibitorIds, setSelectedExhibitorIds] = useState<string[]>([]);
     const [participations, setParticipations] = useState<ShowParticipation[]>([]);
     const [exhibitorsLoading, setExhibitorsLoading] = useState(false);
+    const [exhibitorsLoadingMore, setExhibitorsLoadingMore] = useState(false);
+    const [exhibitorTotal, setExhibitorTotal] = useState(0);
+    const [exhibitorHasMore, setExhibitorHasMore] = useState(false);
+    const [exhibitorFacets, setExhibitorFacets] = useState<ExhibitorFacets | null>(null);
+    const exhibitorListRef = useRef<HTMLDivElement>(null);
+    const exhibitorFetchKeyRef = useRef('');
     const showContacts = DEMO_SHOW_CONTACTS;
     const [isContactSelectMode, setIsContactSelectMode] = useState(false);
     const [selectedContactKeys, setSelectedContactKeys] = useState<string[]>([]);
@@ -375,6 +330,7 @@ export default function ShowDetailPage() {
     const [pendingFloorplanFile, setPendingFloorplanFile] = useState<File | null>(null);
     const [uploadFloorplanForm, setUploadFloorplanForm] = useState({ title: '' });
     const [floorplanUploading, setFloorplanUploading] = useState(false);
+    const [floorplan, setFloorplan] = useState<Floorplan | null>(null);
     const floorplanFileInputRef = useRef<HTMLInputElement>(null);
     const tabsScrollRef = useRef<HTMLDivElement>(null);
     const [tabsOverflow, setTabsOverflow] = useState(false);
@@ -462,6 +418,24 @@ export default function ShowDetailPage() {
         fetchShow();
     }, [showId, supabase]);
 
+    const fetchFloorplan = useCallback(async () => {
+        if (!showId) return;
+        const { data: row, error } = await supabase
+            .from('floorplans')
+            .select('*')
+            .eq('id', showId)
+            .maybeSingle();
+        if (error) {
+            console.error('Failed to load floorplan:', error);
+            return;
+        }
+        setFloorplan(row);
+    }, [showId, supabase]);
+
+    useEffect(() => {
+        fetchFloorplan();
+    }, [fetchFloorplan]);
+
     useEffect(() => {
         const loadUser = async () => {
             const { data: authData } = await supabase.auth.getUser();
@@ -498,9 +472,19 @@ export default function ShowDetailPage() {
     }, [data?.comments, supabase]);
 
     const handleAddNewLink = () => {
-        setLinkForm({ title: '', url: '' });
+        setLinkForm({
+            title: floorplan?.name || '',
+            url: floorplan?.link || '',
+        });
         setAddLinkModal(true);
     };
+
+    const defaultFloorplanYear = useCallback(() => {
+        const startingDate = getValue(data, ['starting_date', 'Starting_Date', 'date', 'Date']);
+        if (!startingDate) return null;
+        const year = new Date(startingDate).getFullYear();
+        return Number.isNaN(year) ? null : String(year);
+    }, [data]);
 
     const handleSaveLink = async () => {
         if (!linkForm.title.trim() || !linkForm.url.trim()) {
@@ -509,57 +493,25 @@ export default function ShowDetailPage() {
         }
         setLinkSaving(true);
         try {
-            const existing = parseLinksJson(data?.floorplan_link ?? null);
-            const updated: FloorplanLinkItem[] = [
-                ...existing,
-                {
-                    title: linkForm.title.trim(),
-                    url: normalizeExternalUrl(linkForm.url.trim()),
-                    added_by_id: currentUser?.id,
-                    added_by_name: currentUser?.name || currentUser?.email,
-                    created_at: new Date().toISOString(),
-                },
-            ];
-
             const { error } = await supabase
-                .from('shows')
-                .update({ floorplan_link: updated })
-                .eq('id', showId);
+                .from('floorplans')
+                .upsert({
+                    id: showId,
+                    link: normalizeExternalUrl(linkForm.url.trim()),
+                    name: linkForm.title.trim(),
+                    year: defaultFloorplanYear(),
+                });
 
             if (error) throw error;
 
-            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
-            if (rows && rows.length > 0) setData(rows[0]);
-
+            await fetchFloorplan();
             setAddLinkModal(false);
-            toast.success('Link added');
+            toast.success('Floorplan link saved');
         } catch (err: any) {
             console.error('Add link error:', err);
-            toast.error(err?.message || 'Failed to add link.');
+            toast.error(err?.message || 'Failed to save floorplan link.');
         } finally {
             setLinkSaving(false);
-        }
-    };
-
-    const handleDeleteLink = async (indexToRemove: number) => {
-        try {
-            const existing = parseLinksJson(data?.floorplan_link ?? null);
-            const updated = existing.filter((_, i) => i !== indexToRemove);
-
-            const { error } = await supabase
-                .from('shows')
-                .update({ floorplan_link: updated.length ? updated : null })
-                .eq('id', showId);
-
-            if (error) throw error;
-
-            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
-            if (rows && rows.length > 0) setData(rows[0]);
-
-            toast.success('Link removed');
-        } catch (err: any) {
-            console.error('Delete link error:', err);
-            toast.error(err?.message || 'Failed to remove link.');
         }
     };
 
@@ -615,31 +567,18 @@ export default function ShowDetailPage() {
                 .from(FLOORPLAN_STORAGE_BUCKET)
                 .getPublicUrl(storagePath);
 
-            const newEntry: FloorplanFileItem = {
-                id: crypto.randomUUID(),
-                title,
-                url: publicUrl,
-                file_name: pendingFloorplanFile.name,
-                mime_type: pendingFloorplanFile.type || undefined,
-                storage_path: storagePath,
-                uploaded_by_id: currentUser.id,
-                uploaded_by_name: currentUser.name || currentUser.email || 'User',
-                created_at: new Date().toISOString(),
-            };
-
-            const existing = parseFloorplanFiles(data?.floorplan_file ?? null);
-            const updated = [...existing, newEntry];
-
             const { error } = await supabase
-                .from('shows')
-                .update({ floorplan_file: updated })
-                .eq('id', showId);
+                .from('floorplans')
+                .upsert({
+                    id: showId,
+                    link: publicUrl,
+                    name: title,
+                    year: defaultFloorplanYear(),
+                });
 
             if (error) throw error;
 
-            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
-            if (rows && rows.length > 0) setData(rows[0]);
-
+            await fetchFloorplan();
             setUploadFloorplanModal(false);
             setPendingFloorplanFile(null);
             setUploadFloorplanForm({ title: '' });
@@ -652,26 +591,22 @@ export default function ShowDetailPage() {
         }
     };
 
-    const handleDeleteFloorplanFile = async (fileId: string) => {
+    const handleDeleteFloorplan = async () => {
+        if (!floorplan?.link) return;
         try {
-            const existing = parseFloorplanFiles(data?.floorplan_file ?? null);
-            const target = existing.find((f) => f.id === fileId);
-            const updated = existing.filter((f) => f.id !== fileId);
-
-            if (target?.storage_path) {
-                await supabase.storage.from(FLOORPLAN_STORAGE_BUCKET).remove([target.storage_path]);
+            const storagePath = storagePathFromFloorplanLink(floorplan.link);
+            if (storagePath) {
+                await supabase.storage.from(FLOORPLAN_STORAGE_BUCKET).remove([storagePath]);
             }
 
             const { error } = await supabase
-                .from('shows')
-                .update({ floorplan_file: updated.length ? updated : null })
+                .from('floorplans')
+                .delete()
                 .eq('id', showId);
 
             if (error) throw error;
 
-            const { data: rows } = await supabase.from('shows').select('*').eq('id', showId).limit(1);
-            if (rows && rows.length > 0) setData(rows[0]);
-
+            setFloorplan(null);
             toast.success('Floorplan removed');
         } catch (err: any) {
             console.error('Delete floorplan error:', err);
@@ -728,97 +663,220 @@ export default function ShowDetailPage() {
     };
 
     useEffect(() => {
-        if (!showId) return;
+        setParticipations([]);
+        setExhibitorTotal(0);
+        setExhibitorHasMore(false);
+        setExhibitorFacets(null);
+        exhibitorFetchKeyRef.current = '';
+    }, [showId]);
 
-        let cancelled = false;
+    const applyExhibitorSearch = useCallback(() => {
+        setAppliedExSearch(exSearch.trim());
+    }, [exSearch]);
 
-        const fetchParticipations = async () => {
+    const clearExhibitorSearch = useCallback(() => {
+        setExSearch('');
+        setAppliedExSearch('');
+    }, []);
+
+    const buildExhibitorQuery = useCallback((offset: number) => {
+        const params = new URLSearchParams({
+            limit: String(EXHIBITOR_PAGE_SIZE),
+            offset: String(offset),
+            search: appliedExSearch,
+            sortKey: exSort.key || 'year',
+            sortDir: exSort.dir,
+            filters: JSON.stringify(exhibitorFilterSelections),
+        });
+        return params.toString();
+    }, [appliedExSearch, exSort, exhibitorFilterSelections]);
+
+    const fetchExhibitorFacets = useCallback(async (signal?: AbortSignal) => {
+        const response = await fetch(`/api/shows/${encodeURIComponent(showId)}/exhibitors?facets=1`, { signal });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload?.error || 'Failed to load exhibitor filters.');
+        }
+        return payload?.facets as ExhibitorFacets;
+    }, [showId]);
+
+    const fetchExhibitorPage = useCallback(async (offset: number, signal?: AbortSignal) => {
+        const response = await fetch(
+            `/api/shows/${encodeURIComponent(showId)}/exhibitors?${buildExhibitorQuery(offset)}`,
+            { signal },
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload?.error || 'Failed to load exhibitors.');
+        }
+        return {
+            participations: Array.isArray(payload?.participations) ? payload.participations as ShowParticipation[] : [],
+            total: Number(payload?.total ?? 0),
+            hasMore: Boolean(payload?.hasMore),
+        };
+    }, [showId, buildExhibitorQuery]);
+
+    useEffect(() => {
+        if (!showId || activeTab !== 'exhibitors') return;
+
+        const controller = new AbortController();
+        const fetchKey = `${showId}:${buildExhibitorQuery(0)}`;
+
+        if (exhibitorFetchKeyRef.current === fetchKey) return;
+        exhibitorFetchKeyRef.current = fetchKey;
+
+        const loadPage = async () => {
             setExhibitorsLoading(true);
+            exhibitorListRef.current?.scrollTo({ top: 0 });
             try {
-                const { data: rows, error } = await supabase
-                    .from('show_participation')
-                    .select('id, show_id, company_id, year, booth_number, booth_size, booth_size_category, created_at')
-                    .eq('show_id', showId)
-                    .order('year', { ascending: false });
-
-                if (error) throw error;
-
-                const participationRows = rows ?? [];
-                const companyIds = [...new Set(
-                    participationRows
-                        .map((row) => String(row.company_id ?? '').trim())
-                        .filter(Boolean),
-                )];
-
-                const companyMap = new Map<string, ShowParticipation['companies']>();
-                if (companyIds.length > 0) {
-                    const { data: companyRows, error: companyError } = await supabase
-                        .from('companies')
-                        .select('id, name, logo_url, country, world_area, industry, primary_domain, estimated_num_employees')
-                        .in('id', companyIds);
-
-                    if (companyError) throw companyError;
-
-                    for (const company of companyRows ?? []) {
-                        companyMap.set(String(company.id), company);
-                    }
-                }
-
-                const normalized = participationRows.map((row) => ({
-                    ...row,
-                    companies: row.company_id
-                        ? companyMap.get(String(row.company_id)) ?? null
-                        : null,
-                })) as ShowParticipation[];
-
-                if (!cancelled) setParticipations(normalized);
-            } catch (err: any) {
-                console.error('Fetch show participations error:', err);
-                if (!cancelled) {
-                    toast.error(err?.message || 'Failed to load exhibitors.');
-                    setParticipations([]);
-                }
+                const page = await fetchExhibitorPage(0, controller.signal);
+                if (controller.signal.aborted) return;
+                setParticipations(page.participations);
+                setExhibitorTotal(page.total);
+                setExhibitorHasMore(page.hasMore);
+            } catch (err: unknown) {
+                if (controller.signal.aborted) return;
+                console.error('Fetch show exhibitors error:', err);
+                toast.error(err instanceof Error ? err.message : 'Failed to load exhibitors.');
+                setParticipations([]);
+                setExhibitorTotal(0);
+                setExhibitorHasMore(false);
             } finally {
-                if (!cancelled) setExhibitorsLoading(false);
+                if (!controller.signal.aborted) setExhibitorsLoading(false);
             }
         };
 
-        fetchParticipations();
-        return () => {
-            cancelled = true;
-        };
-    }, [showId, supabase]);
+        loadPage();
+        return () => controller.abort();
+    }, [showId, activeTab, buildExhibitorQuery, fetchExhibitorPage]);
 
-    const exhibitorRows = useMemo<ShowExhibitorRow[]>(() => {
-        return participations.flatMap((row) => {
-            const companyId = String(row.company_id ?? row.companies?.id ?? '').trim();
-            if (!companyId) return [];
+    useEffect(() => {
+        if (!showId || activeTab !== 'exhibitors' || exhibitorFacets) return;
 
-            const company = row.companies;
-            const sqm = parseSqm(String(row.booth_size ?? ''));
-            const categoryMeta = boothCategoryFromDb(row.booth_size_category) ?? boothCategoryFromSqm(sqm);
-            const booth = String(row.booth_number ?? '').trim() || '—';
-            const sizeRaw = String(row.booth_size ?? '').trim();
-            const size = sizeRaw || (sqm > 0 ? `${sqm} sqm` : '—');
+        const controller = new AbortController();
+        fetchExhibitorFacets(controller.signal)
+            .then((facets) => {
+                if (!controller.signal.aborted && facets) setExhibitorFacets(facets);
+            })
+            .catch((err: unknown) => {
+                if (controller.signal.aborted) return;
+                console.error('Fetch exhibitor facets error:', err);
+            });
 
-            return [{
-                id: String(row.id),
-                companyId,
-                company: String(company?.name ?? 'Unknown Company'),
-                year: String(row.year ?? ''),
-                booth,
-                size,
-                sqm,
-                category: categoryMeta.label,
-                categoryOrder: categoryMeta.order,
-                logoUrl: String(company?.logo_url ?? ''),
-                location: formatCompanyLocation(company ?? {}),
-                industry: String(company?.industry ?? ''),
-                domain: String(company?.primary_domain ?? ''),
-                employees: Number(company?.estimated_num_employees ?? 0),
-            }];
-        });
-    }, [participations]);
+        return () => controller.abort();
+    }, [showId, activeTab, exhibitorFacets, fetchExhibitorFacets]);
+
+    const loadMoreExhibitors = useCallback(async () => {
+        if (exhibitorsLoading || exhibitorsLoadingMore || !exhibitorHasMore) return;
+
+        setExhibitorsLoadingMore(true);
+        try {
+            const page = await fetchExhibitorPage(participations.length);
+            setParticipations((prev) => {
+                const seen = new Set(prev.map((row) => String(row.id)));
+                const next = [...prev];
+                page.participations.forEach((row) => {
+                    const id = String(row.id);
+                    if (!seen.has(id)) next.push(row);
+                });
+                return next;
+            });
+            setExhibitorTotal(page.total);
+            setExhibitorHasMore(page.hasMore);
+        } catch (err: unknown) {
+            console.error('Load more exhibitors error:', err);
+            toast.error(err instanceof Error ? err.message : 'Failed to load more exhibitors.');
+        } finally {
+            setExhibitorsLoadingMore(false);
+        }
+    }, [exhibitorsLoading, exhibitorsLoadingMore, exhibitorHasMore, fetchExhibitorPage, participations.length]);
+
+    const exhibitorRows = useMemo<ShowExhibitorRow[]>(() => (
+        participations
+            .map((row) => mapParticipationToExhibitorRow(row))
+            .filter((row): row is ShowExhibitorRow => row !== null)
+    ), [participations]);
+
+    const totalActiveExhibitorFilters = useMemo(
+        () => Object.values(exhibitorFilterSelections).reduce((sum, values) => sum + values.length, 0),
+        [exhibitorFilterSelections],
+    );
+
+    const exhibitorFilterCategories = useMemo<FilterCategory[]>(() => {
+        if (!exhibitorFacets) return [];
+
+        const categories: FilterCategory[] = [
+            {
+                key: 'year',
+                label: 'Attended Year',
+                icon: <Calendar className="h-3.5 w-3.5" />,
+                options: exhibitorFacets.year,
+            },
+            {
+                key: 'category',
+                label: 'Booth Category',
+                icon: <Layers className="h-3.5 w-3.5" />,
+                options: exhibitorFacets.category,
+            },
+            {
+                key: 'industry',
+                label: 'Industry',
+                icon: <Building2 className="h-3.5 w-3.5" />,
+                options: exhibitorFacets.industry,
+            },
+            {
+                key: 'country',
+                label: 'Country',
+                icon: <MapPin className="h-3.5 w-3.5" />,
+                options: exhibitorFacets.country,
+            },
+            {
+                key: 'worldArea',
+                label: 'Region',
+                icon: <Globe2 className="h-3.5 w-3.5" />,
+                options: exhibitorFacets.worldArea,
+            },
+            {
+                key: 'employees',
+                label: 'Company Size',
+                icon: <Users className="h-3.5 w-3.5" />,
+                options: exhibitorFacets.employees,
+            },
+        ];
+
+        return categories.filter((category) => category.options.length > 0);
+    }, [exhibitorFacets]);
+
+    const hasExhibitorFiltersActive = Boolean(
+        appliedExSearch || totalActiveExhibitorFilters > 0,
+    );
+
+    const toggleExhibitorSort = (key: string) => {
+        setExSort((prev) => (
+            prev.key === key
+                ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                : { key, dir: 'asc' }
+        ));
+    };
+
+    const ExhibitorSortIcon = ({ col }: { col: string }) => {
+        if (exSort.key !== col) return <ArrowUpDown className="h-3 w-3 text-zinc-300" />;
+        return exSort.dir === 'asc'
+            ? <ChevronUp className="h-3 w-3 text-orange-500" />
+            : <ChevronDown className="h-3 w-3 text-orange-500" />;
+    };
+
+    const clearExhibitorFilters = () => {
+        setExhibitorFilterSelections(EMPTY_EXHIBITOR_FILTERS);
+        clearExhibitorSearch();
+    };
+
+    const removeExhibitorFilterValue = (key: string, value: string) => {
+        setExhibitorFilterSelections((prev) => ({
+            ...prev,
+            [key]: (prev[key] || []).filter((item) => item !== value),
+        }));
+    };
 
     const handleDelete = async () => {
         if (!confirm('Delete this show permanently?')) return;
@@ -1018,7 +1076,7 @@ export default function ShowDetailPage() {
                                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50">
                                     <Link2 className="h-4 w-4 text-orange-500" />
                                 </div>
-                                <h3 className="text-base font-semibold text-zinc-900">Manage Links</h3>
+                                <h3 className="text-base font-semibold text-zinc-900">{floorplan?.link ? 'Edit floorplan link' : 'Add floorplan link'}</h3>
                             </div>
                             <button
                                 onClick={() => setAddLinkModal(false)}
@@ -1066,7 +1124,7 @@ export default function ShowDetailPage() {
                                 disabled={linkSaving || !linkForm.title.trim() || !linkForm.url.trim()}
                                 leftIcon={linkSaving ? undefined : <Plus className="h-4 w-4" />}
                             >
-                                {linkSaving ? 'Saving…' : 'Add Link'}
+                                {linkSaving ? 'Saving…' : floorplan?.link ? 'Save changes' : 'Add link'}
                             </Button>
                         </div>
                     </div>
@@ -1664,37 +1722,16 @@ export default function ShowDetailPage() {
                                             return 'link';
                                         };
 
-                                        const floorplanItems = [
-                                            ...parseFloorplanFiles(data?.floorplan_file ?? null).map((item) => ({
-                                                id: `file-${item.id}`,
-                                                name: item.title,
-                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                type: toType(item.url),
-                                                source: 'Uploaded file',
-                                                url: normalizeExternalUrl(item.url),
-                                                attribution: floorplanAttribution(
-                                                    item.uploaded_by_name,
-                                                    item.created_at,
-                                                ),
-                                                fileName: item.file_name,
-                                                kind: 'file' as const,
-                                                fileId: item.id,
-                                            })),
-                                            ...parseLinksJson(data?.floorplan_link ?? null).map((item, idx) => ({
-                                                id: `link-${idx}-${item.url}`,
-                                                name: item.title || `${eventName} — Floorplan ${idx + 1}`,
-                                                year: startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A',
-                                                type: toType(item.url),
-                                                source: 'Map link',
-                                                url: normalizeExternalUrl(item.url),
-                                                attribution: floorplanAttribution(
-                                                    item.added_by_name,
-                                                    item.created_at,
-                                                ),
-                                                kind: 'link' as const,
-                                                linkIndex: idx,
-                                            })),
-                                        ];
+                                        const floorplanLink = floorplan?.link ? normalizeExternalUrl(floorplan.link) : '';
+                                        const floorplanItems = floorplanLink ? [{
+                                            id: floorplan!.id,
+                                            name: floorplan?.name || `${eventName} Floorplan`,
+                                            year: floorplan?.year || (startingDate ? String(new Date(startingDate).getFullYear()) : 'N/A'),
+                                            type: toType(floorplanLink),
+                                            source: storagePathFromFloorplanLink(floorplanLink) ? 'Uploaded file' : 'Map link',
+                                            url: floorplanLink,
+                                            attribution: floorplanAttribution(floorplan?.created_at),
+                                        }] : [];
 
                                         const typeBadge = (type: 'pdf' | 'link' | 'image') => {
                                             const styles = {
@@ -1731,9 +1768,6 @@ export default function ShowDetailPage() {
                                                                 {fp.source} · {fp.year}
                                                             </p>
                                                             <p className="mt-0.5 truncate text-xs text-zinc-500">{fp.attribution}</p>
-                                                            {'fileName' in fp && fp.fileName ? (
-                                                                <p className="mt-0.5 truncate text-[11px] text-zinc-400">{fp.fileName}</p>
-                                                            ) : null}
                                                         </div>
                                                         <div className="hidden sm:block">
                                                             {typeBadge(fp.type)}
@@ -1750,13 +1784,7 @@ export default function ShowDetailPage() {
                                                             </a>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => {
-                                                                    if (fp.kind === 'file' && fp.fileId) {
-                                                                        handleDeleteFloorplanFile(fp.fileId);
-                                                                    } else if (fp.kind === 'link' && fp.linkIndex !== undefined) {
-                                                                        handleDeleteLink(fp.linkIndex);
-                                                                    }
-                                                                }}
+                                                                onClick={handleDeleteFloorplan}
                                                                 className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
                                                                 aria-label="Remove floorplan"
                                                             >
@@ -1782,36 +1810,120 @@ export default function ShowDetailPage() {
                         activeTab === 'exhibitors' && (
                             <div className="w-full py-4 sm:py-6 flex min-h-0 flex-1 flex-col">
                                 <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col px-4 sm:px-6 lg:px-8">
-                                    <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <h2 className="text-lg font-semibold text-zinc-900">Exhibitors</h2>
-                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                            <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 sm:w-56">
-                                                <Search className="h-4 w-4 text-zinc-400" />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Search exhibitors..."
-                                                    className="w-full bg-transparent text-sm outline-none"
-                                                    value={exSearch}
-                                                    onChange={(e) => setExSearch(e.target.value)}
-                                                />
+                                    <div className="flex flex-col gap-3 pb-4">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <h2 className="text-lg font-semibold text-zinc-900">Exhibitors</h2>
+                                                <p className="mt-0.5 text-xs text-zinc-500">
+                                                    Showing {exhibitorRows.length} of {exhibitorTotal} exhibitors
+                                                </p>
                                             </div>
-                                            <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
-                                                Add Exhibitor
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="h-9 rounded-md"
-                                                onClick={() => {
-                                                    setIsExhibitorSelectMode((prev) => {
-                                                        if (prev) setSelectedExhibitorIds([]);
-                                                        return !prev;
-                                                    });
-                                                }}
-                                            >
-                                                {isExhibitorSelectMode ? 'Cancel Selection' : 'Select'}
-                                            </Button>
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 sm:w-56">
+                                                        <Search className="h-4 w-4 text-zinc-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search exhibitors..."
+                                                            className="w-full bg-transparent text-sm outline-none"
+                                                            value={exSearch}
+                                                            onChange={(e) => setExSearch(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    applyExhibitorSearch();
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        className="h-9 rounded-md"
+                                                        onClick={applyExhibitorSearch}
+                                                    >
+                                                        Search
+                                                    </Button>
+                                                </div>
+                                                <div className="relative">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        className={`h-9 rounded-md ${totalActiveExhibitorFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : ''}`}
+                                                        leftIcon={<Filter className="h-4 w-4" />}
+                                                        onClick={() => setIsExhibitorFilterOpen((prev) => !prev)}
+                                                    >
+                                                        Filters
+                                                        {totalActiveExhibitorFilters > 0 && (
+                                                            <span className="ml-1">({totalActiveExhibitorFilters})</span>
+                                                        )}
+                                                    </Button>
+                                                    <FilterPopover
+                                                        isOpen={isExhibitorFilterOpen}
+                                                        onClose={() => setIsExhibitorFilterOpen(false)}
+                                                        categories={exhibitorFilterCategories}
+                                                        selections={exhibitorFilterSelections}
+                                                        onApply={setExhibitorFilterSelections}
+                                                        onClear={() => setExhibitorFilterSelections(EMPTY_EXHIBITOR_FILTERS)}
+                                                    />
+                                                </div>
+                                                <Button size="sm" variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => toast.info('Coming soon')}>
+                                                    Add Exhibitor
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="h-9 rounded-md"
+                                                    onClick={() => {
+                                                        setIsExhibitorSelectMode((prev) => {
+                                                            if (prev) setSelectedExhibitorIds([]);
+                                                            return !prev;
+                                                        });
+                                                    }}
+                                                >
+                                                    {isExhibitorSelectMode ? 'Cancel Selection' : 'Select'}
+                                                </Button>
+                                            </div>
                                         </div>
+
+                                        {hasExhibitorFiltersActive && (
+                                            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Active:</span>
+                                                {appliedExSearch && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={clearExhibitorSearch}
+                                                        className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:border-orange-300"
+                                                    >
+                                                        Search: {appliedExSearch}
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                )}
+                                                {Object.entries(exhibitorFilterSelections).flatMap(([key, values]) =>
+                                                    values.map((value) => {
+                                                        const label = exhibitorFilterCategories.find((category) => category.key === key)?.label ?? key;
+                                                        return (
+                                                            <button
+                                                                key={`${key}-${value}`}
+                                                                type="button"
+                                                                onClick={() => removeExhibitorFilterValue(key, value)}
+                                                                className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:border-orange-300"
+                                                            >
+                                                                {label}: {value}
+                                                                <X className="h-3 w-3" />
+                                                            </button>
+                                                        );
+                                                    }),
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={clearExhibitorFilters}
+                                                    className="text-xs font-semibold text-orange-600 hover:text-orange-700"
+                                                >
+                                                    Clear all
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                     {isExhibitorSelectMode && (
                                         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
@@ -1861,54 +1973,27 @@ export default function ShowDetailPage() {
                                         </div>
                                     )}
                                     <div className="flex h-[calc(100vh-320px)] min-h-[500px] max-h-[760px] min-w-0 flex-col overflow-hidden">
-                                        {(() => {
-                                            const q = exSearch.toLowerCase();
-                                            const filtered = q
-                                                ? exhibitorRows.filter(ex =>
-                                                    ex.company.toLowerCase().includes(q) ||
-                                                    ex.booth.toLowerCase().includes(q) ||
-                                                    ex.year.includes(q) ||
-                                                    ex.category.toLowerCase().includes(q) ||
-                                                    ex.size.toLowerCase().includes(q)
-                                                )
-                                                : exhibitorRows;
-
-                                            // Sort
-                                            const sorted = exSort.key
-                                                ? [...filtered].sort((a, b) => {
-                                                    const aVal = a[exSort.key as keyof typeof a];
-                                                    const bVal = b[exSort.key as keyof typeof b];
-                                                    // Extract numeric value for size column
-                                                    if (exSort.key === 'size' || exSort.key === 'sqm') {
-                                                        const aNum = exSort.key === 'sqm' ? a.sqm : parseSqm(String(aVal));
-                                                        const bNum = exSort.key === 'sqm' ? b.sqm : parseSqm(String(bVal));
-                                                        return exSort.dir === 'asc' ? aNum - bNum : bNum - aNum;
-                                                    }
-                                                    if (exSort.key === 'category') {
-                                                        return exSort.dir === 'asc'
-                                                            ? a.categoryOrder - b.categoryOrder
-                                                            : b.categoryOrder - a.categoryOrder;
-                                                    }
-                                                    const cmp = String(aVal).localeCompare(String(bVal));
-                                                    return exSort.dir === 'asc' ? cmp : -cmp;
-                                                })
-                                                : filtered;
-
-                                            const toggleSort = (key: string) => {
-                                                setExSort(prev =>
-                                                    prev.key === key
-                                                        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-                                                        : { key, dir: 'asc' }
-                                                );
-                                            };
-
-                                            const SortIcon = ({ col }: { col: string }) => {
-                                                if (exSort.key !== col) return <ArrowUpDown className="h-3 w-3 text-zinc-300" />;
-                                                return exSort.dir === 'asc'
-                                                    ? <ChevronUp className="h-3 w-3 text-orange-500" />
-                                                    : <ChevronDown className="h-3 w-3 text-orange-500" />;
-                                            };
-
+                                        {exhibitorsLoading && participations.length === 0 ? (
+                                            <div className="h-full overflow-y-auto">
+                                                <div className="mb-2.5 hidden rounded-xl border border-zinc-200 bg-zinc-50/95 px-4 py-2.5 md:block">
+                                                    <Skeleton className="h-4 w-full rounded-md" />
+                                                </div>
+                                                <div className="flex flex-col gap-2.5">
+                                                    {Array.from({ length: 8 }).map((_, index) => (
+                                                        <div key={index} className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <Skeleton className="h-10 w-10 rounded-lg" />
+                                                                <div className="min-w-0 flex-1 space-y-2">
+                                                                    <Skeleton className="h-4 w-2/5 rounded-md" />
+                                                                    <Skeleton className="h-3 w-1/3 rounded-md" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (() => {
+                                            const sorted = exhibitorRows;
                                             const visibleIds = sorted.map((ex) => ex.id);
                                             const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedExhibitorIds.includes(id));
 
@@ -1947,7 +2032,10 @@ export default function ShowDetailPage() {
                                             );
 
                                             return (
-                                                <div className="h-full overflow-y-auto">
+                                                <div
+                                                    ref={exhibitorListRef}
+                                                    className="h-full overflow-y-auto"
+                                                >
                                                     {/* Mobile: sort chips */}
                                                     <div className="sticky top-0 z-20 mb-2.5 space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/95 p-3 backdrop-blur md:hidden">
                                                         {isExhibitorSelectMode && (
@@ -1966,14 +2054,14 @@ export default function ShowDetailPage() {
                                                                 <button
                                                                     key={opt.key}
                                                                     type="button"
-                                                                    onClick={() => toggleSort(opt.key)}
+                                                                    onClick={() => toggleExhibitorSort(opt.key)}
                                                                     className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${exSort.key === opt.key
                                                                         ? 'border-orange-200 bg-orange-50 text-orange-700'
                                                                         : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
                                                                         }`}
                                                                 >
                                                                     {opt.label}
-                                                                    <SortIcon col={opt.key} />
+                                                                    <ExhibitorSortIcon col={opt.key} />
                                                                 </button>
                                                             ))}
                                                         </div>
@@ -1991,25 +2079,25 @@ export default function ShowDetailPage() {
                                                                     title="Select all visible"
                                                                 />
                                                             )}
-                                                            <button type="button" onClick={() => toggleSort('company')} className="inline-flex items-center gap-1 hover:text-zinc-600">
-                                                                Company <SortIcon col="company" />
+                                                            <button type="button" onClick={() => toggleExhibitorSort('company')} className="inline-flex items-center gap-1 hover:text-zinc-600">
+                                                                Company <ExhibitorSortIcon col="company" />
                                                             </button>
-                                                            <button type="button" onClick={() => toggleSort('year')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                                Attended Year <SortIcon col="year" />
+                                                            <button type="button" onClick={() => toggleExhibitorSort('year')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Attended Year <ExhibitorSortIcon col="year" />
                                                             </button>
-                                                            <button type="button" onClick={() => toggleSort('booth')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                                Booth Number <SortIcon col="booth" />
+                                                            <button type="button" onClick={() => toggleExhibitorSort('booth')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Booth Number <ExhibitorSortIcon col="booth" />
                                                             </button>
-                                                            <button type="button" onClick={() => toggleSort('size')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                                Booth Size <SortIcon col="size" />
+                                                            <button type="button" onClick={() => toggleExhibitorSort('size')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Booth Size <ExhibitorSortIcon col="size" />
                                                             </button>
-                                                            <button type="button" onClick={() => toggleSort('category')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
-                                                                Category <SortIcon col="category" />
+                                                            <button type="button" onClick={() => toggleExhibitorSort('category')} className="inline-flex items-center justify-center gap-1 hover:text-zinc-600">
+                                                                Category <ExhibitorSortIcon col="category" />
                                                             </button>
                                                         </div>
                                                     </div>
 
-                                                    {sorted.length > 0 ? (
+                                                    {exhibitorRows.length > 0 ? (
                                                         <div className="flex w-full flex-col gap-2.5">
                                                             {sorted.map((ex) => {
                                                                 const avatarText = initialsFromName(ex.company);
@@ -2118,18 +2206,38 @@ export default function ShowDetailPage() {
                                                                     </div>
                                                                 );
                                                             })}
-                                                        </div>
-                                                    ) : exhibitorsLoading ? (
-                                                        <div className="py-12 text-center">
-                                                            <p className="text-sm text-zinc-400">Loading exhibitors...</p>
+                                                            {exhibitorHasMore && (
+                                                                <div className="py-4 text-center">
+                                                                    <p className="text-xs text-zinc-400">
+                                                                        Loaded {exhibitorRows.length} of {exhibitorTotal} exhibitors
+                                                                    </p>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={loadMoreExhibitors}
+                                                                        disabled={exhibitorsLoadingMore}
+                                                                        className="mt-2 text-sm font-semibold text-orange-600 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                    >
+                                                                        {exhibitorsLoadingMore ? 'Loading more...' : 'Load more exhibitors'}
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <div className="py-12 text-center">
                                                             <p className="text-sm text-zinc-400">
-                                                                {exSearch.trim()
-                                                                    ? <>No exhibitors match &ldquo;{exSearch}&rdquo;</>
+                                                                {hasExhibitorFiltersActive
+                                                                    ? 'No exhibitors match the current search or filters.'
                                                                     : 'No exhibitors recorded for this show yet.'}
                                                             </p>
+                                                            {hasExhibitorFiltersActive && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={clearExhibitorFilters}
+                                                                    className="mt-3 text-sm font-semibold text-orange-600 hover:text-orange-700"
+                                                                >
+                                                                    Clear filters
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>

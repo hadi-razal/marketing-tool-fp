@@ -25,6 +25,21 @@ export interface Company {
     logo_url?: string;
     estimated_num_employees?: number;
     created_at?: string;
+    founded_year?: number | string;
+    revenue?: number | string;
+    organization_revenue_printed?: string;
+    description?: string;
+    sanitized_phone?: string;
+    street_address?: string;
+    state?: string;
+    postal_code?: string;
+    raw_address?: string;
+    sic_codes?: string[];
+    naics_codes?: string[];
+    publicly_traded_symbol?: string;
+    publicly_traded_exchange?: string;
+    alexa_ranking?: number;
+    retail_location_count?: number;
 }
 
 interface CompanyCardProps {

@@ -33,6 +33,8 @@ export interface ShowExhibitorRow {
     categoryOrder: number;
     logoUrl: string;
     location: string;
+    country: string;
+    worldArea: string;
     industry: string;
     domain: string;
     employees: number;

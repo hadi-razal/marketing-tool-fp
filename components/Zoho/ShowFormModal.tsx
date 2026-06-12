@@ -4,7 +4,6 @@ import {
     Calendar,
     Globe,
     MapPin,
-    Layers,
     Link2,
     Building2,
     Tag,
@@ -68,7 +67,6 @@ type ShowFormState = {
     Note: string;
     Exhibitor_List: string;
     Exhibitor_List_Link: string;
-    Floorplan_Link: string;
     Profile_Img_Link: string;
     Cover_Img_Link: string;
 };
@@ -90,7 +88,6 @@ const EMPTY_FORM: ShowFormState = {
     Note: '',
     Exhibitor_List: '',
     Exhibitor_List_Link: '',
-    Floorplan_Link: '',
     Profile_Img_Link: '',
     Cover_Img_Link: '',
 };
@@ -147,7 +144,6 @@ const formFromData = (data?: Record<string, unknown>): ShowFormState => ({
     Note: pick(data, 'note', 'Note', 'Note1'),
     Exhibitor_List: pick(data, 'exhibitor_list', 'Exhibitor_List', 'Last_edition_n_Exhibitors'),
     Exhibitor_List_Link: pick(data, 'exhibitor_list_link', 'Exhibitor_List_Link'),
-    Floorplan_Link: pick(data, 'floorplan_link', 'Floorplan_Link'),
     Profile_Img_Link: pick(data, 'profile_img_link', 'Profile_Img_Link', 'Event_logo', 'logo_url', 'Logo_URL'),
     Cover_Img_Link: pick(data, 'cover_img_link', 'Cover_Img_Link', 'cover_image', 'Cover_Image', 'banner', 'Banner', 'cover'),
 });
@@ -247,7 +243,6 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                 note: formData.Note.trim(),
                 exhibitor_list: formData.Exhibitor_List.trim(),
                 exhibitor_list_link: formData.Exhibitor_List_Link.trim(),
-                floorplan_link: formData.Floorplan_Link.trim() || null,
                 profile_img_link: formData.Profile_Img_Link.trim(),
                 cover_img_link: formData.Cover_Img_Link.trim(),
             };
@@ -430,13 +425,6 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 onChange={(e) => setField('Exhibitor_List_Link', e.target.value)}
                                 placeholder="https://example.com/exhibitors"
                                 icon={<Link2 className="h-4 w-4" />}
-                            />
-                            <SoftInput
-                                label="Floorplan Link"
-                                value={formData.Floorplan_Link}
-                                onChange={(e) => setField('Floorplan_Link', e.target.value)}
-                                placeholder="https://example.com/floorplan"
-                                icon={<Layers className="h-4 w-4" />}
                             />
                         </div>
                     </section>

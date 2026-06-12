@@ -6,9 +6,7 @@ import {
     Calendar,
     MapPin,
     ExternalLink,
-    Download,
     Link2,
-    FileText,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Globe } from 'lucide-react';
@@ -57,11 +55,7 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
     const location = [city, country, worldArea].filter(Boolean).join(', ');
     const level = show.level ? String(show.level) : (show.Level ? String(show.Level) : '');
     const exhibitorList = linkValue(show.exhibitor_list_link || show.Exhibitor_List_Link);
-    const floorplanLink = linkValue(show.floorplan_link || show.Floorplan_Link);
-    const floorplanRaw = show.floorplan_file || show.Floorplan;
-    const floorplanFileUrl =
-        linkValue(floorplanRaw) ||
-        (typeof floorplanRaw === 'string' && floorplanRaw.trim() ? floorplanRaw : null);
+    const floorplanLink = linkValue(show.floorplan_link);
 
     const logoUrl =
         typeof show.Event_logo === 'string' && show.Event_logo ? show.Event_logo : null;
@@ -150,7 +144,7 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                     </div>
                 </div>
 
-                {(exhibitorList || floorplanLink || floorplanFileUrl) && (
+                {(exhibitorList || floorplanLink) && (
                     <div className="px-6 sm:px-10 py-8">
                         <div className="mb-4 flex items-end justify-between">
                             <h4 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
@@ -160,7 +154,6 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                                 {[
                                     exhibitorList ? 1 : 0,
                                     floorplanLink ? 1 : 0,
-                                    floorplanFileUrl ? 1 : 0,
                                 ].reduce((a, b) => a + b, 0)} resources
                             </span>
                         </div>
@@ -201,25 +194,6 @@ export const DatabaseShowDetailModal: React.FC<DatabaseShowDetailModalProps> = (
                                             </div>
                                         </div>
                                         <ExternalLink className="h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors" />
-                                    </a>
-                                )}
-                                {floorplanFileUrl && (
-                                    <a
-                                        href={floorplanFileUrl || undefined}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="group sm:col-span-2 flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow-md transition-all text-left"
-                                    >
-                                        <div className="flex items-center gap-4 min-w-0">
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-zinc-200 text-zinc-700 shadow-sm">
-                                                <FileText className="h-4 w-4 group-hover:text-zinc-900 transition-colors" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <div className="text-sm font-medium text-zinc-900">Floor plan file</div>
-                                                <div className="text-xs text-zinc-500 truncate">Download PDF</div>
-                                            </div>
-                                        </div>
-                                        <Download className="h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors" />
                                     </a>
                                 )}
                             </div>

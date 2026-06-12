@@ -35,3 +35,55 @@ create index if not exists idx_show_participation_show_id
 
 create index if not exists idx_show_participation_company_id
   on public.show_participation (company_id);
+
+-- Fast exhibitor load for show detail page (single join query).
+create or replace function public.get_show_exhibitors(p_show_id text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', sp.id,
+        'show_id', sp.show_id,
+        'company_id', sp.company_id,
+        'year', sp.year,
+        'booth_number', sp.booth_number,
+        'booth_size', sp.booth_size,
+        'booth_size_category', sp.booth_size_category,
+        'created_at', sp.created_at,
+        'companies', case
+          when c.id is null then null
+          else jsonb_build_object(
+            'id', c.id,
+            'name', c.name,
+            'logo_url', c.logo_url,
+            'country', c.country,
+            'world_area', c.world_area,
+            'industry', c.industry,
+            'primary_domain', c.primary_domain,
+            'estimated_num_employees', c.estimated_num_employees
+          )
+        end
+      )
+      order by sp.year desc
+    ),
+    '[]'::jsonb
+  )
+  from show_participation sp
+  left join companies c on c.id::text = sp.company_id
+  where sp.show_id = p_show_id;
+$$;
+
+create table if not exists public.floorplans (
+  id text not null,
+  created_at timestamp with time zone not null default now(),
+  link text null,
+  name text null,
+  year text null,
+  constraint floorplans_pkey primary key (id),
+  constraint floorplans_id_fkey foreign key (id) references shows (id)
+);

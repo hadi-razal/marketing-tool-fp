@@ -106,11 +106,20 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
     const fetchShows = useCallback(async () => {
         setShowsLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('shows')
-                .select('*')
-                .order('id', { ascending: false });
+            const [{ data, error }, { data: floorplanRows }] = await Promise.all([
+                supabase
+                    .from('shows')
+                    .select('*')
+                    .order('id', { ascending: false }),
+                supabase
+                    .from('floorplans')
+                    .select('id, link')
+                    .not('link', 'is', null),
+            ]);
             if (error) throw error;
+            const floorplanByShowId = new Map(
+                (floorplanRows || []).map((row: { id: string; link: string | null }) => [String(row.id), row]),
+            );
             const normalized = (data || []).map((row: any) => ({
                 ...row,
                 id: row.id ?? row.ID,
@@ -125,8 +134,8 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                 frequency: row.frequency ?? row.Frequency ?? '',
                 exhibitor_list: row.exhibitor_list ?? row.Exhibitor_List ?? null,
                 exhibitor_list_link: row.exhibitor_list_link ?? row.Exhibitor_List_Link ?? null,
-                floorplan_file: row.floorplan_file ?? row.Floorplan ?? null,
-                floorplan_link: row.floorplan_link ?? row.Floorplan_Link ?? null,
+                has_floorplan: floorplanByShowId.has(String(row.id ?? row.ID)),
+                floorplan_link: floorplanByShowId.get(String(row.id ?? row.ID))?.link ?? null,
                 organiser: row.organiser ?? row.Organiser ?? '',
                 note: row.note ?? row.Note ?? row.Note1 ?? '',
                 tags: row.tags ?? row.Tags ?? '',
@@ -168,7 +177,7 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
             result = result.filter((s: any) => Boolean(s.exhibitor_list_link) || Boolean(s.exhibitor_list));
         }
         if (filters.showFloorplanOnly) {
-            result = result.filter((s: any) => Boolean(s.floorplan_link) || Boolean(s.floorplan_file));
+            result = result.filter((s: any) => Boolean(s.has_floorplan));
         }
 
         return [...result].sort((a: any, b: any) => {

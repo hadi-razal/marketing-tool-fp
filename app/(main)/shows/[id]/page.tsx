@@ -43,6 +43,7 @@ import { ShowFormModal } from '@/components/Zoho/ShowFormModal';
 import { FilterPopover, type FilterCategory, type FilterSelections } from '@/components/Zoho/FilterPopover';
 import { ShowImagesPanel } from '@/components/Shows/ShowImagesPanel';
 import { ShowHeaderLogo } from '@/components/Shows/ShowLogo';
+import { CompanyLogo } from '@/components/CompanyLogo';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 
@@ -1970,21 +1971,15 @@ export default function ShowDetailPage() {
                                                 ));
                                             };
 
-                                            const renderExhibitorLogo = (ex: (typeof sorted)[0], avatarText: string) => (
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200 sm:h-9 sm:w-9">
-                                                    {ex.logoUrl ? (
-                                                        <img
-                                                            src={ex.logoUrl}
-                                                            alt={`${ex.company} logo`}
-                                                            className="h-full w-full object-contain p-1"
-                                                            loading="lazy"
-                                                        />
-                                                    ) : (
-                                                        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: '#fb923c' }}>
-                                                            {avatarText}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                            const renderExhibitorLogo = (ex: (typeof sorted)[0]) => (
+                                                <CompanyLogo
+                                                    name={ex.company}
+                                                    logoUrl={ex.logoUrl}
+                                                    company={{ primary_domain: ex.domain }}
+                                                    className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200 sm:h-9 sm:w-9"
+                                                    initialsClassName="text-sm"
+                                                    faviconSize={32}
+                                                />
                                             );
 
                                             return (
@@ -2056,7 +2051,6 @@ export default function ShowDetailPage() {
                                                     {exhibitorRows.length > 0 ? (
                                                         <div className="flex w-full flex-col gap-2.5">
                                                             {sorted.map((ex) => {
-                                                                const avatarText = initialsFromName(ex.company);
                                                                 const openCompany = () => {
                                                                     const query = new URLSearchParams({
                                                                         fromShow: showId,
@@ -2092,7 +2086,7 @@ export default function ShowDetailPage() {
                                                                                         title={`Select ${ex.company}`}
                                                                                     />
                                                                                 )}
-                                                                                {renderExhibitorLogo(ex, avatarText)}
+                                                                                {renderExhibitorLogo(ex)}
                                                                                 <div className="min-w-0 flex-1">
                                                                                     <p className="text-sm font-semibold leading-snug text-zinc-900 group-hover:text-orange-700">{ex.company}</p>
                                                                                     <p className="mt-1 inline-flex min-w-0 items-start gap-1 text-xs text-zinc-500">
@@ -2134,7 +2128,7 @@ export default function ShowDetailPage() {
                                                                                 />
                                                                             )}
                                                                             <div className="flex min-w-0 items-center gap-3">
-                                                                                {renderExhibitorLogo(ex, avatarText)}
+                                                                                {renderExhibitorLogo(ex)}
                                                                                 <div className="min-w-0">
                                                                                     <p className="truncate text-[14px] font-semibold text-zinc-900 group-hover:text-orange-700">{ex.company}</p>
                                                                                     <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">

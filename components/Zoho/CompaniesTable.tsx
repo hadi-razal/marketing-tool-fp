@@ -14,15 +14,9 @@ import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase';
-import { getBrandColor, formatCompanyLocation } from '@/lib/utils';
+import { formatCompanyLocation } from '@/lib/utils';
 import { CreateCompanyModal } from '@/components/CreateCompanyModal';
-
-const initialsFromName = (name: string) => {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return '?';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-};
+import { CompanyLogo } from '@/components/CompanyLogo';
 
 export const CompaniesTable = () => {
     const router = useRouter();
@@ -366,7 +360,6 @@ export const CompaniesTable = () => {
                                 const name = item.name || 'Unknown Company';
                                 const industry = item.industry || '';
                                 const location = formatCompanyLocation(item);
-                                const initials = initialsFromName(name);
                                 const logoUrl = item.logo_url || item.logo;
                                 const domain = item.primary_domain || item.website_url || '';
 
@@ -379,23 +372,13 @@ export const CompaniesTable = () => {
                                     >
                                         <div className="flex flex-1 flex-col gap-3 p-4">
                                             <div className="flex items-start gap-3">
-                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 text-base font-bold tracking-tight text-zinc-900 ring-1 ring-zinc-200">
-                                                    {logoUrl ? (
-                                                        <img
-                                                            src={logoUrl}
-                                                            alt={`${name} logo`}
-                                                            className="h-full w-full object-contain p-1"
-                                                            loading="lazy"
-                                                        />
-                                                    ) : (
-                                                        <div
-                                                            className="flex h-full w-full items-center justify-center text-sm font-bold text-white"
-                                                            style={{ backgroundColor: getBrandColor(name) }}
-                                                        >
-                                                            {initials}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                <CompanyLogo
+                                                    name={name}
+                                                    logoUrl={logoUrl}
+                                                    company={item}
+                                                    className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 text-base font-bold tracking-tight text-zinc-900 ring-1 ring-zinc-200"
+                                                    initialsClassName="text-sm"
+                                                />
                                                 <div className="min-w-0 flex-1">
                                                     <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-zinc-950 transition-colors group-hover:text-orange-700">
                                                         {name}

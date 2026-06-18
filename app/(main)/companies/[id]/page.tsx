@@ -23,10 +23,18 @@ import {
     Sparkles,
     Layers,
     ArrowRight,
+    DollarSign,
+    Linkedin,
+    Twitter,
+    Facebook,
+    TrendingUp,
+    Tag,
+    Landmark,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getBrandColor, formatCompanyLocation } from '@/lib/utils';
+import { formatCompanyLocation } from '@/lib/utils';
 import { ProfileCard } from '@/components/ProfileCard';
+import { CompanyLogo } from '@/components/CompanyLogo';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 
@@ -654,11 +662,39 @@ export default function CompanyDetailPage() {
     const name = company.name || 'Unknown Company';
     const industry = company.industry || '';
     const website = company.website_url || company.primary_domain || '';
-    const phone = company.phone || '';
+    const phone = company.phone || company.sanitized_phone || '';
     const location = formatCompanyLocation(company);
-    const initials = initialsFromName(name);
     const logoUrl = company.logo_url;
     const employees = company.estimated_num_employees || 0;
+
+    const foundedYear = company.founded_year ? String(company.founded_year) : '';
+    const revenue =
+        company.organization_revenue_printed ||
+        (company.revenue ? formatMoney(Number(company.revenue)) : '') ||
+        '';
+    const linkedinUrl = company.linkedin_url || company.linkedin || '';
+    const twitterUrl = company.twitter_url || company.twitter || '';
+    const facebookUrl = company.facebook_url || company.facebook || '';
+    const keywords: string[] = Array.isArray(company.keywords) ? company.keywords.filter(Boolean) : [];
+    const streetAddress = [company.street_address, company.city, company.state, company.postal_code]
+        .filter(Boolean)
+        .join(', ') || company.raw_address || '';
+    const publiclyTraded = [company.publicly_traded_exchange, company.publicly_traded_symbol]
+        .filter(Boolean)
+        .join(': ');
+    const alexaRanking = company.alexa_ranking ? Number(company.alexa_ranking) : 0;
+
+    const ensureHttp = (url: string) => (url.startsWith('http') ? url : `https://${url}`);
+    const ExternalLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
+        <a
+            href={ensureHttp(href)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-orange-600 hover:underline break-all"
+        >
+            {children}
+        </a>
+    );
 
     const handleBack = () => {
         if (fromShowId) {
@@ -673,13 +709,49 @@ export default function CompanyDetailPage() {
 
     const detailRows = [
         industry && { label: 'Industry', value: industry, icon: <Building2 className="h-4 w-4" /> },
-        location && { label: 'Location', value: location, icon: <MapPin className="h-4 w-4" /> },
-        employees > 0 && { label: 'Employees', value: employees.toLocaleString(), icon: <Users className="h-4 w-4" /> },
-        phone && { label: 'Phone', value: phone, icon: <Phone className="h-4 w-4" /> },
         website && {
             label: 'Website',
-            value: <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-orange-600 hover:underline">{website}</a>,
+            value: <ExternalLink href={website}>{website}</ExternalLink>,
             icon: <Globe2 className="h-4 w-4" />,
+        },
+        location && { label: 'Location', value: location, icon: <MapPin className="h-4 w-4" /> },
+        streetAddress && { label: 'Address', value: streetAddress, icon: <MapPin className="h-4 w-4" /> },
+        employees > 0 && { label: 'Employees', value: employees.toLocaleString(), icon: <Users className="h-4 w-4" /> },
+        foundedYear && { label: 'Founded', value: foundedYear, icon: <Calendar className="h-4 w-4" /> },
+        revenue && { label: 'Revenue', value: revenue, icon: <DollarSign className="h-4 w-4" /> },
+        phone && { label: 'Phone', value: phone, icon: <Phone className="h-4 w-4" /> },
+        publiclyTraded && { label: 'Publicly Traded', value: publiclyTraded, icon: <Landmark className="h-4 w-4" /> },
+        alexaRanking > 0 && { label: 'Alexa Ranking', value: `#${alexaRanking.toLocaleString()}`, icon: <TrendingUp className="h-4 w-4" /> },
+        linkedinUrl && {
+            label: 'LinkedIn',
+            value: <ExternalLink href={linkedinUrl}>{linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}</ExternalLink>,
+            icon: <Linkedin className="h-4 w-4" />,
+        },
+        twitterUrl && {
+            label: 'Twitter / X',
+            value: <ExternalLink href={twitterUrl}>{twitterUrl.replace(/^https?:\/\/(www\.)?/, '')}</ExternalLink>,
+            icon: <Twitter className="h-4 w-4" />,
+        },
+        facebookUrl && {
+            label: 'Facebook',
+            value: <ExternalLink href={facebookUrl}>{facebookUrl.replace(/^https?:\/\/(www\.)?/, '')}</ExternalLink>,
+            icon: <Facebook className="h-4 w-4" />,
+        },
+        keywords.length > 0 && {
+            label: 'Keywords',
+            value: (
+                <div className="flex flex-wrap gap-1.5">
+                    {keywords.slice(0, 12).map((kw) => (
+                        <span
+                            key={kw}
+                            className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] font-medium text-zinc-600"
+                        >
+                            {kw}
+                        </span>
+                    ))}
+                </div>
+            ),
+            icon: <Tag className="h-4 w-4" />,
         },
     ].filter(Boolean) as { label: string; value: any; icon: React.ReactNode }[];
 
@@ -736,23 +808,13 @@ export default function CompanyDetailPage() {
 
                     {/* Company identity */}
                     <div className="flex items-center gap-4 pb-6 sm:gap-5 sm:pb-8">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white shadow-2xl ring-2 ring-white/25 sm:h-16 sm:w-16">
-                            {logoUrl ? (
-                                <img
-                                    src={logoUrl}
-                                    alt={`${name} logo`}
-                                    className="h-full w-full object-contain p-1"
-                                    loading="lazy"
-                                />
-                            ) : (
-                                <div
-                                    className="w-full h-full flex items-center justify-center text-lg font-bold text-white sm:text-xl"
-                                    style={{ backgroundColor: getBrandColor(name) }}
-                                >
-                                    {initials}
-                                </div>
-                            )}
-                        </div>
+                        <CompanyLogo
+                            name={name}
+                            logoUrl={logoUrl}
+                            company={company}
+                            className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white shadow-2xl ring-2 ring-white/25 sm:h-16 sm:w-16"
+                            initialsClassName="text-lg sm:text-xl"
+                        />
                         <div className="min-w-0">
                             {industry && (
                                 <span className="mb-1 inline-block rounded bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-orange-300">

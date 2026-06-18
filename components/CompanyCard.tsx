@@ -1,7 +1,8 @@
 import React from 'react';
-import { Building2, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { Comment } from '@/services/databaseService';
 import { formatCompanyLocation } from '@/lib/utils';
+import { CompanyLogo } from '@/components/CompanyLogo';
 
 export interface Company {
     id: string;
@@ -61,13 +62,14 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ company, onClick, onAc
         >
             <div className="relative z-10 mb-3 flex items-start justify-between gap-2.5">
                 <div className="flex min-w-0 gap-3">
-                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 p-1.5 transition-transform duration-300 group-hover:scale-105">
-                        {company.logo ? (
-                            <img src={company.logo} alt={company.name} className="w-full h-full object-contain" />
-                        ) : (
-                            <Building2 className="w-6 h-6 text-zinc-400" />
-                        )}
-                    </div>
+                    <CompanyLogo
+                        name={company.name}
+                        logoUrl={company.logo || company.logo_url}
+                        company={company}
+                        className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 p-1.5 transition-transform duration-300 group-hover:scale-105"
+                        imgClassName="w-full h-full object-contain"
+                        initialsClassName="text-xs"
+                    />
 
                     <div className="min-w-0">
                         <h3 className="truncate text-[15px] font-bold tracking-tight text-zinc-950 transition-colors group-hover:text-orange-600 sm:text-base">

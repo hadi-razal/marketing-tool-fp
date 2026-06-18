@@ -74,6 +74,30 @@ export function normalizeOrganizationDomain(input?: string | null): string | nul
     return s || null;
 }
 
+/** Extract a clean host (no protocol/www/path) from a company's website fields. */
+export function getCompanyDomain(company: {
+    primary_domain?: string | null;
+    website_url?: string | null;
+    website?: string | null;
+}): string {
+    const raw = company.primary_domain || company.website_url || company.website || '';
+    return normalizeOrganizationDomain(raw) || '';
+}
+
+/** Favicon URL for a company's website via Google's favicon service. Returns '' if no domain. */
+export function getCompanyFaviconUrl(
+    company: {
+        primary_domain?: string | null;
+        website_url?: string | null;
+        website?: string | null;
+    },
+    size = 64,
+): string {
+    const domain = getCompanyDomain(company);
+    if (!domain) return '';
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${size}`;
+}
+
 /** Display location for a company row. */
 export function formatCompanyLocation(company: {
     country?: string | null;

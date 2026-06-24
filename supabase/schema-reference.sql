@@ -95,6 +95,38 @@ as $$
     and btrim(sp.show_id) <> '';
 $$;
 
+-- Paginated list of shows that have at least one exhibitor (participation row).
+-- Uses an indexed EXISTS join so the client never has to ship thousands of ids
+-- in an `id IN (...)` clause. Optional case-insensitive name search.
+-- Backed by idx_show_participation_show_id.
+create or replace function public.get_shows_with_exhibitors(
+  p_search text default null,
+  p_limit int default 100,
+  p_offset int default 0
+)
+returns setof shows
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.*
+  from shows s
+  where exists (
+    select 1
+    from show_participation sp
+    where sp.show_id = s.id
+  )
+  and (
+    p_search is null
+    or btrim(p_search) = ''
+    or s.name ilike '%' || p_search || '%'
+  )
+  order by s.id desc
+  limit greatest(p_limit, 0)
+  offset greatest(p_offset, 0);
+$$;
+
 create table if not exists public.floorplans (
   id text not null,
   created_at timestamp with time zone not null default now(),

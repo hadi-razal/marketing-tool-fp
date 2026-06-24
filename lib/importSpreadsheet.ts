@@ -183,24 +183,42 @@ export type ShowImportRow = {
     exhibitor_list_link: string;
 };
 
-export function rowsToShowSupabaseRows(rows: SpreadsheetRow[]): ShowImportRow[] {
-    return rows
-        .map((row): ShowImportRow | null => {
-            const name = rowGet(row, 'name', 'Event_Name', 'event name', 'Event', 'Name', 'Show', 'Show Name', 'Show_Name');
-            if (!name) return null;
+export type ShowImportParse = {
+    entries: { row: number; data: ShowImportRow }[];
+    invalid: ShowRowIssue[];
+};
 
-            const startingRaw = rowGet(row, 'starting_date', 'Starting_Date', 'starting date', 'Date', 'Start', 'Start Date');
-            const websiteRaw = rowGet(row, 'website', 'Website', 'url', 'URL', 'Site');
-            const exhibitorLinkRaw = rowGet(
-                row,
-                'exhibitor_list_link',
-                'exhibitor list link',
-                'Exhibitor_List_Link',
-                'Exhibitor List Link',
-                'Exhibitor List',
-            );
+/**
+ * Parses spreadsheet rows for inserting new shows. Rows missing a show name are
+ * returned in `invalid` (with their data-row number) so the caller can show them
+ * as errors while still importing the valid rows.
+ */
+export function parseShowImportRows(rows: SpreadsheetRow[]): ShowImportParse {
+    const entries: ShowImportParse['entries'] = [];
+    const invalid: ShowRowIssue[] = [];
 
-            return {
+    rows.forEach((row, i) => {
+        const rowNum = i + 1;
+        const name = rowGet(row, 'name', 'Event_Name', 'event name', 'Event', 'Name', 'Show', 'Show Name', 'Show_Name');
+        if (!name) {
+            invalid.push({ row: rowNum, label: `Row ${rowNum}`, reason: 'Missing show name' });
+            return;
+        }
+
+        const startingRaw = rowGet(row, 'starting_date', 'Starting_Date', 'starting date', 'Date', 'Start', 'Start Date');
+        const websiteRaw = rowGet(row, 'website', 'Website', 'url', 'URL', 'Site');
+        const exhibitorLinkRaw = rowGet(
+            row,
+            'exhibitor_list_link',
+            'exhibitor list link',
+            'Exhibitor_List_Link',
+            'Exhibitor List Link',
+            'Exhibitor List',
+        );
+
+        entries.push({
+            row: rowNum,
+            data: {
                 name,
                 starting_date: startingRaw ? formatDateForSupabase(startingRaw) ?? null : null,
                 event_type: rowGet(row, 'event_type', 'Event_Type', 'event type', 'Type'),
@@ -215,9 +233,110 @@ export function rowsToShowSupabaseRows(rows: SpreadsheetRow[]): ShowImportRow[] 
                 tags: rowGet(row, 'tags', 'Tags', 'tag', 'Tag'),
                 note: rowGet(row, 'note', 'Note', 'notes', 'Notes'),
                 exhibitor_list_link: normalizeUrl(exhibitorLinkRaw),
-            };
-        })
-        .filter((r): r is ShowImportRow => r !== null);
+            },
+        });
+    });
+
+    return { entries, invalid };
+}
+
+export function rowsToShowSupabaseRows(rows: SpreadsheetRow[]): ShowImportRow[] {
+    return parseShowImportRows(rows).entries.map((e) => e.data);
+}
+
+/** A data row (1-based, header excluded) that couldn't be processed. */
+export type ShowRowIssue = { row: number; label: string; reason: string };
+
+/** Editable show fields keyed by the Supabase column name. */
+export type ShowUpdateFields = Partial<Omit<ShowImportRow, 'starting_date'>> & { starting_date?: string };
+
+export type ShowUpdateParse = {
+    entries: { row: number; id: string; fields: ShowUpdateFields }[];
+    invalid: ShowRowIssue[];
+};
+
+/**
+ * Parses spreadsheet rows into partial UPDATE payloads for existing `shows`.
+ * Requires an `id` column (the show text PK). Only columns with a non-empty
+ * value are included, so blank cells never overwrite existing data. Rows
+ * without an id, or with nothing to update, are returned in `invalid` so the
+ * caller can surface them as errors.
+ */
+export function parseShowUpdateRows(rows: SpreadsheetRow[]): ShowUpdateParse {
+    const entries: ShowUpdateParse['entries'] = [];
+    const invalid: ShowRowIssue[] = [];
+
+    rows.forEach((row, i) => {
+        const rowNum = i + 1;
+        const id = rowGet(row, 'id', 'ID', 'show_id', 'Show_ID', 'show id', 'Show Id');
+        if (!id) {
+            invalid.push({ row: rowNum, label: `Row ${rowNum}`, reason: 'Missing id column' });
+            return;
+        }
+
+        const fields: ShowUpdateFields = {};
+
+        const name = rowGet(row, 'name', 'Event_Name', 'event name', 'Event', 'Name', 'Show', 'Show Name', 'Show_Name');
+        if (name) fields.name = name;
+
+        const startingRaw = rowGet(row, 'starting_date', 'Starting_Date', 'starting date', 'Date', 'Start', 'Start Date');
+        if (startingRaw) {
+            const iso = formatDateForSupabase(startingRaw);
+            if (iso) fields.starting_date = iso;
+        }
+
+        const eventType = rowGet(row, 'event_type', 'Event_Type', 'event type', 'Type');
+        if (eventType) fields.event_type = eventType;
+
+        const industry = rowGet(row, 'industry', 'Industry', 'sector');
+        if (industry) fields.industry = industry;
+
+        const level = rowGet(row, 'level', 'Level');
+        if (level) fields.level = level;
+
+        const worldArea = rowGet(row, 'world_area', 'World_Area', 'world area', 'Area', 'Region');
+        if (worldArea) fields.world_area = worldArea;
+
+        const country = rowGet(row, 'country', 'Country');
+        if (country) fields.country = country;
+
+        const city = rowGet(row, 'city', 'City');
+        if (city) fields.city = city;
+
+        const frequency = rowGet(row, 'frequency', 'Frequency');
+        if (frequency) fields.frequency = frequency;
+
+        const organiser = rowGet(row, 'organiser', 'Organiser', 'organizer', 'Organizer', 'Host');
+        if (organiser) fields.organiser = organiser;
+
+        const websiteRaw = rowGet(row, 'website', 'Website', 'url', 'URL', 'Site');
+        if (websiteRaw) fields.website = normalizeUrl(websiteRaw);
+
+        const tags = rowGet(row, 'tags', 'Tags', 'tag', 'Tag');
+        if (tags) fields.tags = tags;
+
+        const note = rowGet(row, 'note', 'Note', 'notes', 'Notes');
+        if (note) fields.note = note;
+
+        const exhibitorLinkRaw = rowGet(
+            row,
+            'exhibitor_list_link',
+            'exhibitor list link',
+            'Exhibitor_List_Link',
+            'Exhibitor List Link',
+            'Exhibitor List',
+        );
+        if (exhibitorLinkRaw) fields.exhibitor_list_link = normalizeUrl(exhibitorLinkRaw);
+
+        if (Object.keys(fields).length === 0) {
+            invalid.push({ row: rowNum, label: `Row ${rowNum} (id ${id})`, reason: 'No fields to update' });
+            return;
+        }
+
+        entries.push({ row: rowNum, id, fields });
+    });
+
+    return { entries, invalid };
 }
 
 export function rowsToImportedPeople(rows: SpreadsheetRow[], idPrefix = 'import_person'): any[] {

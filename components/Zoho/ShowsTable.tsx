@@ -6,6 +6,7 @@ import {
     Search,
     Filter,
     FileSpreadsheet,
+    FilePenLine,
     MapPin,
     Calendar,
     Layers,
@@ -56,6 +57,7 @@ export const ShowsTable = () => {
     const [upcomingLoading, setUpcomingLoading] = useState(true);
 
     const [importOpen, setImportOpen] = useState(false);
+    const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [allFetchedData, setAllFetchedData] = useState<any[]>([]);
@@ -260,34 +262,53 @@ export const ShowsTable = () => {
             const from = reset ? 0 : page * LIMIT;
             const trimmedSearch = searchTerm.trim();
 
-            let exhibitorIds: string[] | null = null;
+            let rows: any[] | null = null;
+
             if (showExhibitorsOnly) {
-                const ids = await fetchAllExhibitorShowIds();
-                exhibitorIds = [...ids];
-                if (exhibitorIds.length === 0) {
-                    setData([]);
-                    setHasMore(false);
-                    if (reset) setPage(1);
-                    return;
+                // Server-side EXISTS join: returns only this page of shows that
+                // have exhibitors, so we never ship thousands of ids over the wire.
+                const { data: rpcRows, error: rpcError } = await supabase.rpc('get_shows_with_exhibitors', {
+                    p_search: trimmedSearch || null,
+                    p_limit: LIMIT,
+                    p_offset: from,
+                });
+
+                if (rpcError) {
+                    // Fallback (RPC not deployed yet): filter by the cached id set.
+                    const ids = await fetchAllExhibitorShowIds();
+                    const exhibitorIds = [...ids];
+                    if (exhibitorIds.length === 0) {
+                        setData([]);
+                        setHasMore(false);
+                        if (reset) setPage(1);
+                        return;
+                    }
+                    let fbQuery = supabase
+                        .from('shows')
+                        .select('*')
+                        .order('id', { ascending: false })
+                        .in('id', exhibitorIds);
+                    if (trimmedSearch) fbQuery = fbQuery.ilike('name', `%${trimmedSearch}%`);
+                    const { data: fbRows, error: fbErr } = await fbQuery.range(from, from + LIMIT - 1);
+                    if (fbErr) throw fbErr;
+                    rows = fbRows;
+                } else {
+                    rows = rpcRows;
                 }
+            } else {
+                let query = supabase
+                    .from('shows')
+                    .select('*')
+                    .order('id', { ascending: false });
+
+                if (trimmedSearch) {
+                    query = query.ilike('name', `%${trimmedSearch}%`);
+                }
+
+                const { data: queryRows, error: fetchErr } = await query.range(from, from + LIMIT - 1);
+                if (fetchErr) throw fetchErr;
+                rows = queryRows;
             }
-
-            let query = supabase
-                .from('shows')
-                .select('*')
-                .order('id', { ascending: false });
-
-            if (exhibitorIds) {
-                query = query.in('id', exhibitorIds);
-            }
-
-            if (trimmedSearch) {
-                query = query.ilike('name', `%${trimmedSearch}%`);
-            }
-
-            const { data: rows, error: fetchErr } = await query.range(from, from + LIMIT - 1);
-
-            if (fetchErr) throw fetchErr;
 
             let normalized = (rows || []).map(normalizeShow);
 
@@ -496,36 +517,88 @@ export const ShowsTable = () => {
         meta?: { comment?: string },
         onProgress?: (p: SpreadsheetImportProgress) => void,
     ) => {
-        const { rowsToShowSupabaseRows } = await import('@/lib/importSpreadsheet');
+        const { parseShowImportRows } = await import('@/lib/importSpreadsheet');
         const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
-        const showRows = rowsToShowSupabaseRows(rows);
-        if (showRows.length === 0) {
-            toast.error('No valid rows. Each row needs a show name (name, Event_Name, Event, or Show).');
+        const { entries, invalid } = parseShowImportRows(rows);
+        if (entries.length === 0 && invalid.length === 0) {
+            toast.error('No data rows found. Use a header row and at least one data row.');
             return;
         }
-        const total = showRows.length;
-        onProgress?.({ current: 0, total });
+
+        const errors = invalid.map((iv) => ({ label: iv.label, reason: iv.reason }));
+        const total = entries.length + invalid.length;
+        onProgress?.({ current: invalid.length, total });
         let ok = 0;
 
         const CHUNK = 100;
-        for (let i = 0; i < showRows.length; i += CHUNK) {
-            const chunk = showRows.slice(i, i + CHUNK).map((r) => ({ id: crypto.randomUUID(), ...r }));
-            const { error: insertError } = await supabase.from('shows').insert(chunk);
+        for (let i = 0; i < entries.length; i += CHUNK) {
+            const chunk = entries.slice(i, i + CHUNK);
+            const payload = chunk.map((e) => ({ id: crypto.randomUUID(), ...e.data }));
+            const { error: insertError } = await supabase.from('shows').insert(payload);
             if (insertError) {
                 // Fall back to per-row inserts so one bad row doesn't drop the batch.
-                for (const single of chunk) {
-                    const { error: rowError } = await supabase.from('shows').insert(single);
-                    if (!rowError) ok++;
+                for (const e of chunk) {
+                    const { error: rowError } = await supabase.from('shows').insert({ id: crypto.randomUUID(), ...e.data });
+                    if (rowError) {
+                        errors.push({ label: `Row ${e.row} (${e.data.name})`, reason: rowError.message });
+                    } else {
+                        ok++;
+                    }
                 }
             } else {
                 ok += chunk.length;
             }
-            onProgress?.({ current: Math.min(i + CHUNK, total), total });
+            onProgress?.({ current: invalid.length + Math.min(i + CHUNK, entries.length), total });
         }
         await fetchData(true, appliedSearch);
         void fetchUpcomingShows();
         await logSpreadsheetImport(`Created ${ok} of ${total} shows in Supabase from spreadsheet.`, meta?.comment);
-        toast.success(`Created ${ok} of ${total} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
+        return { total, successCount: ok, errors, verb: 'imported' };
+    };
+
+    const handleShowsBulkUpdate = async (
+        rows: SpreadsheetRow[],
+        meta?: { comment?: string },
+        onProgress?: (p: SpreadsheetImportProgress) => void,
+    ) => {
+        const { parseShowUpdateRows } = await import('@/lib/importSpreadsheet');
+        const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
+        const { entries, invalid } = parseShowUpdateRows(rows);
+        if (entries.length === 0 && invalid.length === 0) {
+            toast.error('No data rows found. Use a header row and at least one data row.');
+            return;
+        }
+
+        const errors = invalid.map((iv) => ({ label: iv.label, reason: iv.reason }));
+        const total = entries.length + invalid.length;
+        onProgress?.({ current: invalid.length, total });
+        let ok = 0;
+
+        const CHUNK = 25;
+        for (let i = 0; i < entries.length; i += CHUNK) {
+            const chunk = entries.slice(i, i + CHUNK);
+            await Promise.all(
+                chunk.map(async (e) => {
+                    const { data, error } = await supabase
+                        .from('shows')
+                        .update(e.fields)
+                        .eq('id', e.id)
+                        .select('id');
+                    if (error) {
+                        errors.push({ label: `Row ${e.row} (id ${e.id})`, reason: error.message });
+                    } else if ((data?.length ?? 0) === 0) {
+                        errors.push({ label: `Row ${e.row} (id ${e.id})`, reason: 'No show found with this id' });
+                    } else {
+                        ok++;
+                    }
+                }),
+            );
+            onProgress?.({ current: invalid.length + Math.min(i + CHUNK, entries.length), total });
+        }
+        await fetchData(true, appliedSearch);
+        void fetchUpcomingShows();
+        await logSpreadsheetImport(`Updated ${ok} of ${total} shows in Supabase from spreadsheet.`, meta?.comment);
+        return { total, successCount: ok, errors, verb: 'updated' };
     };
 
     const handleRowClick = (item: any) => {
@@ -574,6 +647,24 @@ export const ShowsTable = () => {
                     }
                     demoCsvTemplate={fpMarketingImportDemoTemplates.shows}
                     onImportRows={handleShowsSpreadsheetImport}
+                />
+            )}
+
+            {bulkUpdateOpen && (
+                <SpreadsheetImportModal
+                    isOpen
+                    onClose={() => setBulkUpdateOpen(false)}
+                    title="Bulk update shows (CSV / Excel)"
+                    columnHint={
+                        <>
+                            Required: <strong>id</strong> (an existing show id). Editable: name, starting_date, event_type,
+                            industry, level, world_area, country, city, frequency, organiser, website, tags, note,
+                            exhibitor_list_link. <strong>Blank cells are kept</strong> — only filled cells overwrite existing
+                            values. Rows whose id isn&apos;t found are skipped.
+                        </>
+                    }
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.showsUpdate}
+                    onImportRows={handleShowsBulkUpdate}
                 />
             )}
 
@@ -650,6 +741,14 @@ export const ShowsTable = () => {
                             className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
                         >
                             <span className="hidden sm:inline">Import</span>
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={() => setBulkUpdateOpen(true)}
+                            leftIcon={<FilePenLine className="h-4 w-4" />}
+                            className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
+                        >
+                            <span className="hidden sm:inline">Bulk update</span>
                         </Button>
                         <Button
                             onClick={handleAdd}

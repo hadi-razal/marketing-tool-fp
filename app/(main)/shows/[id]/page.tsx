@@ -280,6 +280,9 @@ export default function ShowDetailPage() {
         title: '',
         description: '',
     });
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
     const [addLinkModal, setAddLinkModal] = useState(false);
     const [linkForm, setLinkForm] = useState({ title: '', url: '' });
     const [linkSaving, setLinkSaving] = useState(false);
@@ -835,15 +838,23 @@ export default function ShowDetailPage() {
         }));
     };
 
+    const openDeleteModal = () => {
+        setDeleteConfirmText('');
+        setDeleteModalOpen(true);
+    };
+
     const handleDelete = async () => {
-        if (!confirm('Delete this show permanently?')) return;
+        setIsDeleting(true);
         const { error } = await supabase.from('shows').delete().eq('id', showId);
         if (error) {
+            setIsDeleting(false);
             toast.error(error.message);
-        } else {
-            toast.success('Show deleted');
-            router.push('/shows');
+            return;
         }
+        setIsDeleting(false);
+        setDeleteModalOpen(false);
+        toast.success('Show deleted');
+        router.push('/shows');
     };
 
     const openFeatureInfoModal = (title: string, description: string) => {
@@ -1011,6 +1022,78 @@ export default function ShowDetailPage() {
                         <div className="mt-4 flex justify-end">
                             <Button size="sm" variant="primary" onClick={closeFeatureInfoModal}>
                                 Got it
+                            </Button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* ── Delete Show Confirmation Modal ── */}
+            {deleteModalOpen && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="Close delete confirmation"
+                        onClick={() => !isDeleting && setDeleteModalOpen(false)}
+                        className="fixed inset-0 z-140 bg-zinc-950/45 backdrop-blur-sm"
+                    />
+                    <div className="fixed inset-0 z-150 m-auto h-fit w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl shadow-zinc-950/20">
+                        <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                                <Trash2 className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <h3 className="text-base font-semibold text-zinc-900">Delete this show?</h3>
+                                <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+                                    This permanently deletes <span className="font-semibold text-zinc-900">{eventName}</span> and
+                                    cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="mt-4">
+                            <label htmlFor="delete-confirm-input" className="block text-xs font-medium text-zinc-600">
+                                Type the show name <span className="font-semibold text-zinc-900">{eventName}</span> to confirm
+                            </label>
+                            <input
+                                id="delete-confirm-input"
+                                type="text"
+                                autoFocus
+                                value={deleteConfirmText}
+                                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (
+                                        e.key === 'Enter' &&
+                                        !isDeleting &&
+                                        deleteConfirmText.trim().toLowerCase() === eventName.trim().toLowerCase()
+                                    ) {
+                                        void handleDelete();
+                                    }
+                                }}
+                                placeholder={eventName}
+                                disabled={isDeleting}
+                                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100 disabled:opacity-50"
+                            />
+                        </div>
+                        <div className="mt-4 flex justify-end gap-2">
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setDeleteModalOpen(false)}
+                                disabled={isDeleting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="danger"
+                                onClick={handleDelete}
+                                isLoading={isDeleting}
+                                disabled={
+                                    isDeleting ||
+                                    deleteConfirmText.trim().toLowerCase() !== eventName.trim().toLowerCase()
+                                }
+                            >
+                                Delete show
                             </Button>
                         </div>
                     </div>
@@ -1207,7 +1290,7 @@ export default function ShowDetailPage() {
                                     Edit
                                 </button>
                                 <button
-                                    onClick={handleDelete}
+                                    onClick={openDeleteModal}
                                     className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-xs font-medium text-red-400 backdrop-blur-sm transition-all hover:bg-red-500/20 hover:text-red-300"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />

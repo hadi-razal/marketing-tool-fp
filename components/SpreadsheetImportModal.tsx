@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { UploadCloud, Loader2, FileSpreadsheet, Download } from 'lucide-react';
+import { UploadCloud, Loader2, FileSpreadsheet, Download, CheckCircle2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { parseSpreadsheetFile, type SpreadsheetRow } from '@/lib/importSpreadsheet';
 import { downloadUtf8CsvFile } from '@/lib/demoSpreadsheetTemplates';
@@ -12,6 +12,21 @@ export type SpreadsheetImportMeta = { comment?: string };
 /** `current` = rows processed so far (0…total); use for % and bar while saving. */
 export type SpreadsheetImportProgress = { current: number; total: number };
 
+/** A single row that failed: `label` identifies the row, `reason` explains why. */
+export type SpreadsheetImportError = { label: string; reason: string };
+
+/**
+ * Returned by `onImportRows` to render a results/log view after processing.
+ * Return `void` instead to keep the old behavior (toast + immediate close).
+ */
+export type SpreadsheetImportResult = {
+    total: number;
+    successCount: number;
+    errors: SpreadsheetImportError[];
+    /** Optional noun for the summary, e.g. "updated" or "imported". Defaults to "processed". */
+    verb?: string;
+};
+
 export interface SpreadsheetImportModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -21,7 +36,7 @@ export interface SpreadsheetImportModalProps {
         rows: SpreadsheetRow[],
         meta?: SpreadsheetImportMeta,
         onProgress?: (p: SpreadsheetImportProgress) => void,
-    ) => Promise<void>;
+    ) => Promise<void | SpreadsheetImportResult>;
     /** Optional demo CSV (headers + sample row) users can download before filling their file. */
     demoCsvTemplate?: { fileName: string; csv: string };
 }
@@ -40,6 +55,7 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
     const [parsingFile, setParsingFile] = useState(false);
     const [saveProgress, setSaveProgress] = useState<SpreadsheetImportProgress | null>(null);
     const [importComment, setImportComment] = useState('');
+    const [result, setResult] = useState<SpreadsheetImportResult | null>(null);
 
     const reset = useCallback(() => {
         setFile(null);
@@ -47,6 +63,7 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
         setImportComment('');
         setParsingFile(false);
         setSaveProgress(null);
+        setResult(null);
     }, []);
 
     const handleClose = () => {
@@ -61,6 +78,7 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
         setBusy(true);
         setParsingFile(true);
         setSaveProgress(null);
+        setResult(null);
         try {
             const rows = await parseSpreadsheetFile(f);
             setParsingFile(false);
@@ -68,13 +86,19 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
                 toast.error('No data rows found. Use a header row and at least one data row.');
                 return;
             }
-            await onImportRows(
+            const res = await onImportRows(
                 rows,
                 commentSnapshot ? { comment: commentSnapshot } : undefined,
                 (p) => setSaveProgress(p),
             );
-            reset();
-            onClose();
+            if (res && typeof res === 'object') {
+                // Keep the modal open to show the results/log view.
+                setResult(res);
+                setFile(null);
+            } else {
+                reset();
+                onClose();
+            }
         } catch (e) {
             console.error(e);
             toast.error(e instanceof Error ? e.message : 'Could not read file');
@@ -97,6 +121,81 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
         }
         setFile(f);
     };
+
+    if (result) {
+        const failedCount = result.errors.length;
+        const verb = result.verb || 'processed';
+        return (
+            <Modal isOpen={isOpen} onClose={handleClose} title={title} maxWidth="max-w-lg">
+                <div className="p-6 space-y-5">
+                    <div className="flex items-start gap-3">
+                        <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                                failedCount === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                            }`}
+                        >
+                            {failedCount === 0 ? (
+                                <CheckCircle2 className="h-5 w-5" />
+                            ) : (
+                                <AlertTriangle className="h-5 w-5" />
+                            )}
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="text-base font-semibold text-zinc-950">
+                                {failedCount === 0 ? 'Import complete' : 'Import finished with some errors'}
+                            </h3>
+                            <p className="mt-1 text-sm text-zinc-600">
+                                <span className="font-semibold text-zinc-900">{result.successCount}</span> of{' '}
+                                <span className="font-semibold text-zinc-900">{result.total}</span> rows {verb} successfully
+                                {failedCount > 0 && (
+                                    <>
+                                        {' · '}
+                                        <span className="font-semibold text-amber-700">{failedCount} failed</span>
+                                    </>
+                                )}
+                                .
+                            </p>
+                        </div>
+                    </div>
+
+                    {failedCount > 0 && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/50 overflow-hidden">
+                            <div className="border-b border-amber-200/70 px-4 py-2 text-xs font-bold uppercase tracking-wider text-amber-800">
+                                Skipped rows ({failedCount})
+                            </div>
+                            <ul className="max-h-56 divide-y divide-amber-100 overflow-y-auto custom-scrollbar text-xs">
+                                {result.errors.map((err, idx) => (
+                                    <li key={idx} className="flex items-start gap-2 px-4 py-2">
+                                        <span className="shrink-0 font-semibold text-zinc-900">{err.label}</span>
+                                        <span className="text-zinc-500">—</span>
+                                        <span className="text-zinc-600">{err.reason}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => reset()}
+                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-bold text-zinc-950 shadow-sm hover:border-orange-300 hover:bg-orange-50/80 transition-colors"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5 text-orange-600" />
+                            Import another file
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleClose}
+                            className="rounded-lg bg-zinc-950 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 transition-colors"
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        );
+    }
 
     return (
         <Modal isOpen={isOpen} onClose={handleClose} title={title} maxWidth="max-w-lg">

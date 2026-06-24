@@ -7,6 +7,7 @@ export const FP_MARKETING_IMPORT_TEMPLATE_FILENAMES = {
     people: 'Fairplatz-Marketing_Import-Template_People.csv',
     companies: 'Fairplatz-Marketing_Import-Template_Companies.csv',
     shows: 'Fairplatz-Marketing_Import-Template_Shows.csv',
+    showsUpdate: 'Fairplatz-Marketing_Bulk-Update-Template_Shows.csv',
     exhibitorsZoho: 'Fairplatz-Marketing_Import-Template_Exhibitors-for-Zoho.csv',
 } as const;
 
@@ -26,6 +27,13 @@ const SHOWS_CSV = [
     'Sample Expo Europe,2027-03-18,Trade show,Manufacturing,2,Europe,Germany,Frankfurt,Annual,Sample Organiser GmbH,https://sample-expo.example,"manufacturing, robotics",First-time entry,https://sample-expo.example/exhibitors',
 ].join('\n');
 
+// Bulk UPDATE template: the `id` column must hold an existing show id.
+// Leave a cell blank to keep the current value; filled cells overwrite it.
+const SHOWS_UPDATE_CSV = [
+    'id,name,starting_date,event_type,industry,level,world_area,country,city,frequency,organiser,website,tags,note,exhibitor_list_link',
+    'PASTE-EXISTING-SHOW-ID,Sample Expo Europe,2027-03-18,Trade show,Manufacturing,2,Europe,Germany,Frankfurt,Annual,Sample Organiser GmbH,https://sample-expo.example,"manufacturing, robotics",Updated via bulk edit,https://sample-expo.example/exhibitors',
+].join('\n');
+
 const EXHIBITORS_CSV = [
     'Company,Website,Company_Type,City,Country,World_Area,Contact_Details,Company_Linkedin,FP_Level,Events',
     'Sample Booth GmbH,https://sample-booth.example,Exhibitor,Cologne,Germany,Europe,events@sample-booth.example,https://www.linkedin.com/company/sample-booth,2,Sample Expo Europe',
@@ -35,6 +43,7 @@ export const fpMarketingImportDemoTemplates = {
     people: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.people, csv: PEOPLE_CSV },
     companies: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.companies, csv: COMPANIES_CSV },
     shows: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.shows, csv: SHOWS_CSV },
+    showsUpdate: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.showsUpdate, csv: SHOWS_UPDATE_CSV },
     exhibitorsZoho: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.exhibitorsZoho, csv: EXHIBITORS_CSV },
 } as const;
 

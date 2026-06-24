@@ -63,6 +63,8 @@ export const ShowsTable = () => {
     const [quickRegion, setQuickRegion] = useState<string>('All');
     const [exhibitorShowIds, setExhibitorShowIds] = useState<Set<string>>(new Set());
     const exhibitorShowIdsRef = useRef<Set<string>>(new Set());
+    const exhibitorIdsLoadedRef = useRef(false);
+    const exhibitorIdsInFlightRef = useRef<Promise<Set<string>> | null>(null);
     const [showExhibitorsOnly, setShowExhibitorsOnly] = useState(false);
 
     const [filterSelections, setFilterSelections] = useState<FilterSelections>({
@@ -134,34 +136,69 @@ export const ShowsTable = () => {
         if (!error) setTotalShowsCount(count ?? 0);
     }, [supabase]);
 
-    const fetchAllExhibitorShowIds = useCallback(async (): Promise<Set<string>> => {
-        const withExhibitors = new Set<string>();
-        const pageSize = 1000;
-        let offset = 0;
-
-        while (true) {
-            const { data: rows, error } = await supabase
-                .from('show_participation')
-                .select('show_id')
-                .range(offset, offset + pageSize - 1);
-
-            if (error) {
-                console.error('Failed to load exhibitor participation:', error);
-                return exhibitorShowIdsRef.current;
-            }
-
-            for (const row of rows || []) {
-                const showId = String(row.show_id ?? '').trim();
-                if (showId) withExhibitors.add(showId);
-            }
-
-            if (!rows || rows.length < pageSize) break;
-            offset += pageSize;
+    const fetchAllExhibitorShowIds = useCallback(async (force = false): Promise<Set<string>> => {
+        // Reuse the cached set unless a refresh is explicitly requested.
+        if (!force && exhibitorIdsLoadedRef.current) {
+            return exhibitorShowIdsRef.current;
+        }
+        // De-dupe concurrent callers so we never run this query more than once
+        // at a time (fetchData + the mount effect can race on first load).
+        if (!force && exhibitorIdsInFlightRef.current) {
+            return exhibitorIdsInFlightRef.current;
         }
 
-        exhibitorShowIdsRef.current = withExhibitors;
-        setExhibitorShowIds(withExhibitors);
-        return withExhibitors;
+        const load = (async (): Promise<Set<string>> => {
+            const withExhibitors = new Set<string>();
+
+            // Fast path: a single DISTINCT query in the database.
+            const { data: rpcRows, error: rpcError } = await supabase.rpc('get_exhibitor_show_ids');
+
+            if (!rpcError && Array.isArray(rpcRows)) {
+                for (const row of rpcRows) {
+                    const showId = String((typeof row === 'string' ? row : row?.show_id) ?? '').trim();
+                    if (showId) withExhibitors.add(showId);
+                }
+                exhibitorShowIdsRef.current = withExhibitors;
+                exhibitorIdsLoadedRef.current = true;
+                setExhibitorShowIds(withExhibitors);
+                return withExhibitors;
+            }
+
+            // Fallback: paginate the table (used only if the RPC is not deployed).
+            const pageSize = 1000;
+            let offset = 0;
+            while (true) {
+                const { data: rows, error } = await supabase
+                    .from('show_participation')
+                    .select('show_id')
+                    .range(offset, offset + pageSize - 1);
+
+                if (error) {
+                    console.error('Failed to load exhibitor participation:', error);
+                    return exhibitorShowIdsRef.current;
+                }
+
+                for (const row of rows || []) {
+                    const showId = String(row.show_id ?? '').trim();
+                    if (showId) withExhibitors.add(showId);
+                }
+
+                if (!rows || rows.length < pageSize) break;
+                offset += pageSize;
+            }
+
+            exhibitorShowIdsRef.current = withExhibitors;
+            exhibitorIdsLoadedRef.current = true;
+            setExhibitorShowIds(withExhibitors);
+            return withExhibitors;
+        })();
+
+        exhibitorIdsInFlightRef.current = load;
+        try {
+            return await load;
+        } finally {
+            exhibitorIdsInFlightRef.current = null;
+        }
     }, [supabase]);
 
     useEffect(() => {
@@ -319,7 +356,6 @@ export const ShowsTable = () => {
 
             if (reset) {
                 void fetchTotalShowsCount();
-                void fetchAllExhibitorShowIds();
             }
         } catch (err: any) {
             console.error(err);
@@ -460,42 +496,36 @@ export const ShowsTable = () => {
         meta?: { comment?: string },
         onProgress?: (p: SpreadsheetImportProgress) => void,
     ) => {
-        const { rowsToShowZohoPayloads } = await import('@/lib/importSpreadsheet');
+        const { rowsToShowSupabaseRows } = await import('@/lib/importSpreadsheet');
         const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
-        const payloads = rowsToShowZohoPayloads(rows);
-        if (payloads.length === 0) {
-            toast.error('No valid rows. Include Event Name (Event_Name, Event, Name, or Show).');
+        const showRows = rowsToShowSupabaseRows(rows);
+        if (showRows.length === 0) {
+            toast.error('No valid rows. Each row needs a show name (name, Event_Name, Event, or Show).');
             return;
         }
-        onProgress?.({ current: 0, total: payloads.length });
+        const total = showRows.length;
+        onProgress?.({ current: 0, total });
         let ok = 0;
 
-        for (let i = 0; i < payloads.length; i++) {
-            const payload = payloads[i];
-            try {
-                const row = {
-                    id: crypto.randomUUID(),
-                    name: payload.Event_Name || payload.Event || payload.Name || '',
-                    event_type: payload.Event_Type || '',
-                    starting_date: payload.Starting_Date || null,
-                    industry: payload.Industry || '',
-                    level: payload.Level || '',
-                    world_area: payload.World_Area || '',
-                    country: payload.Country || '',
-                    city: payload.City || '',
-                    frequency: payload.Frequency || '',
-                };
-                const { error: insertError } = await supabase.from('shows').insert(row);
-                if (!insertError) ok++;
-            } catch (e) {
-                console.error(e);
+        const CHUNK = 100;
+        for (let i = 0; i < showRows.length; i += CHUNK) {
+            const chunk = showRows.slice(i, i + CHUNK).map((r) => ({ id: crypto.randomUUID(), ...r }));
+            const { error: insertError } = await supabase.from('shows').insert(chunk);
+            if (insertError) {
+                // Fall back to per-row inserts so one bad row doesn't drop the batch.
+                for (const single of chunk) {
+                    const { error: rowError } = await supabase.from('shows').insert(single);
+                    if (!rowError) ok++;
+                }
+            } else {
+                ok += chunk.length;
             }
-            onProgress?.({ current: i + 1, total: payloads.length });
+            onProgress?.({ current: Math.min(i + CHUNK, total), total });
         }
         await fetchData(true, appliedSearch);
         void fetchUpcomingShows();
-        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
-        toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
+        await logSpreadsheetImport(`Created ${ok} of ${total} shows in Supabase from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${total} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
 
     const handleRowClick = (item: any) => {
@@ -537,11 +567,12 @@ export const ShowsTable = () => {
                     title="Import shows (CSV / Excel)"
                     columnHint={
                         <>
-                            Required: <strong>Event_Name</strong> (or Event / Name / Show). Optional: Event_Type, Starting_Date,
-                            Industry, Level, World_Area, Country, City, Frequency.
+                            Required: <strong>name</strong> (or Event_Name / Event / Show). Optional: starting_date, event_type,
+                            industry, level, world_area, country, city, frequency, organiser, website, tags, note,
+                            exhibitor_list_link.
                         </>
                     }
-                    demoCsvTemplate={fpMarketingImportDemoTemplates.showsZoho}
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.shows}
                     onImportRows={handleShowsSpreadsheetImport}
                 />
             )}

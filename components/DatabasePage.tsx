@@ -424,47 +424,35 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
         meta?: { comment?: string },
         onProgress?: (p: SpreadsheetImportProgress) => void,
     ) => {
-        const { rowsToShowZohoPayloads } = await import('@/lib/importSpreadsheet');
+        const { rowsToShowSupabaseRows } = await import('@/lib/importSpreadsheet');
         const { logSpreadsheetImport } = await import('@/lib/logImportActivity');
-        const payloads = rowsToShowZohoPayloads(rows);
-        if (payloads.length === 0) {
-            toast.error('No valid rows. Each row needs an event name (Event_Name, Event, Name, or Show).');
+        const showRows = rowsToShowSupabaseRows(rows);
+        if (showRows.length === 0) {
+            toast.error('No valid rows. Each row needs a show name (name, Event_Name, Event, or Show).');
             return;
         }
-        onProgress?.({ current: 0, total: payloads.length });
+        const total = showRows.length;
+        onProgress?.({ current: 0, total });
         let ok = 0;
-        const { data: maxIdRows } = await supabase
-            .from('shows')
-            .select('id')
-            .order('id', { ascending: false })
-            .limit(1);
-        let nextId = Number(maxIdRows?.[0]?.id || 0);
-        for (let i = 0; i < payloads.length; i++) {
-            const payload = payloads[i];
-            try {
-                nextId += 1;
-                const row = {
-                    id: nextId,
-                    name: payload.Event_Name || payload.Event || payload.Name || '',
-                    event_type: payload.Event_Type || '',
-                    starting_date: payload.Starting_Date || null,
-                    industry: payload.Industry || '',
-                    level: payload.Level || '',
-                    world_area: payload.World_Area || '',
-                    country: payload.Country || '',
-                    city: payload.City || '',
-                    frequency: payload.Frequency || '',
-                };
-                const { error } = await supabase.from('shows').insert(row);
-                if (!error) ok++;
-            } catch (e) {
-                console.error(e);
+
+        const CHUNK = 100;
+        for (let i = 0; i < showRows.length; i += CHUNK) {
+            const chunk = showRows.slice(i, i + CHUNK).map((r) => ({ id: crypto.randomUUID(), ...r }));
+            const { error } = await supabase.from('shows').insert(chunk);
+            if (error) {
+                // Fall back to per-row inserts so one bad row doesn't drop the batch.
+                for (const single of chunk) {
+                    const { error: rowError } = await supabase.from('shows').insert(single);
+                    if (!rowError) ok++;
+                }
+            } else {
+                ok += chunk.length;
             }
-            onProgress?.({ current: i + 1, total: payloads.length });
+            onProgress?.({ current: Math.min(i + CHUNK, total), total });
         }
         await fetchShows();
-        await logSpreadsheetImport(`Created ${ok} of ${payloads.length} shows in Supabase from spreadsheet.`, meta?.comment);
-        toast.success(`Created ${ok} of ${payloads.length} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
+        await logSpreadsheetImport(`Created ${ok} of ${total} shows in Supabase from spreadsheet.`, meta?.comment);
+        toast.success(`Created ${ok} of ${total} shows in Supabase${meta?.comment?.trim() ? ' · note saved' : ''}`);
     };
 
     return (
@@ -1133,11 +1121,12 @@ export const DatabasePage: React.FC<DatabasePageProps> = ({ notify }) => {
                     title="Import shows (CSV / Excel)"
                     columnHint={
                         <>
-                            Required: <strong>Event_Name</strong> (or Event / Name / Show). Optional: Event_Type, Starting_Date
-                            (YYYY-MM-DD), Industry, Level, World_Area, Country, City, Frequency.
+                            Required: <strong>name</strong> (or Event_Name / Event / Show). Optional: starting_date (YYYY-MM-DD),
+                            event_type, industry, level, world_area, country, city, frequency, organiser, website, tags, note,
+                            exhibitor_list_link.
                         </>
                     }
-                    demoCsvTemplate={fpMarketingImportDemoTemplates.showsZoho}
+                    demoCsvTemplate={fpMarketingImportDemoTemplates.shows}
                     onImportRows={handleSpreadsheetShowsImport}
                 />
             )}

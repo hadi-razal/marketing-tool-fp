@@ -141,6 +141,85 @@ export function formatStartingDateForZoho(dateStr: string): string | undefined {
     return `${day}-${month}-${year}`;
 }
 
+/** ISO `YYYY-MM-DD` for Postgres `date` columns; undefined if unparseable. */
+export function formatDateForSupabase(dateStr: string): string | undefined {
+    if (!dateStr?.trim()) return undefined;
+    const s = dateStr.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return undefined;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+}
+
+function normalizeUrl(input: string): string {
+    const v = input.trim();
+    if (!v) return '';
+    return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
+
+/**
+ * Maps spreadsheet rows directly to the Supabase `shows` table schema.
+ * Skips rows without a show name. Caller supplies the `id` (text PK).
+ * Column matching is flexible (case/spacing) and accepts both snake_case
+ * (matching the DB) and the older Zoho-style headers.
+ */
+export type ShowImportRow = {
+    name: string;
+    starting_date: string | null;
+    event_type: string;
+    industry: string;
+    level: string;
+    world_area: string;
+    country: string;
+    city: string;
+    frequency: string;
+    organiser: string;
+    website: string;
+    tags: string;
+    note: string;
+    exhibitor_list_link: string;
+};
+
+export function rowsToShowSupabaseRows(rows: SpreadsheetRow[]): ShowImportRow[] {
+    return rows
+        .map((row): ShowImportRow | null => {
+            const name = rowGet(row, 'name', 'Event_Name', 'event name', 'Event', 'Name', 'Show', 'Show Name', 'Show_Name');
+            if (!name) return null;
+
+            const startingRaw = rowGet(row, 'starting_date', 'Starting_Date', 'starting date', 'Date', 'Start', 'Start Date');
+            const websiteRaw = rowGet(row, 'website', 'Website', 'url', 'URL', 'Site');
+            const exhibitorLinkRaw = rowGet(
+                row,
+                'exhibitor_list_link',
+                'exhibitor list link',
+                'Exhibitor_List_Link',
+                'Exhibitor List Link',
+                'Exhibitor List',
+            );
+
+            return {
+                name,
+                starting_date: startingRaw ? formatDateForSupabase(startingRaw) ?? null : null,
+                event_type: rowGet(row, 'event_type', 'Event_Type', 'event type', 'Type'),
+                industry: rowGet(row, 'industry', 'Industry', 'sector'),
+                level: rowGet(row, 'level', 'Level'),
+                world_area: rowGet(row, 'world_area', 'World_Area', 'world area', 'Area', 'Region'),
+                country: rowGet(row, 'country', 'Country'),
+                city: rowGet(row, 'city', 'City'),
+                frequency: rowGet(row, 'frequency', 'Frequency'),
+                organiser: rowGet(row, 'organiser', 'Organiser', 'organizer', 'Organizer', 'Host'),
+                website: normalizeUrl(websiteRaw),
+                tags: rowGet(row, 'tags', 'Tags', 'tag', 'Tag'),
+                note: rowGet(row, 'note', 'Note', 'notes', 'Notes'),
+                exhibitor_list_link: normalizeUrl(exhibitorLinkRaw),
+            };
+        })
+        .filter((r): r is ShowImportRow => r !== null);
+}
+
 export function rowsToImportedPeople(rows: SpreadsheetRow[], idPrefix = 'import_person'): any[] {
     const ts = Date.now();
     return rows.map((row, i) => {

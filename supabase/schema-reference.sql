@@ -78,6 +78,23 @@ as $$
   where sp.show_id = p_show_id;
 $$;
 
+-- Fast lookup of which shows have at least one exhibitor (participation row).
+-- Returns the DISTINCT set of show_ids in a single query instead of paginating
+-- the entire show_participation table on the client. Backed by
+-- idx_show_participation_show_id.
+create or replace function public.get_exhibitor_show_ids()
+returns table (show_id text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select distinct sp.show_id
+  from show_participation sp
+  where sp.show_id is not null
+    and btrim(sp.show_id) <> '';
+$$;
+
 create table if not exists public.floorplans (
   id text not null,
   created_at timestamp with time zone not null default now(),

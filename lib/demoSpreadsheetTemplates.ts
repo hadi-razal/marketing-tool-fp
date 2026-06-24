@@ -6,7 +6,7 @@
 export const FP_MARKETING_IMPORT_TEMPLATE_FILENAMES = {
     people: 'Fairplatz-Marketing_Import-Template_People.csv',
     companies: 'Fairplatz-Marketing_Import-Template_Companies.csv',
-    showsZoho: 'Fairplatz-Marketing_Import-Template_Shows-for-Zoho.csv',
+    shows: 'Fairplatz-Marketing_Import-Template_Shows.csv',
     exhibitorsZoho: 'Fairplatz-Marketing_Import-Template_Exhibitors-for-Zoho.csv',
 } as const;
 
@@ -22,8 +22,8 @@ const COMPANIES_CSV = [
 ].join('\n');
 
 const SHOWS_CSV = [
-    'Event_Name,Event_Type,Industry,Level,World_Area,Country,City,Frequency,Starting_Date',
-    'Sample Expo Europe,Trade show,Manufacturing,2,Europe,Germany,Frankfurt,Annual,2027-03-18',
+    'name,starting_date,event_type,industry,level,world_area,country,city,frequency,organiser,website,tags,note,exhibitor_list_link',
+    'Sample Expo Europe,2027-03-18,Trade show,Manufacturing,2,Europe,Germany,Frankfurt,Annual,Sample Organiser GmbH,https://sample-expo.example,"manufacturing, robotics",First-time entry,https://sample-expo.example/exhibitors',
 ].join('\n');
 
 const EXHIBITORS_CSV = [
@@ -34,7 +34,7 @@ const EXHIBITORS_CSV = [
 export const fpMarketingImportDemoTemplates = {
     people: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.people, csv: PEOPLE_CSV },
     companies: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.companies, csv: COMPANIES_CSV },
-    showsZoho: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.showsZoho, csv: SHOWS_CSV },
+    shows: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.shows, csv: SHOWS_CSV },
     exhibitorsZoho: { fileName: FP_MARKETING_IMPORT_TEMPLATE_FILENAMES.exhibitorsZoho, csv: EXHIBITORS_CSV },
 } as const;
 

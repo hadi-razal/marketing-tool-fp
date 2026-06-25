@@ -14,6 +14,7 @@ import {
     ChevronDown,
     ChevronRight,
     Search,
+    Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import type { FilterCategory, FilterSelections } from '@/components/Zoho/FilterPopover';
@@ -74,6 +75,11 @@ const CATEGORY_GROUPS: { title: string; keys: string[] }[] = [
     { title: 'Location', keys: ['country', 'city', 'world_area'] },
     { title: 'Event details', keys: ['event_type', 'industry', 'level', 'frequency'] },
 ];
+
+const SCORE_MIN = 1;
+const SCORE_MAX = 100;
+type ScoreRange = { min: number; max: number };
+const FULL_SCORE_RANGE: ScoreRange = { min: SCORE_MIN, max: SCORE_MAX };
 
 const FilterOptionSection: React.FC<{
     category: FilterCategory;
@@ -200,6 +206,8 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
     const [tempSelections, setTempSelections] = useState<FilterSelections>(selections);
     const [tempDateFilter, setTempDateFilter] = useState<ShowDateFilter>(dateFilter);
     const [tempExhibitorsOnly, setTempExhibitorsOnly] = useState(exhibitorsOnly);
+    // UI-only placeholder until shows carry an opportunity score; not wired to data filtering yet.
+    const [scoreRange, setScoreRange] = useState<ScoreRange>(FULL_SCORE_RANGE);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -255,6 +263,7 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
         );
         setTempDateFilter(EMPTY_SHOW_DATE_FILTER);
         setTempExhibitorsOnly(false);
+        setScoreRange(FULL_SCORE_RANGE);
         onClear();
         onClose();
     };
@@ -328,6 +337,68 @@ export const ShowsFilterDrawer: React.FC<ShowsFilterDrawerProps> = ({
                                         <Check className="h-4 w-4 shrink-0 text-emerald-600" />
                                     ) : null}
                                 </button>
+                            </section>
+
+                            <section>
+                                <div className="mb-2.5 flex items-center gap-2">
+                                    <Gauge className="h-3.5 w-3.5 text-orange-500" />
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Opportunity score</h4>
+                                </div>
+                                <div className="rounded-xl border border-zinc-200 bg-white px-3.5 pb-3.5 pt-3">
+                                    <div className="mb-3 flex items-center justify-between">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Range</span>
+                                        <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">
+                                            {scoreRange.min} – {scoreRange.max}
+                                        </span>
+                                    </div>
+
+                                    <div className="relative h-5">
+                                        <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-zinc-200" />
+                                        <div
+                                            className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-orange-500"
+                                            style={{
+                                                left: `${((scoreRange.min - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100}%`,
+                                                right: `${100 - ((scoreRange.max - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100}%`,
+                                            }}
+                                        />
+                                        <input
+                                            type="range"
+                                            min={SCORE_MIN}
+                                            max={SCORE_MAX}
+                                            value={scoreRange.min}
+                                            onChange={(e) =>
+                                                setScoreRange((prev) => ({
+                                                    ...prev,
+                                                    min: Math.min(Number(e.target.value), prev.max),
+                                                }))
+                                            }
+                                            aria-label="Minimum opportunity score"
+                                            className="pointer-events-none absolute left-0 top-1/2 h-0 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-orange-500 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-orange-500 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+                                        />
+                                        <input
+                                            type="range"
+                                            min={SCORE_MIN}
+                                            max={SCORE_MAX}
+                                            value={scoreRange.max}
+                                            onChange={(e) =>
+                                                setScoreRange((prev) => ({
+                                                    ...prev,
+                                                    max: Math.max(Number(e.target.value), prev.min),
+                                                }))
+                                            }
+                                            aria-label="Maximum opportunity score"
+                                            className="pointer-events-none absolute left-0 top-1/2 h-0 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-orange-500 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-orange-500 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+                                        />
+                                    </div>
+
+                                    <div className="mt-2 flex items-center justify-between text-[10px] font-medium text-zinc-400">
+                                        <span>{SCORE_MIN}</span>
+                                        <span>{SCORE_MAX}</span>
+                                    </div>
+                                    <p className="mt-2 text-[10px] text-zinc-400">
+                                        Scoring data isn&apos;t available yet — this filter is a preview.
+                                    </p>
+                                </div>
                             </section>
 
                             <section>

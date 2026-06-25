@@ -97,34 +97,45 @@ $$;
 
 -- Paginated list of shows that have at least one exhibitor (participation row).
 -- Uses an indexed EXISTS join so the client never has to ship thousands of ids
--- in an `id IN (...)` clause. Optional case-insensitive name search.
--- Backed by idx_show_participation_show_id.
+-- in an `id IN (...)` clause. Optional case-insensitive name search plus a
+-- whitelisted sort column/direction. Backed by idx_show_participation_show_id.
 create or replace function public.get_shows_with_exhibitors(
   p_search text default null,
   p_limit int default 100,
-  p_offset int default 0
+  p_offset int default 0,
+  p_sort text default 'id',
+  p_asc boolean default false
 )
 returns setof shows
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select s.*
-  from shows s
-  where exists (
-    select 1
-    from show_participation sp
-    where sp.show_id = s.id
-  )
-  and (
-    p_search is null
-    or btrim(p_search) = ''
-    or s.name ilike '%' || p_search || '%'
-  )
-  order by s.id desc
-  limit greatest(p_limit, 0)
-  offset greatest(p_offset, 0);
+declare
+  v_sort text;
+  v_dir text;
+begin
+  -- Whitelist the sort column to keep the dynamic ORDER BY injection-safe.
+  v_sort := case lower(coalesce(p_sort, 'id'))
+    when 'name' then 'name'
+    when 'level' then 'level'
+    when 'starting_date' then 'starting_date'
+    else 'id'
+  end;
+  v_dir := case when p_asc then 'asc nulls last' else 'desc nulls last' end;
+
+  return query execute format(
+    'select s.*
+       from shows s
+      where exists (select 1 from show_participation sp where sp.show_id = s.id)
+        and ($1 is null or btrim($1) = '''' or s.name ilike ''%%'' || $1 || ''%%'')
+      order by %I %s, s.id desc
+      limit greatest($2, 0)
+      offset greatest($3, 0)',
+    v_sort, v_dir
+  ) using p_search, p_limit, p_offset;
+end;
 $$;
 
 create table if not exists public.floorplans (

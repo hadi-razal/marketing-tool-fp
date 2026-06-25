@@ -7,6 +7,9 @@ import {
     Link2,
     Building2,
     Tag,
+    X,
+    CalendarDays,
+    FileText,
 } from 'lucide-react';
 import { SoftInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -148,8 +151,20 @@ const formFromData = (data?: Record<string, unknown>): ShowFormState => ({
     Exhibitor_List_Link: pick(data, 'exhibitor_list_link', 'Exhibitor_List_Link'),
 });
 
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">{children}</h3>
+const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
+    icon,
+    title,
+    children,
+}) => (
+    <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm shadow-zinc-950/5">
+        <div className="mb-4 flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+                {icon}
+            </span>
+            <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
+        </div>
+        {children}
+    </section>
 );
 
 const SoftSelect: React.FC<{
@@ -269,16 +284,39 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
     };
 
     return (
-        <Modal
-            isOpen={isOpen}
-            onClose={onClose}
-            title={initialData ? 'Edit Show' : 'Add New Show'}
-            maxWidth="max-w-4xl"
-        >
-            <div className="max-h-[calc(90vh-5rem)] overflow-y-auto custom-scrollbar">
-                <div className="space-y-8 p-6">
-                    <section className="space-y-4">
-                        <SectionTitle>Basic details</SectionTitle>
+        <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl" hideHeader>
+            <div className="flex max-h-[90vh] flex-col">
+                {/* Header */}
+                <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 bg-linear-to-br from-orange-50 via-white to-white px-6 py-5">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-orange-500 to-orange-400 text-white shadow-lg shadow-orange-500/25">
+                            <CalendarDays className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold tracking-tight text-zinc-950">
+                                {initialData ? 'Edit show' : 'Add new show'}
+                            </h2>
+                            <p className="text-sm text-zinc-500">
+                                {initialData
+                                    ? 'Update the details for this show.'
+                                    : 'Fill in the details to add a show to your library.'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar bg-zinc-50/60">
+                    <div className="space-y-4 p-5 sm:p-6">
+                    <Section icon={<Calendar className="h-4 w-4" />} title="Basic details">
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <SoftInput
                                 label="Event Name"
@@ -301,10 +339,9 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 onChange={(e) => setField('Starting_Date', e.target.value)}
                             />
                         </div>
-                    </section>
+                    </Section>
 
-                    <section className="space-y-4">
-                        <SectionTitle>Classification & location</SectionTitle>
+                    <Section icon={<MapPin className="h-4 w-4" />} title="Classification & location">
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <SoftSelect
                                 label="Industry"
@@ -378,10 +415,9 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 icon={<MapPin className="h-4 w-4" />}
                             />
                         </div>
-                    </section>
+                    </Section>
 
-                    <section className="space-y-4">
-                        <SectionTitle>Organiser & tags</SectionTitle>
+                    <Section icon={<Building2 className="h-4 w-4" />} title="Organiser & tags">
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <SoftInput
                                 label="Organiser"
@@ -398,10 +434,9 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 icon={<Tag className="h-4 w-4" />}
                             />
                         </div>
-                    </section>
+                    </Section>
 
-                    <section className="space-y-4">
-                        <SectionTitle>Links</SectionTitle>
+                    <Section icon={<Link2 className="h-4 w-4" />} title="Links">
                         <div className="grid grid-cols-1 gap-4">
                             <SoftInput
                                 label="Show Website"
@@ -418,10 +453,9 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                                 icon={<Link2 className="h-4 w-4" />}
                             />
                         </div>
-                    </section>
+                    </Section>
 
-                    <section className="space-y-4">
-                        <SectionTitle>Notes</SectionTitle>
+                    <Section icon={<FileText className="h-4 w-4" />} title="Notes">
                         <SoftTextarea
                             label="Show Note"
                             value={formData.Note}
@@ -429,16 +463,18 @@ export const ShowFormModal: React.FC<ShowFormModalProps> = ({ isOpen, onClose, o
                             placeholder="Internal notes, follow-ups, or event details…"
                             rows={4}
                         />
-                    </section>
-
-                    <div className="flex justify-end gap-3 border-t border-zinc-100 pt-4">
-                        <Button variant="ghost" onClick={onClose}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSubmit} isLoading={loading} leftIcon={<Save className="h-4 w-4" />}>
-                            Save Show
-                        </Button>
+                    </Section>
                     </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex shrink-0 items-center justify-end gap-3 border-t border-zinc-200 bg-white px-6 py-4">
+                    <Button variant="ghost" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSubmit} isLoading={loading} leftIcon={<Save className="h-4 w-4" />}>
+                        {initialData ? 'Save changes' : 'Save show'}
+                    </Button>
                 </div>
             </div>
         </Modal>

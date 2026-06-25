@@ -13,6 +13,13 @@ import {
     CalendarDays,
     Globe2,
     Building2,
+    ArrowUpDown,
+    ChevronDown,
+    ChevronRight,
+    LayoutGrid,
+    CalendarRange,
+    PencilLine,
+    X,
 } from 'lucide-react';
 import { ShowCardLogo } from '@/components/Shows/ShowLogo';
 import type { FilterSelections, FilterCategory } from './FilterPopover';
@@ -26,15 +33,40 @@ import {
 } from '@/components/Shows/ShowsFilterDrawer';
 import { ShowFormModal } from './ShowFormModal';
 import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
 import { Skeleton } from '../ui/Skeleton';
 import { toast } from 'sonner';
 import { SpreadsheetImportModal, type SpreadsheetImportProgress } from '@/components/SpreadsheetImportModal';
 import type { SpreadsheetRow } from '@/lib/importSpreadsheet';
 import { fpMarketingImportDemoTemplates } from '@/lib/demoSpreadsheetTemplates';
 import { createClient } from '@/lib/supabase';
-import { startOfDay, isAfter, isSameDay, format } from 'date-fns';
-import { UpcomingShowsPanel, type UpcomingShowItem } from '@/components/Shows/UpcomingShowsPanel';
-import { isMiddleEastShow } from '@/lib/utils';
+import { ShowsCalendar } from '@/components/Shows/ShowsCalendar';
+
+type ShowViewMode = 'grid' | 'calendar';
+
+type ShowSortKey =
+    | 'recent'
+    | 'name_asc'
+    | 'name_desc'
+    | 'tier_asc'
+    | 'tier_desc'
+    | 'date_asc'
+    | 'date_desc';
+
+const SHOW_SORT_OPTIONS: { key: ShowSortKey; label: string; column: string; ascending: boolean }[] = [
+    { key: 'recent', label: 'Newest added', column: 'id', ascending: false },
+    { key: 'name_asc', label: 'Name (A → Z)', column: 'name', ascending: true },
+    { key: 'name_desc', label: 'Name (Z → A)', column: 'name', ascending: false },
+    { key: 'tier_asc', label: 'Tier (low → high)', column: 'level', ascending: true },
+    { key: 'tier_desc', label: 'Tier (high → low)', column: 'level', ascending: false },
+    { key: 'date_asc', label: 'Start date (soonest)', column: 'starting_date', ascending: true },
+    { key: 'date_desc', label: 'Start date (latest)', column: 'starting_date', ascending: false },
+];
+
+const SHOW_SORT_MAP = Object.fromEntries(SHOW_SORT_OPTIONS.map((o) => [o.key, o])) as Record<
+    ShowSortKey,
+    (typeof SHOW_SORT_OPTIONS)[number]
+>;
 
 export const ShowsTable = () => {
     const router = useRouter();
@@ -50,19 +82,18 @@ export const ShowsTable = () => {
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(0);
     const LIMIT = 100;
-    const UPCOMING_DISPLAY_LIMIT = 20;
 
     const [totalShowsCount, setTotalShowsCount] = useState<number | null>(null);
-    const [upcomingShowsAll, setUpcomingShowsAll] = useState<UpcomingShowItem[]>([]);
-    const [upcomingLoading, setUpcomingLoading] = useState(true);
 
     const [importOpen, setImportOpen] = useState(false);
     const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const [sortBy, setSortBy] = useState<ShowSortKey>('recent');
+    const [viewMode, setViewMode] = useState<ShowViewMode>('grid');
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [allFetchedData, setAllFetchedData] = useState<any[]>([]);
 
-    const [quickRegion, setQuickRegion] = useState<string>('All');
     const [exhibitorShowIds, setExhibitorShowIds] = useState<Set<string>>(new Set());
     const exhibitorShowIdsRef = useRef<Set<string>>(new Set());
     const exhibitorIdsLoadedRef = useRef(false);
@@ -207,60 +238,13 @@ export const ShowsTable = () => {
         void fetchAllExhibitorShowIds();
     }, [fetchAllExhibitorShowIds]);
 
-    const fetchUpcomingShows = useCallback(async () => {
-        setUpcomingLoading(true);
-        try {
-            const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
-            const { data: rows, error } = await supabase
-                .from('shows')
-                .select('id, name, starting_date, city, country, world_area, industry')
-                .not('starting_date', 'is', null)
-                .gte('starting_date', today)
-                .order('starting_date', { ascending: true })
-                .limit(500);
-
-            if (error) throw error;
-
-            const items = (rows || [])
-                .filter((row) => isMiddleEastShow({
-                    world_area: String(row.world_area || ''),
-                    country: String(row.country || ''),
-                }))
-                .flatMap((item) => {
-                    const parsed = new Date(item.starting_date);
-                    if (Number.isNaN(parsed.getTime())) return [];
-                    const upcoming: UpcomingShowItem = {
-                        id: String(item.id),
-                        name: String(item.name || 'Untitled show'),
-                        date: parsed,
-                        location: [item.city, item.country].filter(Boolean).join(', '),
-                        ...(item.industry ? { industry: String(item.industry) } : {}),
-                    };
-                    if (!isAfter(upcoming.date, startOfDay(new Date())) && !isSameDay(upcoming.date, startOfDay(new Date()))) {
-                        return [];
-                    }
-                    return [upcoming];
-                });
-
-            setUpcomingShowsAll(items);
-        } catch (err) {
-            console.error('Failed to fetch upcoming shows', err);
-            setUpcomingShowsAll([]);
-        } finally {
-            setUpcomingLoading(false);
-        }
-    }, [supabase]);
-
-    useEffect(() => {
-        void fetchUpcomingShows();
-    }, [fetchUpcomingShows]);
-
     const fetchData = useCallback(async (reset = false, searchTerm = '') => {
         setLoading(true);
         setFetchError('');
         try {
             const from = reset ? 0 : page * LIMIT;
             const trimmedSearch = searchTerm.trim();
+            const sort = SHOW_SORT_MAP[sortBy] ?? SHOW_SORT_MAP.recent;
 
             let rows: any[] | null = null;
 
@@ -271,6 +255,8 @@ export const ShowsTable = () => {
                     p_search: trimmedSearch || null,
                     p_limit: LIMIT,
                     p_offset: from,
+                    p_sort: sort.column,
+                    p_asc: sort.ascending,
                 });
 
                 if (rpcError) {
@@ -286,7 +272,7 @@ export const ShowsTable = () => {
                     let fbQuery = supabase
                         .from('shows')
                         .select('*')
-                        .order('id', { ascending: false })
+                        .order(sort.column, { ascending: sort.ascending, nullsFirst: false })
                         .in('id', exhibitorIds);
                     if (trimmedSearch) fbQuery = fbQuery.ilike('name', `%${trimmedSearch}%`);
                     const { data: fbRows, error: fbErr } = await fbQuery.range(from, from + LIMIT - 1);
@@ -299,7 +285,7 @@ export const ShowsTable = () => {
                 let query = supabase
                     .from('shows')
                     .select('*')
-                    .order('id', { ascending: false });
+                    .order(sort.column, { ascending: sort.ascending, nullsFirst: false });
 
                 if (trimmedSearch) {
                     query = query.ilike('name', `%${trimmedSearch}%`);
@@ -320,18 +306,6 @@ export const ShowsTable = () => {
                     const uniqueItems = new Map(prev.map(item => [item.ID, item]));
                     normalized.forEach(item => uniqueItems.set(item.ID, item));
                     return Array.from(uniqueItems.values());
-                });
-            }
-
-            /* Apply quick region filter */
-            if (quickRegion !== 'All') {
-                normalized = normalized.filter(item => {
-                    const country = String(item.Country || '').toLowerCase();
-                    const area = String(item.World_Area || '').toLowerCase();
-                    if (quickRegion === 'UAE') return country.includes('united arab emirates') || country === 'uae';
-                    if (quickRegion === 'KSA') return country.includes('saudi arabia') || country === 'ksa';
-                    if (quickRegion === 'Europe') return area.includes('europe');
-                    return true;
                 });
             }
 
@@ -388,12 +362,12 @@ export const ShowsTable = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, filterSelections, dateFilter, quickRegion, showExhibitorsOnly, supabase, fetchTotalShowsCount, fetchAllExhibitorShowIds]);
+    }, [page, filterSelections, dateFilter, showExhibitorsOnly, sortBy, supabase, fetchTotalShowsCount, fetchAllExhibitorShowIds]);
 
     useEffect(() => {
         setPage(0);
         fetchData(true, appliedSearch);
-    }, [appliedSearch, filterSelections, dateFilter, quickRegion, showExhibitorsOnly]);
+    }, [appliedSearch, filterSelections, dateFilter, showExhibitorsOnly, sortBy]);
 
     const handleSearch = () => {
         const term = search.trim();
@@ -470,17 +444,9 @@ export const ShowsTable = () => {
         return () => observer.disconnect();
     }, [hasMore, data.length, loadMore]);
 
-    const upcomingShows = useMemo(
-        () => upcomingShowsAll.slice(0, UPCOMING_DISPLAY_LIMIT),
-        [upcomingShowsAll],
-    );
-
     const hasListFilters = useMemo(
-        () =>
-            Boolean(appliedSearch.trim()) ||
-            totalActiveFilters > 0 ||
-            quickRegion !== 'All',
-        [appliedSearch, totalActiveFilters, quickRegion],
+        () => Boolean(appliedSearch.trim()) || totalActiveFilters > 0,
+        [appliedSearch, totalActiveFilters],
     );
 
     const exhibitionsCountLabel = useMemo(() => {
@@ -551,7 +517,6 @@ export const ShowsTable = () => {
             onProgress?.({ current: invalid.length + Math.min(i + CHUNK, entries.length), total });
         }
         await fetchData(true, appliedSearch);
-        void fetchUpcomingShows();
         await logSpreadsheetImport(`Created ${ok} of ${total} shows in Supabase from spreadsheet.`, meta?.comment);
         return { total, successCount: ok, errors, verb: 'imported' };
     };
@@ -596,7 +561,6 @@ export const ShowsTable = () => {
             onProgress?.({ current: invalid.length + Math.min(i + CHUNK, entries.length), total });
         }
         await fetchData(true, appliedSearch);
-        void fetchUpcomingShows();
         await logSpreadsheetImport(`Updated ${ok} of ${total} shows in Supabase from spreadsheet.`, meta?.comment);
         return { total, successCount: ok, errors, verb: 'updated' };
     };
@@ -621,17 +585,177 @@ export const ShowsTable = () => {
     };
 
     return (
-        <div className="flex flex-col gap-6">
-            <div className="space-y-1">
-                <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Shows</h1>
-                <p className="text-sm text-zinc-500">Upcoming exhibitions at a glance, then your full show library.</p>
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 flex flex-col gap-3 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm shadow-zinc-950/5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+                <div className="space-y-1">
+                    <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Shows</h1>
+                    <p className="text-sm text-zinc-500">Browse and manage your full show library.</p>
+                </div>
+
+                {/* Compact search + actions — top-right, opposite the title */}
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <div className="relative w-full min-w-0 sm:w-56">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                        <input
+                            type="text"
+                            placeholder="Search shows..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSearch();
+                                }
+                            }}
+                            className="h-9 w-full rounded-xl border border-zinc-200 bg-white py-2 pl-8 pr-8 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleSearch}
+                            aria-label="Search"
+                            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                        >
+                            {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                        </button>
+                    </div>
+
+                    <div className="flex h-9 shrink-0 items-center rounded-xl border border-zinc-200 bg-white p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('grid')}
+                            aria-label="Grid view"
+                            title="Grid view"
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                                viewMode === 'grid' ? 'bg-orange-500 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-100'
+                            }`}
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('calendar')}
+                            aria-label="Calendar view"
+                            title="Calendar view"
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                                viewMode === 'calendar' ? 'bg-orange-500 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-100'
+                            }`}
+                        >
+                            <CalendarRange className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <Button
+                        variant="secondary"
+                        onClick={() => setIsFilterOpen(!isFilterOpen)}
+                        className={`h-9 rounded-xl border px-3 ${totalActiveFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
+                        leftIcon={<Filter className="h-4 w-4" />}
+                    >
+                        <span className="hidden sm:inline">Filters</span>
+                        {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={() => {
+                            fetchData(true, appliedSearch);
+                        }}
+                        isLoading={loading}
+                        className="h-9 w-9 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
+                    >
+                        {!loading && <RefreshCw className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                        onClick={() => setAddMenuOpen(true)}
+                        leftIcon={<Plus className="h-4 w-4" />}
+                        className="h-9 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
+                    >
+                        Add shows
+                    </Button>
+                </div>
             </div>
 
-            <UpcomingShowsPanel
-                shows={upcomingShows}
-                loading={upcomingLoading}
-                onShowClick={(id) => router.push(`/shows/${id}`)}
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="mx-auto w-full max-w-9xl px-4 py-6 lg:px-6">
+            <div className="flex flex-col gap-6">
+
+            <Modal
+                isOpen={addMenuOpen}
+                onClose={() => setAddMenuOpen(false)}
+                maxWidth="max-w-lg"
+                hideHeader
+            >
+                <div className="relative">
+                    <button
+                        type="button"
+                        onClick={() => setAddMenuOpen(false)}
+                        aria-label="Close"
+                        className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+
+                    <div className="px-6 pb-5 pt-7">
+                        <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-orange-500 to-orange-400 text-white shadow-lg shadow-orange-500/25">
+                            <Plus className="h-5 w-5" />
+                        </div>
+                        <h2 className="text-lg font-bold tracking-tight text-zinc-950">Add shows</h2>
+                        <p className="mt-1 text-sm text-zinc-500">Choose how you&apos;d like to add shows to your library.</p>
+                    </div>
+
+                    <div className="space-y-2 px-4 pb-5">
+                        {[
+                            {
+                                key: 'manual',
+                                icon: <PencilLine className="h-5 w-5" />,
+                                accent: 'bg-blue-50 text-blue-600',
+                                title: 'Manual entry',
+                                description: 'Add a single show with a form.',
+                                onClick: () => {
+                                    setAddMenuOpen(false);
+                                    handleAdd();
+                                },
+                            },
+                            {
+                                key: 'import',
+                                icon: <FileSpreadsheet className="h-5 w-5" />,
+                                accent: 'bg-emerald-50 text-emerald-600',
+                                title: 'Import from spreadsheet',
+                                description: 'Create many shows at once from a CSV / Excel file.',
+                                onClick: () => {
+                                    setAddMenuOpen(false);
+                                    setImportOpen(true);
+                                },
+                            },
+                            {
+                                key: 'bulk',
+                                icon: <FilePenLine className="h-5 w-5" />,
+                                accent: 'bg-violet-50 text-violet-600',
+                                title: 'Bulk update',
+                                description: 'Update existing shows by id from a CSV / Excel file.',
+                                onClick: () => {
+                                    setAddMenuOpen(false);
+                                    setBulkUpdateOpen(true);
+                                },
+                            },
+                        ].map((option) => (
+                            <button
+                                key={option.key}
+                                type="button"
+                                onClick={option.onClick}
+                                className="group flex w-full items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-3.5 text-left transition-all hover:border-orange-300 hover:bg-orange-50/40 hover:shadow-sm"
+                            >
+                                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105 ${option.accent}`}>
+                                    {option.icon}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-zinc-900">{option.title}</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-zinc-500">{option.description}</span>
+                                </span>
+                                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300 transition-all group-hover:translate-x-0.5 group-hover:text-orange-500" />
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </Modal>
 
             {importOpen && (
                 <SpreadsheetImportModal
@@ -679,107 +803,10 @@ export const ShowsTable = () => {
                 initialData={selectedItem}
             />
 
-            {/* Toolbar — sticks below header/upcoming panel while scrolling exhibitions */}
-            <div className="sticky top-0 z-20 flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-sm shadow-zinc-950/5 backdrop-blur-md">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                    {/* Search */}
-                    <div className="flex gap-2 lg:min-w-0 lg:flex-1">
-                        <div className="relative min-w-0 flex-1">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                            <input
-                                type="text"
-                                placeholder="Search by show name..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleSearch();
-                                    }
-                                }}
-                                className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 py-2 pl-9 pr-3 text-sm font-medium text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
-                            />
-                        </div>
-                        <Button
-                            type="button"
-                            onClick={handleSearch}
-                            isLoading={loading}
-                            className="h-10 shrink-0 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
-                            leftIcon={<Search className="h-4 w-4" />}
-                        >
-                            Search
-                        </Button>
-                    </div>
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 overflow-x-auto pb-0.5 lg:overflow-visible">
-                        <div className="relative">
-                            <Button
-                                variant="secondary"
-                                onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                className={`h-9 rounded-xl border px-3 ${totalActiveFilters > 0 ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-zinc-200 bg-white text-zinc-700'}`}
-                                leftIcon={<Filter className="h-4 w-4" />}
-                            >
-                                <span className="hidden sm:inline">Filters</span>
-                                {totalActiveFilters > 0 && <span className="ml-1">({totalActiveFilters})</span>}
-                            </Button>
-                        </div>
-                        <Button
-                            variant="secondary"
-                            onClick={() => {
-                                fetchData(true, appliedSearch);
-                                void fetchUpcomingShows();
-                            }}
-                            isLoading={loading}
-                            className="h-9 w-9 shrink-0 rounded-xl border border-zinc-200 bg-white p-0 text-zinc-600 hover:border-orange-200 hover:bg-orange-50"
-                        >
-                            {!loading && <RefreshCw className="h-4 w-4" />}
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={() => setImportOpen(true)}
-                            leftIcon={<FileSpreadsheet className="h-4 w-4" />}
-                            className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
-                        >
-                            <span className="hidden sm:inline">Import</span>
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={() => setBulkUpdateOpen(true)}
-                            leftIcon={<FilePenLine className="h-4 w-4" />}
-                            className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-zinc-700 hover:border-orange-200 hover:bg-orange-50"
-                        >
-                            <span className="hidden sm:inline">Bulk update</span>
-                        </Button>
-                        <Button
-                            onClick={handleAdd}
-                            leftIcon={<Plus className="h-4 w-4" />}
-                            className="h-9 rounded-xl bg-linear-to-r from-orange-600 to-orange-500 px-4 font-semibold text-white shadow-md shadow-orange-500/25 hover:from-orange-500 hover:to-orange-400"
-                        >
-                            Add Show
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Region chips */}
-                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Region:</span>
-                    {['All', 'UAE', 'KSA', 'Europe'].map((region) => {
-                        const isSelected = quickRegion === region;
-                        const label = region === 'All' ? 'All Shows' : region;
-                        return (
-                            <button
-                                key={region}
-                                onClick={() => setQuickRegion(region)}
-                                className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${isSelected ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-orange-300 hover:bg-orange-50 hover:text-zinc-950'}`}
-                            >
-                                {label}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {totalActiveFilters > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2">
+            {/* Active filters summary */}
+            {viewMode === 'grid' && totalActiveFilters > 0 && (
+                <div className="rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-sm shadow-zinc-950/5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Active filters:</span>
                         {showExhibitorsOnly && (
                             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">
@@ -811,18 +838,42 @@ export const ShowsTable = () => {
                             Clear all
                         </button>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
+
+            {/* Calendar view */}
+            {viewMode === 'calendar' && (
+                <ShowsCalendar onShowClick={(id) => router.push(`/shows/${id}`)} search={appliedSearch} />
+            )}
 
             {/* Card grid */}
-            <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/5">
-                <div className="flex flex-col gap-3 border-b border-zinc-100 bg-linear-to-r from-zinc-50/80 to-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            {viewMode === 'grid' && (
+            <section className="overflow-hidden rounded-2xl bg-white">
+                <div className="flex flex-col gap-3 border-b border-zinc-100 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div>
                         <h2 className="text-base font-semibold text-zinc-900">All exhibitions</h2>
                         <p className="mt-0.5 text-xs text-zinc-500">
                             {exhibitionsCountLabel}
                         </p>
                     </div>
+                    <label className="flex shrink-0 items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Sort</span>
+                        <div className="relative">
+                            <ArrowUpDown className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as ShowSortKey)}
+                                className="h-9 cursor-pointer appearance-none rounded-xl border border-zinc-200 bg-white py-2 pl-8 pr-8 text-xs font-semibold text-zinc-700 outline-none transition-colors hover:border-orange-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                            >
+                                {SHOW_SORT_OPTIONS.map((option) => (
+                                    <option key={option.key} value={option.key}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                        </div>
+                    </label>
                 </div>
                 <div className="p-4 md:p-6">
                     {loading && data.length === 0 ? (
@@ -906,7 +957,7 @@ export const ShowsTable = () => {
                                         key={item.ID}
                                         type="button"
                                         onClick={() => handleRowClick(item)}
-                                        className={`group flex flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-sm shadow-zinc-950/5 outline-none transition-all duration-300 cursor-pointer hover:shadow-2xl focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 ${hasExhibitorList ? 'border-emerald-200 hover:border-emerald-300 hover:shadow-emerald-950/10' : 'border-zinc-200 hover:border-orange-200 hover:shadow-orange-950/15'}`}
+                                        className={`group flex flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-lg shadow-zinc-950/10 outline-none transition-all duration-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-2xl focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 ${hasExhibitorList ? 'border-emerald-200 hover:border-emerald-300 hover:shadow-emerald-950/15' : 'border-zinc-200 hover:border-orange-200 hover:shadow-orange-950/20'}`}
                                     >
                                         {/* Visual header */}
                                         <div className="relative h-36 overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-950">
@@ -1010,6 +1061,7 @@ export const ShowsTable = () => {
                     />
                 )}
             </section>
+            )}
 
             <ShowsFilterDrawer
                 isOpen={isFilterOpen}
@@ -1021,6 +1073,9 @@ export const ShowsTable = () => {
                 onApply={handleApplyFilters}
                 onClear={handleClearFilters}
             />
+            </div>
+            </div>
+            </div>
         </div>
     );
 };

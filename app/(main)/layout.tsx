@@ -15,12 +15,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             {showSplash && <SplashIntro onComplete={() => setShowSplash(false)} />}
 
             <div className={`h-screen bg-[#f7f5f2] text-zinc-950 font-sans selection:bg-orange-500/20 overflow-hidden flex relative transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
-                {/* Background Effects */}
-                <div className="absolute inset-0 pointer-events-none z-0">
-                    <div className="absolute top-[-18%] left-[-10%] w-[48%] h-[48%] bg-orange-400/18 rounded-full blur-[130px]" />
-                    <div className="absolute bottom-[-20%] right-[-12%] w-[46%] h-[46%] bg-zinc-900/8 rounded-full blur-[120px]" />
-                </div>
-
                 {/* Sidebar */}
                 <MainSidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 

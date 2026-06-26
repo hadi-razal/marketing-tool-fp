@@ -68,6 +68,19 @@ const SHOW_SORT_MAP = Object.fromEntries(SHOW_SORT_OPTIONS.map((o) => [o.key, o]
     (typeof SHOW_SORT_OPTIONS)[number]
 >;
 
+// Persist the active filters/search/sort/view so they survive navigating into a
+// show detail page and back (kept per-tab via sessionStorage).
+const SHOWS_FILTERS_STORAGE_KEY = 'fp:shows:filters';
+
+type PersistedShowFilters = {
+    search: string;
+    sortBy: ShowSortKey;
+    viewMode: ShowViewMode;
+    showExhibitorsOnly: boolean;
+    filterSelections: FilterSelections;
+    dateFilter: ShowDateFilter;
+};
+
 export const ShowsTable = () => {
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
@@ -90,6 +103,10 @@ export const ShowsTable = () => {
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [sortBy, setSortBy] = useState<ShowSortKey>('recent');
     const [viewMode, setViewMode] = useState<ShowViewMode>('grid');
+
+    // Becomes true once persisted filters have been restored from sessionStorage.
+    // The initial data fetch waits for this so it runs with the restored filters.
+    const [hydrated, setHydrated] = useState(false);
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [allFetchedData, setAllFetchedData] = useState<any[]>([]);
@@ -364,10 +381,56 @@ export const ShowsTable = () => {
         }
     }, [page, filterSelections, dateFilter, showExhibitorsOnly, sortBy, supabase, fetchTotalShowsCount, fetchAllExhibitorShowIds]);
 
+    // Restore persisted filters once on mount (e.g. after going into a show and
+    // coming back). Done in an effect (not a lazy initializer) to avoid SSR
+    // hydration mismatches; the fetch waits on `hydrated`.
     useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(SHOWS_FILTERS_STORAGE_KEY);
+            if (raw) {
+                const saved = JSON.parse(raw) as Partial<PersistedShowFilters>;
+                if (typeof saved.search === 'string') {
+                    setSearch(saved.search);
+                    setAppliedSearch(saved.search);
+                }
+                if (saved.sortBy) setSortBy(saved.sortBy);
+                if (saved.viewMode) setViewMode(saved.viewMode);
+                if (typeof saved.showExhibitorsOnly === 'boolean') setShowExhibitorsOnly(saved.showExhibitorsOnly);
+                if (saved.filterSelections) {
+                    setFilterSelections((prev) => ({ ...prev, ...saved.filterSelections }));
+                }
+                if (saved.dateFilter) setDateFilter(saved.dateFilter);
+            }
+        } catch {
+            // Ignore malformed/unavailable storage and fall back to defaults.
+        }
+        setHydrated(true);
+    }, []);
+
+    // Save filters whenever they change (only after restore, so we never clobber
+    // the saved values with the initial defaults).
+    useEffect(() => {
+        if (!hydrated) return;
+        try {
+            const payload: PersistedShowFilters = {
+                search: appliedSearch,
+                sortBy,
+                viewMode,
+                showExhibitorsOnly,
+                filterSelections,
+                dateFilter,
+            };
+            sessionStorage.setItem(SHOWS_FILTERS_STORAGE_KEY, JSON.stringify(payload));
+        } catch {
+            // Ignore quota/serialization errors.
+        }
+    }, [hydrated, appliedSearch, sortBy, viewMode, showExhibitorsOnly, filterSelections, dateFilter]);
+
+    useEffect(() => {
+        if (!hydrated) return;
         setPage(0);
         fetchData(true, appliedSearch);
-    }, [appliedSearch, filterSelections, dateFilter, showExhibitorsOnly, sortBy]);
+    }, [hydrated, appliedSearch, filterSelections, dateFilter, showExhibitorsOnly, sortBy]);
 
     const handleSearch = () => {
         const term = search.trim();
